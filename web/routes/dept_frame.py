@@ -125,6 +125,7 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
                 "active": "dept",
                 "csrf_token": csrf_token,
                 "error": request.session.pop("error", None),
+                "session_id": request.state.session_id,
             },
         )
 
@@ -146,5 +147,6 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
             "csrf_token": csrf_token,
             "success": request.session.pop("success", None),
             "error": request.session.pop("error", None),
+            "session_id": request.state.session_id,
         },
     )

@@ -16,7 +16,7 @@
         {% if user.role in ['SUPERADMIN', 'superadmin'] and departments|length > 1 %}
         <select id="dept-switcher" class="btn btn-secondary" style="min-width: 200px;">
             {% for dept in departments %}
-            <option value="/dept/{{ dept.id }}/" {% if dept.id == department.id %}selected{% endif %}>
+            <option value="/dept/{{ dept.id }}/{{ '?sid=' + session_id if session_id else '' }}" {% if dept.id == department.id %}selected{% endif %}>
                 {{ dept.name }}
             </option>
             {% endfor %}
@@ -61,7 +61,7 @@
         <div class="card">
             <div class="card-header">
                 <h2>Последние заявки отдела</h2>
-                <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки →</a>
+                <a href="/tickets/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Все заявки →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -90,7 +90,7 @@
         <div class="card">
             <div class="card-header">
                 <h2>База знаний отдела</h2>
-                <a href="/knowledge/" class="btn btn-secondary btn-small">Управлять →</a>
+                <a href="/knowledge/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Управлять →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -116,7 +116,7 @@
         <div class="card">
             <div class="card-header">
                 <h2>FAQ отдела</h2>
-                <a href="/faq/" class="btn btn-secondary btn-small">Управлять →</a>
+                <a href="/faq/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Управлять →</a>
             </div>
             <div class="faq-list">
                 {% for node in faq_items %}
@@ -149,7 +149,7 @@
         <div class="card">
             <div class="card-header">
                 <h2>События отдела</h2>
-                <a href="/events/" class="btn btn-secondary btn-small">Управлять →</a>
+                <a href="/events/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Управлять →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -175,7 +175,7 @@
     <div class="empty-state">
         Отдел не найден или нет прав доступа.
         {% if departments %}
-        <a href="/dept/{{ departments[0].id }}/">Перейти в ваш отдел</a>
+        <a href="/dept/{{ departments[0].id }}/{{ '?sid=' + session_id if session_id else '' }}">Перейти в ваш отдел</a>
         {% else %}
         Попросите суперадмина создать отдел в разделе «Управление отделами».
         {% endif %}

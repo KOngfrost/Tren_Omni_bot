@@ -119,6 +119,7 @@ async def tickets_page(
             "query": q,
             "selected_status": status,
             "selected_department": department_id,
+            "session_id": request.state.session_id,
         },
     )
 

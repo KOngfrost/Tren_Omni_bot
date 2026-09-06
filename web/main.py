@@ -2,7 +2,7 @@
 Главный модуль FastAPI-приложения.
 
 Включает:
-- Безопасные session-куки (https_only, same_site)
+- Поддержка параллельных сессий через уникальные session_id (SessionAuthMiddleware)
 - CSRF-защита (CSRFMiddleware)
 - Security Headers (X-Frame-Options, CSP, X-Content-Type-Options и др.)
 - Валидация размера запросов
@@ -32,6 +32,7 @@ from web.security.middleware import (
     RequestSizeValidator,
     SecurityHeadersMiddleware,
 )
+from web.security.session_middleware_asgi import SessionAuthMiddleware
 from web.templating import templates  # noqa: F401 (реэкспорт для обратной совместимости)
 
 setup_logging(log_dir=os.path.join(os.path.dirname(__file__), "..", "logs"))
@@ -44,15 +45,36 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# === Middleware безопасности (в порядке приоритета) ===
+# === Middleware безопасности ===
+# ВАЖНО: В Starlette add_middleware использует insert(0, ...), поэтому
+# порядок выполнения ОБРАТЕН порядку добавления.
+# Первым добавленный выполняется ПОСЛЕДНИМ (innermost).
+# Целевой порядок на запросе: SecurityHeaders → Session → SessionAuth → CSRF → CORS → handler
+# Поэтому добавляем в ОБРАТНОМ порядке: CORS → CSRF → SessionAuth → Session → SecurityHeaders
 
-# 1. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
-app.add_middleware(SecurityHeadersMiddleware)
+# 1. CORS (innermost - выполняется последним перед handler)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 2. CSRF защита для всех POST-запросов
+# ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал
 app.add_middleware(CSRFMiddleware)
 
-# 3. Session middleware с безопасными настройками
+# 3. Поддержка параллельных сессий через уникальные session_id
+# Каждый пользователь получает уникальный session_id, который используется
+# для имени cookie: session_<session_id>. session_id передаётся через
+# query-параметр ?sid=<session_id>.
+# ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал.
+app.add_middleware(SessionAuthMiddleware)
+
+# 4. Session middleware с безопасными настройками (для CSRF)
+# ДОЛЖЕН выполняться ДО SessionAuthMiddleware и CSRFMiddleware,
+# чтобы scope["session"] был создан до того, как они попытаются его прочитать.
 _session_secret = settings.session_secret_key
 if not _session_secret:
     raise RuntimeError(
@@ -72,15 +94,9 @@ app.add_middleware(
     path="/",
 )
 
-# === Настраиваемый CORS из настроек ===
-# По умолчанию в dev — localhost:8000, в production — настраивается через CORS_ORIGINS.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 5. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
+# (outermost - выполняется первым)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Static
 app.mount("/static", StaticFiles(directory="web/static"), name="static")

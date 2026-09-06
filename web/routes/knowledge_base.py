@@ -71,6 +71,7 @@ async def knowledge_base_page(request: Request, user=Depends(require_auth)):
             "success": request.session.pop("success", None),
             "error": request.session.pop("error", None),
             "csrf_token": get_csrf_token(request),
+            "session_id": request.state.session_id,
         },
     )
 

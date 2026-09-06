@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Admin, Department, User, UserRole, WebRole, WebUser
+from core.models import Admin, Department, Log, User, UserRole, WebRole, WebUser
 from web.dependencies import get_admin_scope, is_superadmin, require_auth
 from web.routes.auth import require_crud_rate_limit
 from web.security.csrf import get_csrf_token
@@ -87,6 +87,7 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "error": request.session.pop("error", None),
             "csrf_token": get_csrf_token(request),
             "created_credentials": request.session.pop("created_credentials", None),
+            "session_id": request.state.session_id,
         },
     )
 
@@ -204,6 +205,7 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
     - Rate limiting: не более 20 запросов на IP за 5 минут
     - Только суперадмин может удалять администраторов
     - Нельзя удалить самого себя или последнего суперадмина
+    - При удалении Admin также удаляется связанный WebUser (если есть)
     """
     require_crud_rate_limit(request)
     if not is_superadmin(user):
@@ -230,12 +232,101 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
                     request.session["error"] = "Нельзя удалить последнего суперадмина"
                     return RedirectResponse(url="/admin/admins/", status_code=302)
 
+            # Находим и удаляем связанного WebUser (если есть)
+            # Ищем по department_id и роли, так как прямой связи между Admin и WebUser нет
+            web_user_stmt = select(WebUser).where(
+                WebUser.department_id == admin.department_id,
+                WebUser.role.in_([WebRole.DEPARTMENT_ADMIN, WebRole.SUPERADMIN])
+            )
+            web_users = (await session.execute(web_user_stmt)).scalars().all()
+
+            # Удаляем связанных веб-пользователей (обычно это один пользователь)
+            # Это очищает логин и пароль удалённого админа
+            deleted_web_users_count = 0
+            for web_user in web_users:
+                # Проверяем, что это не текущий пользователь (для web_user_id в сессии)
+                if user.get("web_user_id") == web_user.id:
+                    continue
+                await session.delete(web_user)
+                deleted_web_users_count += 1
+
+            # Логируем действие удаления (сохраняем для аудита)
+            # Действие привязываем к пользователю, чтобы сохранить историю
+            deletion_log = Log(
+                user_id=admin.user_id,
+                action="admin_deleted",
+                details=f"Удалён администратор id={admin_id}, роль={admin.role.value}, отдел={admin.department_id}"
+            )
+            session.add(deletion_log)
+
+            # Удаляем самого админа (очищаем admin id)
+            # Действия пользователя (логи) сохраняются, так как они привязаны к User
             await session.delete(admin)
             await session.commit()
+
+            logger.info(
+                "Удалён администратор id=%s, department_id=%s, связанных web_users: %d, лог сохранён",
+                admin_id,
+                admin.department_id,
+                deleted_web_users_count,
+            )
     except Exception:
         logger.exception("Не удалось удалить администратора")
         request.session["error"] = "Не удалось удалить администратора. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     request.session["success"] = "Администратор удалён"
+    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+
+@router.post("/web-users/{web_user_id}/delete")
+async def delete_web_user(request: Request, web_user_id: int, user=Depends(require_auth)):
+    """Удаление веб-пользователя (POST с CSRF-токеном и подтверждением).
+
+    Безопасность:
+    - Rate limiting: не более 20 запросов на IP за 5 минут
+    - Только суперадмин может удалять веб-пользователей
+    - Нельзя удалить самого себя
+    - Нельзя удалить последнего суперадмина
+    """
+    require_crud_rate_limit(request)
+    if not is_superadmin(user):
+        request.session["error"] = "Только суперадмин может удалять веб-пользователей"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    try:
+        async with async_session_maker() as session:
+            web_user = await session.get(WebUser, web_user_id)
+            if not web_user:
+                request.session["error"] = "Веб-пользователь не найден"
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            # Нельзя удалить самого себя
+            if user.get("web_user_id") == web_user.id:
+                request.session["error"] = "Нельзя удалить себя"
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            # Проверяем, что это не последний суперадмин
+            if web_user.role == WebRole.SUPERADMIN:
+                superadmin_count: int | None = await session.scalar(
+                    select(func.count(WebUser.id)).where(WebUser.role == WebRole.SUPERADMIN)
+                )
+                if superadmin_count is not None and superadmin_count <= 1:
+                    request.session["error"] = "Нельзя удалить последнего суперадмина"
+                    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            await session.delete(web_user)
+            await session.commit()
+
+            logger.info(
+                "Удалён веб-пользователь id=%s, username=%s",
+                web_user_id,
+                web_user.username,
+            )
+    except Exception:
+        logger.exception("Не удалось удалить веб-пользователя")
+        request.session["error"] = "Не удалось удалить веб-пользователя. Попробуйте позже."
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    request.session["success"] = "Веб-пользователь удалён"
     return RedirectResponse(url="/admin/admins/", status_code=302)

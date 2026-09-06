@@ -44,7 +44,7 @@
                 <span class="chip">Польз.: {{ u.get('web_users', 0) }}</span>
             </div>
             <div class="department-actions">
-                <a href="/dept/{{ dept.id }}/" class="btn btn-secondary btn-small">Открыть фрейм</a>
+                <a href="/dept/{{ dept.id }}/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Открыть фрейм</a>
                 <button class="btn btn-secondary btn-small" data-open-modal="rename-modal-{{ dept.id }}">Переименовать</button>
                 <form method="post" action="/departments/{{ dept.id }}/delete"
                       data-confirm="Удалить отдел «{{ dept.name }}»? Удалить можно только пустой отдел.">

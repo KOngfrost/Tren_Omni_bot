@@ -9,8 +9,8 @@
         <div class="page-desc">Сводка по обращениям студентов за всё время</div>
     </div>
     <div class="actions">
-        <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки</a>
-        <a href="/admin/admins/" class="btn btn-primary btn-small">Управление админами</a>
+        <a href="/tickets/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Все заявки</a>
+        <a href="/admin/admins/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-primary btn-small">Управление админами</a>
     </div>
 </div>
 
@@ -40,7 +40,7 @@
 <div class="card">
     <div class="card-header">
         <h2>Последние заявки</h2>
-        <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки →</a>
+        <a href="/tickets/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Все заявки →</a>
     </div>
     <div class="table-container">
         <table>

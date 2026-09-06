@@ -39,7 +39,14 @@
                     {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
                 </div>
                 <div class="admin-card-top-info">
-                    <div class="admin-name">{{ admin.user.full_name or 'Без имени' }}</div>
+                    {% set full_name = admin.user.full_name or 'Без имени' %}
+                    {% set name_parts = full_name.split(' ') %}
+                    {% if name_parts|length >= 2 %}
+                        {% set initials = (name_parts[0][:1] ~ '.' ~ name_parts[1][:1] ~ '.') | upper %}
+                    {% else %}
+                        {% set initials = (name_parts[0][:1]) | upper %}
+                    {% endif %}
+                    <div class="admin-name">{{ initials }}</div>
                     <div class="admin-vk">VK ID: {{ admin.user.vk_id }}</div>
                 </div>
             </div>
@@ -52,7 +59,7 @@
                 <span class="admin-dept">{{ admin.department.name if admin.department else 'Без отдела' }}</span>
             </div>
             <div class="admin-card-footer">
-                <span class="admin-id">#{{ admin.id }}</span>
+                <span class="admin-id">#{{ loop.index }}</span>
                 <form method="post" action="/admin/admins/{{ admin.id }}/delete"
                               data-confirm="Удалить этого админа?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -66,6 +73,55 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if web_users %}
+    <div class="page-header" style="margin-top: 2rem;">
+        <div>
+            <h2>Веб-пользователи</h2>
+            <div class="page-desc">Пользователи веб-панели без привязки к VK</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="admins-grid">
+            {% for web_user in web_users %}
+            <div class="admin-card">
+                <div class="admin-card-top">
+                    <div class="admin-avatar">
+                        {{ web_user.username[:2] | upper }}
+                    </div>
+                    <div class="admin-card-top-info">
+                        <div class="admin-name">{{ web_user.username }}</div>
+                        <div class="admin-vk">Веб-пользователь</div>
+                    </div>
+                </div>
+                <div class="admin-card-meta">
+                    {% if web_user.role.value == 'SUPERADMIN' %}
+                    <span class="badge badge-completed">Суперадмин</span>
+                    {% elif web_user.role.value == 'DEPARTMENT_ADMIN' %}
+                    <span class="badge badge-new">Админ отдела</span>
+                    {% else %}
+                    <span class="badge badge-pending">Наблюдатель</span>
+                    {% endif %}
+                    <span class="admin-dept">{{ web_user.department.name if web_user.department else 'Без отдела' }}</span>
+                </div>
+                <div class="admin-card-footer">
+                    <span class="admin-id">#{{ web_user.id }}</span>
+                    <form method="post" action="/admin/admins/web-users/{{ web_user.id }}/delete"
+                                  data-confirm="Удалить этого веб-пользователя?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-small">Удалить</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state grid-full">
+                Веб-пользователей пока нет
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Modal -->

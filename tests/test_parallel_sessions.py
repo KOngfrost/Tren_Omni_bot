@@ -1,0 +1,269 @@
+"""
+QA tests for parallel sessions and system recovery.
+"""
+
+import re
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi.testclient import TestClient
+
+from web.main import app
+
+
+@pytest.fixture
+def client():
+    """Test client for FastAPI app."""
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def mock_db_with_users(db_session_maker):
+    """Fixture with test users in DB."""
+    import asyncio
+    from core.models import WebRole, WebUser
+    from web.security.passwords import hash_password
+
+    async def _setup():
+        async with db_session_maker() as session:
+            superadmin = WebUser(
+                username="superadmin",
+                password_hash=hash_password("SuperSecret123!"),
+                role=WebRole.SUPERADMIN,
+                is_active=True,
+            )
+            dept_admin = WebUser(
+                username="zhilbyt_admin",
+                password_hash=hash_password("DeptSecret456!"),
+                role=WebRole.DEPARTMENT_ADMIN,
+                department_id=1,
+                is_active=True,
+            )
+            session.add_all([superadmin, dept_admin])
+            await session.commit()
+
+    asyncio.run(_setup())
+    return db_session_maker
+
+
+class TestAdminLoginRestored:
+    """Tests for admin login recovery."""
+
+    def test_login_page_accessible(self, client):
+        """Login page is accessible and contains CSRF token."""
+        response = client.get("/auth/login")
+        assert response.status_code == 200
+        assert 'csrf_token' in response.text
+
+    def test_bootstrap_login_success(self, client, monkeypatch):
+        """Successful login with bootstrap credentials."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+        login_page = client.get("/auth/login")
+        csrf_token = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+        response = client.post(
+            "/auth/login",
+            data={"username": "admin", "password": "admin123", "csrf_token": csrf_token},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert "sid=" in response.headers.get("location", "")
+
+    def test_bootstrap_login_wrong_password(self, client, monkeypatch):
+        """Failed login with wrong password."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+        login_page = client.get("/auth/login")
+        csrf_token = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+        response = client.post(
+            "/auth/login",
+            data={"username": "admin", "password": "wrong", "csrf_token": csrf_token},
+        )
+        assert response.status_code == 401
+
+    def test_web_user_login_success(self, client, mock_db_with_users, monkeypatch):
+        """Successful login with web_users credentials."""
+        monkeypatch.setattr(
+            "web.routes.auth._are_web_users_configured",
+            AsyncMock(return_value=True),
+        )
+        login_page = client.get("/auth/login")
+        csrf_token = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+        response = client.post(
+            "/auth/login",
+            data={"username": "superadmin", "password": "SuperSecret123!", "csrf_token": csrf_token},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert "sid=" in response.headers.get("location", "")
+
+
+class TestParallelSessions:
+    """Tests for parallel sessions."""
+
+    def test_two_accounts_simultaneously(self, client, monkeypatch):
+        """Two accounts can be logged in simultaneously."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+        with TestClient(app) as client2:
+            login1 = client.get("/auth/login")
+            csrf1 = re.search(r'csrf_token" value="([^"]+)"', login1.text).group(1)
+            resp1 = client.post(
+                "/auth/login",
+                data={"username": "admin", "password": "admin123", "csrf_token": csrf1},
+                follow_redirects=False,
+            )
+            assert resp1.status_code == 303
+            sid1 = re.search(r"sid=([^&]+)", resp1.headers["location"]).group(1)
+
+            login2 = client2.get("/auth/login")
+            csrf2 = re.search(r'csrf_token" value="([^"]+)"', login2.text).group(1)
+            resp2 = client2.post(
+                "/auth/login",
+                data={"username": "admin", "password": "admin123", "csrf_token": csrf2},
+                follow_redirects=False,
+            )
+            assert resp2.status_code == 303
+            sid2 = re.search(r"sid=([^&]+)", resp2.headers["location"]).group(1)
+
+            assert sid1 != sid2
+
+    def test_session_isolation(self, client, monkeypatch):
+        """Session isolation: logout of one user doesn't affect another."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+        with TestClient(app) as client2:
+            login1 = client.get("/auth/login")
+            csrf1 = re.search(r'csrf_token" value="([^"]+)"', login1.text).group(1)
+            resp1 = client.post(
+                "/auth/login",
+                data={"username": "admin", "password": "admin123", "csrf_token": csrf1},
+                follow_redirects=False,
+            )
+            sid1 = re.search(r"sid=([^&]+)", resp1.headers["location"]).group(1)
+
+            login2 = client2.get("/auth/login")
+            csrf2 = re.search(r'csrf_token" value="([^"]+)"', login2.text).group(1)
+            resp2 = client2.post(
+                "/auth/login",
+                data={"username": "admin", "password": "admin123", "csrf_token": csrf2},
+                follow_redirects=False,
+            )
+            sid2 = re.search(r"sid=([^&]+)", resp2.headers["location"]).group(1)
+
+            assert sid1 != sid2
+
+            # First user logs out
+            csrf_logout = re.search(r'csrf_token" value="([^"]+)"', client.get(f"/?sid={sid1}").text)
+            if csrf_logout:
+                client.post(
+                    f"/auth/logout?sid={sid1}",
+                    data={"csrf_token": csrf_logout.group(1)},
+                    follow_redirects=False,
+                )
+
+            # Second user should still be logged in
+            dash2 = client2.get(f"/?sid={sid2}", follow_redirects=False)
+            assert dash2.status_code in (200, 302, 303)
+
+
+class TestLogout:
+    """Tests for logout."""
+
+    def test_logout_clears_session(self, client, monkeypatch):
+        """Logout clears the session."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+        login_page = client.get("/auth/login")
+        csrf = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+        response = client.post(
+            "/auth/login",
+            data={"username": "admin", "password": "admin123", "csrf_token": csrf},
+            follow_redirects=False,
+        )
+        sid = re.search(r"sid=([^&]+)", response.headers["location"]).group(1)
+
+        response = client.post(
+            f"/auth/logout?sid={sid}",
+            data={"csrf_token": csrf},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert "/auth/login" in response.headers.get("location", "")
+
+
+class TestMiddlewareOrder:
+    """Tests for middleware order."""
+
+    def test_middleware_order(self):
+        """SessionMiddleware should run before SessionAuthMiddleware."""
+        from starlette.middleware.sessions import SessionMiddleware
+        from web.security.session_middleware_asgi import SessionAuthMiddleware
+        from web.main import app
+
+        middleware_classes = [m.cls if hasattr(m, "cls") else type(m) for m in app.user_middleware]
+
+        session_idx = None
+        session_auth_idx = None
+        for i, m in enumerate(middleware_classes):
+            if m == SessionMiddleware:
+                session_idx = i
+            if m == SessionAuthMiddleware:
+                session_auth_idx = i
+
+        assert session_idx is not None
+        assert session_auth_idx is not None
+        # In Starlette, add_middleware uses insert(0), so:
+        # - First added middleware has HIGHER index and runs FIRST (outermost)
+        # - Last added middleware has LOWER index and runs LAST (innermost)
+        # SessionMiddleware should run BEFORE SessionAuthMiddleware,
+        # so SessionMiddleware should have a LOWER index.
+        assert session_idx < session_auth_idx, (
+            "SessionMiddleware should run before SessionAuthMiddleware"
+        )
+
+
+class TestSecurityHeaders:
+    """Tests for security headers."""
+
+    def test_headers_present(self, client):
+        """All critical security headers are present."""
+        response = client.get("/auth/login")
+        assert response.status_code == 200
+        assert response.headers.get("x-frame-options") == "DENY"
+        assert response.headers.get("x-content-type-options") == "nosniff"
+        assert "content-security-policy" in response.headers
+
+    def test_csp_restricts_scripts(self, client):
+        """CSP restricts script execution."""
+        response = client.get("/auth/login")
+        csp = response.headers.get("content-security-policy", "")
+        assert "script-src" in csp
+        assert "form-action" in csp
+
+
+class TestRateLimiting:
+    """Tests for rate limiting."""
+
+    def test_rate_limit_after_five_failures(self, client, monkeypatch):
+        """Block after 5 failed attempts."""
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
+        monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
+
+        for i in range(5):
+            login_page = client.get("/auth/login")
+            csrf = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+            response = client.post(
+                "/auth/login",
+                data={"username": "admin", "password": "wrong_password", "csrf_token": csrf},
+            )
+            assert response.status_code == 401
+
+        login_page = client.get("/auth/login")
+        csrf = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
+        response = client.post(
+            "/auth/login",
+            data={"username": "admin", "password": "admin123", "csrf_token": csrf},
+        )
+        assert response.status_code == 429

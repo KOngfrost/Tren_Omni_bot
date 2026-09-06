@@ -77,5 +77,6 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
             "db_error": db_error,
             "active": "dashboard",
             "csrf_token": get_csrf_token(request),
+            "session_id": request.state.session_id,
         },
     )

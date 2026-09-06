@@ -13,6 +13,7 @@
 - Timing-safe сравнение, поворот CSRF-токена после входа.
 """
 
+import json
 import logging
 import secrets
 import time
@@ -313,7 +314,28 @@ async def login(request: Request):
         "web_login_success",
         f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
     )
-    return RedirectResponse(url="/", status_code=303)
+
+    # Генерируем уникальный session_id для параллельных входов
+    session_id = secrets.token_urlsafe(32)
+
+    # Копируем user данные в scope["session"] для совместимости с CSRF
+    if "session" in request.scope:
+        request.scope["session"]["user"] = user_data
+        request.scope["session"]["session_id"] = session_id
+
+    # Сохраняем сессию в cookie с уникальным именем
+    cookie_name = f"session_{session_id}"
+    session_data = {"user": user_data, "session_id": session_id}
+    response = RedirectResponse(url=f"/?sid={session_id}", status_code=303)
+    response.set_cookie(
+        cookie_name,
+        json.dumps(session_data),
+        max_age=3600,
+        httponly=True,
+        samesite="strict",
+        path="/",
+    )
+    return response
 
 
 @router.post("/logout")
@@ -341,7 +363,16 @@ async def logout(request: Request):
     # Это предотвращает повторную активацию сессии при stateless-сессиях.
     request.session["csrf_token"] = secrets.token_urlsafe(32)
 
-    return RedirectResponse(url="/auth/login", status_code=303)
+    # Определяем session_id из query-параметра
+    session_id = request.query_params.get("sid")
+
+    # Удаляем cookie сессии
+    response = RedirectResponse(url="/auth/login", status_code=303)
+    if session_id:
+        cookie_name = f"session_{session_id}"
+        response.delete_cookie(cookie_name, path="/")
+
+    return response
 
 
 # ==========================================

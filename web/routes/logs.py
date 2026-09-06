@@ -82,6 +82,7 @@ async def logs_page(
             "total_pages": total_pages,
             "total_logs": total,
             "csrf_token": get_csrf_token(request),
+            "session_id": request.state.session_id,
         }
     )
 
