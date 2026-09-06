@@ -79,6 +79,10 @@ class SessionAuthMiddleware:
         # Извлекаем session_id из query-параметра
         session_id = _extract_session_id_from_scope(scope)
 
+        # Всегда доступен request.state.session_id (None при отсутствии sid),
+        # чтобы маршруты и шаблоны могли его использовать безопасно.
+        scope.setdefault("state", {})["session_id"] = session_id
+
         if session_id:
             store = _get_session(session_id)
 
