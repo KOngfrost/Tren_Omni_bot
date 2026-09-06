@@ -87,9 +87,11 @@ services:
       timeout: 5s
       retries: 3
 
-  # Веб-панель видна ТОЛЬКО внутри tailnet: делит сетевой стек с Tailscale
-  # (network_mode: service:tailscale). Порты на хост (127.0.0.1) не публикуются.
-  # Доступ: https://oss-web-panel.<tailnet>.ts.net  (tailscale serve)
+  # Веб-панель работает в общей compose-сети (как bot/migrate), поэтому
+  # резолвит имя БД "db". Порт 8000 НЕ публикуется на хост: наружу панель
+  # отдаёт только Tailscale-контейнер через HTTPS-прокси (tailscale serve),
+  # который адресует панель по имени сервиса web-admin.
+  # Доступ: https://oss-web-panel.<tailnet>.ts.net
   web-admin:
     build:
       context: .
@@ -98,7 +100,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    network_mode: "service:tailscale"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -110,8 +111,6 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-      tailscale:
-        condition: service_started
 
 volumes:
   postgres_data:

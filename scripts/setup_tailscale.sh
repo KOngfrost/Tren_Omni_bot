@@ -67,8 +67,8 @@ fi
 
 echo "Включаем HTTPS для панели (tailscale serve)..."
 # Сначала удаляем старую настройку serve (если была), затем настраиваем корректно
-"${COMPOSE[@]}" exec -T tailscale tailscale serve --delete http://localhost:8000 2>/dev/null || true
-"${COMPOSE[@]}" exec -T tailscale tailscale serve http://localhost:8000
+"${COMPOSE[@]}" exec -T tailscale tailscale serve --delete http://web-admin:8000 2>/dev/null || true
+"${COMPOSE[@]}" exec -T tailscale tailscale serve http://web-admin:8000
 
 echo "Перезапускаем веб-панель для применения SESSION_HTTPS_ONLY=true..."
 "${COMPOSE[@]}" up -d --force-recreate web-admin
