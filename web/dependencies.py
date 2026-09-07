@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import async_session_maker
-from core.models import Department, WebRole, WebUser
+from core.models import Admin, Department, User, UserRole, WebRole, WebUser
 
 logger = logging.getLogger(__name__)
 

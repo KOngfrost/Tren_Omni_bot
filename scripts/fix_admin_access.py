@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from core.config import settings
 from core.database import async_session_maker
-from core.models import WebUser, WebRole
+from core.models import WebRole, WebUser
 from web.security.passwords import hash_password, verify_password
 
 
@@ -32,11 +32,11 @@ async def check_db_connection():
     print("=" * 60)
     print("ШАГ 1: Проверка подключения к базе данных")
     print("=" * 60)
-    
+
     print(f"  DB_HOST: {settings.DB_HOST}")
     print(f"  DB_PORT: {settings.DB_PORT}")
     print(f"  DB_NAME: {settings.DB_NAME}")
-    
+
     try:
         async with async_session_maker() as session:
             await session.execute(select(1))
@@ -62,16 +62,16 @@ async def check_users():
     print("=" * 60)
     print("ШАГ 2: Проверка пользователей")
     print("=" * 60)
-    
+
     try:
         async with async_session_maker() as session:
             users = await session.execute(select(WebUser))
             result = users.scalars().all()
-            
+
             if not result:
                 print("  ❌ Пользователи не найдены!")
                 return []
-            
+
             print(f"  Найдено пользователей: {len(result)}")
             print()
             for u in result:
@@ -81,9 +81,9 @@ async def check_users():
                 print(f"      Статус: {status}")
                 print(f"      Хеш пароля: {u.password_hash[:50]}...")
                 print()
-            
+
             return result
-            
+
     except Exception as e:
         print(f"  ❌ Ошибка при проверке пользователей: {e}")
         return []
@@ -95,7 +95,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
     print("=" * 60)
     print("ШАГ 3: Сброс паролей и включение пользователей")
     print("=" * 60)
-    
+
     try:
         async with async_session_maker() as session:
             # Получаем всех пользователей или только указанного
@@ -108,7 +108,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
             else:
                 users_query = await session.execute(select(WebUser))
                 users = users_query.scalars().all()
-            
+
             if not users:
                 print(f"  ⚠️ Пользователь '{username}' не найден. Создаю нового...")
                 # Создаём нового пользователя
@@ -124,7 +124,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 print(f"      Роль: {role}")
                 print(f"      Пароль: {password}")
                 return
-            
+
             for user in users:
                 old_status = "АКТИВЕН" if user.is_active else "ОТКЛЮЧЁН"
                 user.is_active = True
@@ -132,14 +132,14 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 user.role = WebRole[role]
                 print(f"  👤 {user.username}")
                 print(f"      Старый статус: {old_status}")
-                print(f"      Новый статус: АКТИВЕН ✅")
+                print("      Новый статус: АКТИВЕН ✅")
                 print(f"      Новая роль: {role}")
                 print(f"      Пароль установлен: {'*' * len(password)}")
                 print()
-            
+
             await session.commit()
             print("  ✅ Все изменения сохранены!")
-            
+
     except Exception as e:
         print(f"  ❌ Ошибка при сбросе паролей: {e}")
         import traceback
@@ -152,10 +152,10 @@ async def test_password(username: str, password: str):
     print("=" * 60)
     print("ШАГ 4: Тестирование пароля")
     print("=" * 60)
-    
+
     hashed = hash_password(password)
     is_valid = verify_password(password, hashed)
-    
+
     print(f"  Пользователь: {username}")
     print(f"  Пароль: {'*' * len(password)}")
     print(f"  Хеш: {hashed[:60]}...")
@@ -169,9 +169,9 @@ async def main():
     parser.add_argument("--role", default="SUPERADMIN", choices=["SUPERADMIN", "DEPARTMENT_ADMIN", "VIEWER"],
                        help="Роль для пользователя (по умолчанию SUPERADMIN)")
     args = parser.parse_args()
-    
+
     import getpass
-    
+
     # Шаг 1: Проверка БД
     db_ok = await check_db_connection()
     if not db_ok:
@@ -179,10 +179,10 @@ async def main():
         print("⚠️  База данных недоступна. Не могу выполнить сброс паролей.")
         print("   Сначала решите проблему с подключением к БД.")
         sys.exit(1)
-    
+
     # Шаг 2: Проверка пользователей
     users = await check_users()
-    
+
     # Шаг 3: Запрос пароля
     if not args.password:
         password = getpass.getpass("\nВведите новый пароль: ")
@@ -195,14 +195,14 @@ async def main():
             sys.exit(1)
     else:
         password = args.password
-    
+
     # Шаг 4: Сброс паролей
     await fix_users(args.username, password, args.role)
-    
+
     # Шаг 5: Тест пароля
     username = args.username or (users[0].username if users else "admin")
     await test_password(username, password)
-    
+
     print()
     print("=" * 60)
     print("✅ Готово! Теперь можете войти в веб-админку:")

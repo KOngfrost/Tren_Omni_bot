@@ -33,7 +33,7 @@ from web.security.middleware import (
     SecurityHeadersMiddleware,
 )
 from web.security.session_middleware_asgi import SessionAuthMiddleware
-from web.templating import templates  # noqa: F401 (реэкспорт для обратной совместимости)
+from web.templating import templates
 
 setup_logging(log_dir=os.path.join(os.path.dirname(__file__), "..", "logs"))
 
@@ -253,7 +253,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             status_code=exc.status_code,
             headers=exc.headers,
         )
-    
+
     # Для браузерных запросов возвращаем HTML-страницу ошибки
     if _is_browser_request(request):
         context = _get_error_page_context(exc)
@@ -262,7 +262,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             context,
             status_code=exc.status_code,
         )
-    
+
     # Для API-запросов возвращаем JSON
     return JSONResponse(
         content={"detail": exc.detail},

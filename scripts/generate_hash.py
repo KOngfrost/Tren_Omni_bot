@@ -2,6 +2,7 @@
 """Генерация хеша пароля Argon2id для вставки в БД."""
 
 import sys
+
 sys.path.insert(0, '.')
 
 from web.security.passwords import hash_password

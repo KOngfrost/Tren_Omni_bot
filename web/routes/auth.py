@@ -172,45 +172,25 @@ async def _authenticate(
         logger.exception("Не удалось проверить web_users")
 
     # Bootstrap-вход из .env
-    if _credentials_configured():
-        if username == settings.WEB_ADMIN_USERNAME:
-            password_ok = secrets.compare_digest(
-                password.encode("utf-8"), settings.WEB_ADMIN_PASSWORD.encode("utf-8")
-            )
-            if password_ok:
-                # Проверяем, есть ли в БД постоянный пользователь с таким логином
-                try:
-                    web_user = await session.scalar(
-                        select(WebUser).where(WebUser.username == username)
+    if _credentials_configured()and username == settings.WEB_ADMIN_USERNAME:
+        password_ok = secrets.compare_digest(
+            password.encode("utf-8"), settings.WEB_ADMIN_PASSWORD.encode("utf-8")
+        )
+        if password_ok:
+            # Проверяем, есть ли в БД постоянный пользователь с таким логином
+            try:
+                web_user = await session.scalar(
+                    select(WebUser).where(WebUser.username == username)
+                )
+                if web_user is None:
+                    # Постоянного пользователя с таким логином нет —
+                    # разрешаем bootstrap-вход (суперадмин)
+                    logger.warning(
+                        "Bootstrap-вход из .env выполнен (пользователь %s не найден в БД). "
+                        "Рекомендуется создать постоянного пользователя: "
+                        "python scripts/create_web_user.py",
+                        username,
                     )
-                    if web_user is None:
-                        # Постоянного пользователя с таким логином нет —
-                        # разрешаем bootstrap-вход (суперадмин)
-                        logger.warning(
-                            "Bootstrap-вход из .env выполнен (пользователь %s не найден в БД). "
-                            "Рекомендуется создать постоянного пользователя: "
-                            "python scripts/create_web_user.py",
-                            username,
-                        )
-                        return {
-                            "username": username,
-                            "role": WebRole.SUPERADMIN.value,
-                            "web_user_id": None,
-                            "bootstrap": True,
-                            "department_id": None,
-                        }
-                    else:
-                        # Постоянный пользователь с таким логином существует —
-                        # bootstrap отклонён, нужно использовать хешированный пароль
-                        logger.warning(
-                            "Bootstrap-вход отклонён для пользователя %s: "
-                            "постоянный пользователь уже существует в БД. "
-                            "Используйте его хешированный пароль или создайте нового пользователя через scripts/create_web_user.py",
-                            username,
-                        )
-                except Exception:
-                    # БД недоступна — безопасно разрешаем bootstrap как fallback
-                    logger.warning("БД недоступна: разрешаю bootstrap-вход как fallback")
                     return {
                         "username": username,
                         "role": WebRole.SUPERADMIN.value,
@@ -218,6 +198,25 @@ async def _authenticate(
                         "bootstrap": True,
                         "department_id": None,
                     }
+                else:
+                    # Постоянный пользователь с таким логином существует —
+                    # bootstrap отклонён, нужно использовать хешированный пароль
+                    logger.warning(
+                        "Bootstrap-вход отклонён для пользователя %s: "
+                        "постоянный пользователь уже существует в БД. "
+                        "Используйте его хешированный пароль или создайте нового пользователя через scripts/create_web_user.py",
+                        username,
+                    )
+            except Exception:
+                # БД недоступна — безопасно разрешаем bootstrap как fallback
+                logger.warning("БД недоступна: разрешаю bootstrap-вход как fallback")
+                return {
+                    "username": username,
+                    "role": WebRole.SUPERADMIN.value,
+                    "web_user_id": None,
+                    "bootstrap": True,
+                    "department_id": None,
+                }
     return None
 
 

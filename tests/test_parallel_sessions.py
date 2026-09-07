@@ -3,7 +3,6 @@ QA tests for parallel sessions and system recovery.
 """
 
 import re
-from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +21,7 @@ def client():
 def mock_db_with_users(db_session_maker):
     """Fixture with test users in DB."""
     import asyncio
+
     from core.models import WebRole, WebUser
     from web.security.passwords import hash_password
 
@@ -202,8 +202,9 @@ class TestMiddlewareOrder:
     def test_middleware_order(self):
         """SessionMiddleware should run before SessionAuthMiddleware."""
         from starlette.middleware.sessions import SessionMiddleware
-        from web.security.session_middleware_asgi import SessionAuthMiddleware
+
         from web.main import app
+        from web.security.session_middleware_asgi import SessionAuthMiddleware
 
         middleware_classes = [m.cls if hasattr(m, "cls") else type(m) for m in app.user_middleware]
 
@@ -254,7 +255,7 @@ class TestRateLimiting:
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
 
-        for i in range(5):
+        for _ in range(5):
             login_page = client.get("/auth/login")
             csrf = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
             response = client.post(

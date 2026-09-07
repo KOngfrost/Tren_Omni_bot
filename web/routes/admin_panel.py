@@ -162,7 +162,7 @@ def _parse_vk_id(form) -> int:
     try:
         return int(form.get("vk_id", 0))
     except (TypeError, ValueError):
-        raise ValueError("VK ID должен быть числом")
+        raise ValueError("VK ID должен быть числом") from None
 
 
 def _validate_add_admin_form(form) -> str | None:

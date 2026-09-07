@@ -56,6 +56,25 @@ def _extract_session_id_from_scope(scope: dict) -> str | None:
     return None
 
 
+def _read_session_cookie(scope: dict, cookie_name: str) -> str | None:
+    """Прочитать значение cookie из ASGI scope."""
+    headers = scope.get("headers", [])
+    for name, value in headers:
+        if name == cookie_name.encode():
+            return value.decode()
+    return None
+
+
+def _merge_cookie_into_store(store: dict, cookie_value: str, session_id: str) -> None:
+    """Слить данные из cookie в in-memory store (без служебного _last_access)."""
+    try:
+        data = json.loads(cookie_value)
+        stored = {k: v for k, v in data.items() if k != "_last_access"}
+        store.update(stored)
+    except Exception:
+        logger.warning("Не удалось загрузить сессию: %s", session_id[:8])
+
+
 class SessionAuthMiddleware:
     """Plain ASGI middleware для поддержки параллельных сессий.
 
@@ -89,20 +108,10 @@ class SessionAuthMiddleware:
             # Загружаем сессию из cookie
             cookie_name = _session_cookie_name(session_id)
             # Читаем cookies из scope["headers"]
-            cookie_data = None
-            headers = scope.get("headers", [])
-            for name, value in headers:
-                if name == cookie_name.encode():
-                    cookie_data = value.decode()
-                    break
+            cookie_data = _read_session_cookie(scope, cookie_name)
 
             if cookie_data:
-                try:
-                    data = json.loads(cookie_data)
-                    stored = {k: v for k, v in data.items() if k != "_last_access"}
-                    store.update(stored)
-                except Exception:
-                    logger.warning("Не удалось загрузить сессию: %s", session_id[:8])
+                _merge_cookie_into_store(store, cookie_data, session_id)
 
             # Копируем user данные в scope["session"] для совместимости с CSRF
             # scope["session"] уже существует, потому что SessionMiddleware
@@ -121,16 +130,15 @@ class SessionAuthMiddleware:
             # а не в http.response.body, потому что заголовки отправляются
             # до тела ответа.
             async def send_wrapper(message):
-                if message["type"] == "http.response.start":
+                if message["type"] == "http.response.start" and "user" in store:
                     # Сохраняем сессию в cookie при наличии пользователя
-                    if "user" in store:
-                        cookie_value = (
-                            f"{cookie_name}={json.dumps(store)}; "
-                            "Path=/; HttpOnly; SameSite=Strict; Max-Age=3600"
-                        )
-                        headers = list(message.get("headers", []))
-                        headers.append((b"set-cookie", cookie_value.encode()))
-                        message["headers"] = headers
+                    cookie_value = (
+                        f"{cookie_name}={json.dumps(store)}; "
+                        "Path=/; HttpOnly; SameSite=Strict; Max-Age=3600"
+                    )
+                    headers = list(message.get("headers", []))
+                    headers.append((b"set-cookie", cookie_value.encode()))
+                    message["headers"] = headers
                 await send(message)
 
             await self.app(scope, receive, send_wrapper)

@@ -310,8 +310,10 @@ class TestAppSecurityIntegration:
 
         # Подменяем БД на in-memory SQLite
         import asyncio
-        import core.database as database_module
+
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        import core.database as database_module
         from core.models import Base
 
         engine = create_async_engine("sqlite+aiosqlite://")

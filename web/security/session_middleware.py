@@ -13,7 +13,6 @@ session_id извлекается из query-параметра ?sid=<session_id
 
 import json
 import logging
-import secrets
 import time
 from typing import Any
 
