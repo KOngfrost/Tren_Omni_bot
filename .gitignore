@@ -24,3 +24,11 @@ test/
 
 # Dev-секрет сессий (генерируется автоматически в development-режиме)
 .session_secret
+
+# Локальные артефакты, выводы проверок и черновики
+logs/
+mypy_output.txt
+results.txt
+_o.txt
+_e2e_check.sh
+py2.txt
