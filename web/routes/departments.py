@@ -71,8 +71,8 @@ async def departments_page(request: Request, user=Depends(require_superadmin)):
             "usage": usage,
             "db_error": db_error,
             "active": "departments",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
         },
@@ -87,10 +87,10 @@ async def create_department(request: Request, user=Depends(require_superadmin)):
     name = sanitize_html(str(form.get("name", ""))).strip()
 
     if not name:
-        request.session["error"] = "Название отдела не может быть пустым"
+        request.session["flash_error"] = "Название отдела не может быть пустым"
         return RedirectResponse(url="/departments/", status_code=303)
     if len(name) > MAX_DEPARTMENT_NAME_LEN:
-        request.session["error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        request.session["flash_error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
         return RedirectResponse(url="/departments/", status_code=303)
 
     try:
@@ -99,17 +99,17 @@ async def create_department(request: Request, user=Depends(require_superadmin)):
                 select(func.count(Department.id)).where(Department.name == name)
             )
             if exists:
-                request.session["error"] = "Отдел с таким названием уже существует"
+                request.session["flash_error"] = "Отдел с таким названием уже существует"
                 return RedirectResponse(url="/departments/", status_code=303)
 
             session.add(Department(name=name))
             await session.commit()
     except Exception:
         logger.exception("Не удалось создать отдел")
-        request.session["error"] = "Не удалось создать отдел. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось создать отдел. Попробуйте позже."
         return RedirectResponse(url="/departments/", status_code=303)
 
-    request.session["success"] = f"Отдел «{name}» создан"
+    request.session["flash_success"] = f"Отдел «{name}» создан"
     return RedirectResponse(url="/departments/", status_code=303)
 
 
@@ -121,17 +121,17 @@ async def rename_department(request: Request, dept_id: int, user=Depends(require
     name = sanitize_html(str(form.get("name", ""))).strip()
 
     if not name:
-        request.session["error"] = "Название отдела не может быть пустым"
+        request.session["flash_error"] = "Название отдела не может быть пустым"
         return RedirectResponse(url="/departments/", status_code=303)
     if len(name) > MAX_DEPARTMENT_NAME_LEN:
-        request.session["error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        request.session["flash_error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
         return RedirectResponse(url="/departments/", status_code=303)
 
     try:
         async with async_session_maker() as session:
             dept = await session.get(Department, dept_id)
             if not dept:
-                request.session["error"] = "Отдел не найден"
+                request.session["flash_error"] = "Отдел не найден"
                 return RedirectResponse(url="/departments/", status_code=303)
 
             exists = await session.scalar(
@@ -140,17 +140,17 @@ async def rename_department(request: Request, dept_id: int, user=Depends(require
                 )
             )
             if exists:
-                request.session["error"] = "Отдел с таким названием уже существует"
+                request.session["flash_error"] = "Отдел с таким названием уже существует"
                 return RedirectResponse(url="/departments/", status_code=303)
 
             dept.name = name
             await session.commit()
     except Exception:
         logger.exception("Не удалось переименовать отдел")
-        request.session["error"] = "Не удалось переименовать отдел. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось переименовать отдел. Попробуйте позже."
         return RedirectResponse(url="/departments/", status_code=303)
 
-    request.session["success"] = f"Отдел переименован в «{name}»"
+    request.session["flash_success"] = f"Отдел переименован в «{name}»"
     return RedirectResponse(url="/departments/", status_code=303)
 
 
@@ -166,13 +166,13 @@ async def delete_department(request: Request, dept_id: int, user=Depends(require
         async with async_session_maker() as session:
             dept = await session.get(Department, dept_id)
             if not dept:
-                request.session["error"] = "Отдел не найден"
+                request.session["flash_error"] = "Отдел не найден"
                 return RedirectResponse(url="/departments/", status_code=303)
 
             usage = await _department_usage(session, dept_id)
             if any(usage.values()):
                 parts = ", ".join(f"{key}: {count}" for key, count in usage.items() if count)
-                request.session["error"] = (
+                request.session["flash_error"] = (
                     f"Отдел «{dept.name}» не пуст ({parts}). "
                     "Сначала перенесите или удалите его данные."
                 )
@@ -182,8 +182,8 @@ async def delete_department(request: Request, dept_id: int, user=Depends(require
             await session.commit()
     except Exception:
         logger.exception("Не удалось удалить отдел")
-        request.session["error"] = "Не удалось удалить отдел. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить отдел. Попробуйте позже."
         return RedirectResponse(url="/departments/", status_code=303)
 
-    request.session["success"] = "Отдел удалён"
+    request.session["flash_success"] = "Отдел удалён"
     return RedirectResponse(url="/departments/", status_code=303)

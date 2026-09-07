@@ -674,10 +674,6 @@ textarea {
     width: auto;
 }
 
-.is-hidden {
-    display: none;
-}
-
 .filter-bar {
     display: flex;
     gap: 10px;
@@ -1048,6 +1044,39 @@ textarea {
     color: var(--text-tertiary);
     font-size: 13px;
 }
+/* ---------- Password toggle button ---------- */
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    flex: 1;
+    padding-right: 44px;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 16px;
+    border-radius: var(--r-xs);
+    transition: color 0.2s ease, background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toggle-password:hover {
+    color: var(--text-primary);
+    background: var(--bg-surface-3);
+}
+
 /* ---------- Misc helpers ---------- */
 .faq-question .badge {
     flex-shrink: 0;

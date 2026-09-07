@@ -7,7 +7,7 @@
 - Резервный вход по WEB_ADMIN_USERNAME/WEB_ADMIN_PASSWORD из .env
   (bootstrap-суперадмин, пока web_users не заведены).
 - Rate limiting: не более 5 неудачных попыток за 15 минут на IP,
-  затем временная блокировка.
+  затем временная блокировка (хранилище — БД login_attempts).
 - Журналирование входов в таблицу logs + уведомление суперадмина в VK
   при срабатывании блокировки.
 - Timing-safe сравнение, поворот CSRF-токена после входа.
@@ -16,12 +16,12 @@
 import json
 import logging
 import secrets
-import time
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core import database as core_db
 from core.config import settings
@@ -42,16 +42,9 @@ CREDENTIALS_NOT_SET = (
 )
 
 # Rate limiting: 5 неудачных попыток за 15 минут на IP.
-# Первичное хранилище — таблица login_attempts (PostgreSQL): лимит переживает
-# рестарты панели и работает одинаково при нескольких экземплярах.
-# _LOGIN_ATTEMPTS остаётся как in-memory mirror (совместимость; fallback,
-# если БД временно недоступна).
+# Единственное хранилище — таблица login_attempts (PostgreSQL).
 _LOGIN_MAX_ATTEMPTS = 5
 _LOGIN_WINDOW_SECONDS = 15 * 60
-
-# In-memory mirror для fallback (когда БД недоступна).
-# При штатной работе используется БД (login_attempts).
-_LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 
 # ==========================================
 # Rate limiting для CRUD-операций админ-панели
@@ -86,49 +79,27 @@ def _get_client_ip(request: Request) -> str:
     return client_ip
 
 
-async def _db_recent_failed_count(ip: str) -> int:
-    """Сколько неудачных попыток за окно в базе. -1 — БД недоступна."""
-    try:
-        cutoff = datetime.now(UTC) - timedelta(seconds=_LOGIN_WINDOW_SECONDS)
-        async with core_db.async_session_maker() as session:
-            count: int | None = await session.scalar(
-                select(func.count(LoginAttempt.id)).where(
-                    LoginAttempt.ip == ip,
-                    LoginAttempt.success.is_(False),
-                    LoginAttempt.attempted_at >= cutoff,
-                )
-            )
-            return int(count or 0)
-    except Exception:
-        logger.warning("Rate-limit: БД недоступна, использую in-memory mirror")
-        return -1
+async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
+    """Сколько неудачных попыток за окно в базе."""
+    cutoff = datetime.now(UTC) - timedelta(seconds=_LOGIN_WINDOW_SECONDS)
+    count: int | None = await session.scalar(
+        select(func.count(LoginAttempt.id)).where(
+            LoginAttempt.ip == ip,
+            LoginAttempt.success.is_(False),
+            LoginAttempt.attempted_at >= cutoff,
+        )
+    )
+    return int(count or 0)
 
 
-def _memory_window(ip: str) -> list[float]:
-    """Очистить и вернуть окно неудачных попыток из in-memory mirror."""
-    now = time.time()
-    window_start = now - _LOGIN_WINDOW_SECONDS
-    attempts = [t for t in _LOGIN_ATTEMPTS.get(ip, []) if t > window_start]
-    _LOGIN_ATTEMPTS[ip] = attempts
-    return attempts
-
-
-async def _is_rate_limited(ip: str) -> bool:
-    """Превышен ли лимит неудачных попыток входа для IP (БД + mirror)."""
-    db_count = await _db_recent_failed_count(ip)
-    if db_count >= 0:
-        return db_count >= _LOGIN_MAX_ATTEMPTS
-    return len(_memory_window(ip)) >= _LOGIN_MAX_ATTEMPTS
+async def _is_rate_limited(session: AsyncSession, ip: str) -> bool:
+    """Превышен ли лимит неудачных попыток входа для IP."""
+    db_count = await _db_recent_failed_count(session, ip)
+    return db_count >= _LOGIN_MAX_ATTEMPTS
 
 
 async def _record_failed_attempt(ip: str) -> None:
-    """Зафиксировать неудачную попытку входа (в БД и в mirror)."""
-    now = time.time()
-    window_start = now - _LOGIN_WINDOW_SECONDS
-    attempts = [t for t in _LOGIN_ATTEMPTS.get(ip, []) if t > window_start]
-    attempts.append(now)
-    _LOGIN_ATTEMPTS[ip] = attempts
-
+    """Зафиксировать неудачную попытку входа в БД."""
     try:
         async with core_db.async_session_maker() as session:
             session.add(LoginAttempt(ip=ip, success=False))
@@ -138,8 +109,7 @@ async def _record_failed_attempt(ip: str) -> None:
 
 
 async def _clear_attempts(ip: str) -> None:
-    """Сбросить лимит после успешного входа (БД + mirror)."""
-    _LOGIN_ATTEMPTS.pop(ip, None)
+    """Сбросить лимит после успешного входа (БД)."""
     try:
         async with core_db.async_session_maker() as session:
             await session.execute(delete(LoginAttempt).where(LoginAttempt.ip == ip))
@@ -168,88 +138,86 @@ async def _notify_superadmin(details: str) -> None:
         )
 
 
-async def _bootstrap_disabled_in_db() -> bool:
-    """Проверить, есть ли пользователи в web_users.
-
-    Если в БД уже есть хотя бы один пользователь, bootstrap-вход из .env
-    считается недействительным — постоянные учётные данные должны
-    создаваться через scripts/create_web_user.py.
-    """
-    try:
-        async with core_db.async_session_maker() as session:
-            count: int | None = await session.scalar(
-                select(func.count(WebUser.id)).where(WebUser.is_active.is_(True))
-            )
-            return int(count or 0) == 0
-    except Exception:
-        # БД недоступна — безопасно разрешаем bootstrap как fallback
-        logger.warning("БД недоступна: разрешаю bootstrap-вход как fallback")
-        return True
-
-
-async def _authenticate(username: str, password: str) -> dict | None:
+async def _authenticate(
+    session: AsyncSession,
+    username: str,
+    password: str,
+) -> dict | None:
     """Аутентифицировать пользователя: сначала web_users, затем .env-bootstrap.
 
-    Bootstrap-вход из .env работает ТОЛЬКО если в web_users нет активных
-    пользователей. После заведения постоянных учётных данных bootstrap
-    автоматически отключается.
+    Использует переданную сессию вместо создания нового подключения.
+    Bootstrap-вход из .env работает для суперадмина всегда.
+    После заведения постоянных учётных записей bootstrap для обычных
+    пользователей отключается.
     """
     try:
-        async with core_db.async_session_maker() as session:
-            web_user = await session.scalar(
-                select(WebUser).where(WebUser.username == username)
-            )
-            if web_user is not None:
-                if not web_user.is_active:
-                    return None
-                if not verify_password(password, web_user.password_hash):
-                    return None
-                web_user.last_login_at = datetime.now()
-                await session.commit()
-                return {
-                    "username": web_user.username,
-                    "role": web_user.role.value,
-                    "web_user_id": web_user.id,
-                    "department_id": web_user.department_id,
-                }
+        web_user = await session.scalar(
+            select(WebUser).where(WebUser.username == username)
+        )
+        if web_user is not None:
+            if not web_user.is_active:
+                return None
+            if not verify_password(password, web_user.password_hash):
+                return None
+            web_user.last_login_at = datetime.now()
+            await session.commit()
+            return {
+                "username": web_user.username,
+                "role": web_user.role.value,
+                "web_user_id": web_user.id,
+                "department_id": web_user.department_id,
+            }
     except Exception:
         # БД недоступна — пробуем bootstrap-вход из .env
         logger.exception("Не удалось проверить web_users")
 
-    # Bootstrap-вход из .env (только пока web_users пуст)
-    # Пароль из .env сравнивается только если нет активных пользователей в БД.
-    # Это предотвращает использование plain-text пароля из .env после
-    # заведения постоянных учётных записей.
+    # Bootstrap-вход из .env
     if _credentials_configured():
-        if await _bootstrap_disabled_in_db():
-            username_ok = secrets.compare_digest(
-                username.encode("utf-8"), settings.WEB_ADMIN_USERNAME.encode("utf-8")
-            )
+        if username == settings.WEB_ADMIN_USERNAME:
             password_ok = secrets.compare_digest(
                 password.encode("utf-8"), settings.WEB_ADMIN_PASSWORD.encode("utf-8")
             )
-            if username_ok and password_ok:
-                logger.warning(
-                    "Bootstrap-вход из .env выполнен (web_users пуст). "
-                    "Рекомендуется создать постоянного пользователя: "
-                    "python scripts/create_web_user.py"
-                )
-                return {
-                    "username": username,
-                    "role": WebRole.SUPERADMIN.value,
-                    "web_user_id": None,
-                    "bootstrap": True,
-                    "department_id": None,
-                }
-        else:
-            # Bootstrap отключён — но если введён правильный пароль из .env,
-            # логируем предупреждение о том, что учётные данные устарели
-            if username == settings.WEB_ADMIN_USERNAME:
-                logger.warning(
-                    "Bootstrap-вход отклонён: в web_users уже есть активные "
-                    "пользователи. Используйте постоянные учётные данные или "
-                    "создайте пользователя через scripts/create_web_user.py"
-                )
+            if password_ok:
+                # Проверяем, есть ли в БД постоянный пользователь с таким логином
+                try:
+                    web_user = await session.scalar(
+                        select(WebUser).where(WebUser.username == username)
+                    )
+                    if web_user is None:
+                        # Постоянного пользователя с таким логином нет —
+                        # разрешаем bootstrap-вход (суперадмин)
+                        logger.warning(
+                            "Bootstrap-вход из .env выполнен (пользователь %s не найден в БД). "
+                            "Рекомендуется создать постоянного пользователя: "
+                            "python scripts/create_web_user.py",
+                            username,
+                        )
+                        return {
+                            "username": username,
+                            "role": WebRole.SUPERADMIN.value,
+                            "web_user_id": None,
+                            "bootstrap": True,
+                            "department_id": None,
+                        }
+                    else:
+                        # Постоянный пользователь с таким логином существует —
+                        # bootstrap отклонён, нужно использовать хешированный пароль
+                        logger.warning(
+                            "Bootstrap-вход отклонён для пользователя %s: "
+                            "постоянный пользователь уже существует в БД. "
+                            "Используйте его хешированный пароль или создайте нового пользователя через scripts/create_web_user.py",
+                            username,
+                        )
+                except Exception:
+                    # БД недоступна — безопасно разрешаем bootstrap как fallback
+                    logger.warning("БД недоступна: разрешаю bootstrap-вход как fallback")
+                    return {
+                        "username": username,
+                        "role": WebRole.SUPERADMIN.value,
+                        "web_user_id": None,
+                        "bootstrap": True,
+                        "department_id": None,
+                    }
     return None
 
 
@@ -274,68 +242,55 @@ async def login(request: Request):
     username: str = str(form.get("username", ""))
     password: str = str(form.get("password", ""))
 
-    if await _is_rate_limited(client_ip):
-        details = f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
-        await _log_action("web_login_blocked", details)
-        await _notify_superadmin(details)
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Слишком много попыток входа. Подождите 15 минут.",
-                "csrf_token": get_csrf_token(request),
-            },
-            status_code=429,
-        )
+    async with core_db.async_session_maker() as session:
+        if await _is_rate_limited(session, client_ip):
+            details = f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
+            await _log_action("web_login_blocked", details)
+            await _notify_superadmin(details)
+            request.session["flash_error"] = "Слишком много попыток входа. Подождите 15 минут."
+            return RedirectResponse(url="/auth/login", status_code=302)
 
-    user_data: dict | None = await _authenticate(username, password)
+        user_data: dict | None = await _authenticate(session, username, password)
 
-    if user_data is None:
-        await _record_failed_attempt(client_ip)
+        if user_data is None:
+            await _record_failed_attempt(client_ip)
+            await _log_action(
+                "web_login_failed",
+                f"Неудачный вход с IP {client_ip} (username={username!r})",
+            )
+            logger.warning("Неудачная попытка входа с IP %s", client_ip)
+            request.session["flash_error"] = "Неверный логин или пароль"
+            return RedirectResponse(url="/auth/login", status_code=302)
+
+        await _clear_attempts(client_ip)
+        request.session["user"] = user_data
+        request.session["csrf_token"] = secrets.token_urlsafe(32)
         await _log_action(
-            "web_login_failed",
-            f"Неудачный вход с IP {client_ip} (username={username!r})",
-        )
-        logger.warning("Неудачная попытка входа с IP %s", client_ip)
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": "Неверный логин или пароль",
-                "csrf_token": get_csrf_token(request),
-            },
-            status_code=401,
+            "web_login_success",
+            f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
         )
 
-    await _clear_attempts(client_ip)
-    request.session["user"] = user_data
-    request.session["csrf_token"] = secrets.token_urlsafe(32)
-    await _log_action(
-        "web_login_success",
-        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
-    )
+        # Генерируем уникальный session_id для параллельных входов
+        session_id = secrets.token_urlsafe(32)
 
-    # Генерируем уникальный session_id для параллельных входов
-    session_id = secrets.token_urlsafe(32)
+        # Копируем user данные в scope["session"] для совместимости с CSRF
+        if "session" in request.scope:
+            request.scope["session"]["user"] = user_data
+            request.scope["session"]["session_id"] = session_id
 
-    # Копируем user данные в scope["session"] для совместимости с CSRF
-    if "session" in request.scope:
-        request.scope["session"]["user"] = user_data
-        request.scope["session"]["session_id"] = session_id
-
-    # Сохраняем сессию в cookie с уникальным именем
-    cookie_name = f"session_{session_id}"
-    session_data = {"user": user_data, "session_id": session_id}
-    response = RedirectResponse(url=f"/?sid={session_id}", status_code=303)
-    response.set_cookie(
-        cookie_name,
-        json.dumps(session_data),
-        max_age=3600,
-        httponly=True,
-        samesite="strict",
-        path="/",
-    )
-    return response
+        # Сохраняем сессию в cookie с уникальным именем
+        cookie_name = f"session_{session_id}"
+        session_data = {"user": user_data, "session_id": session_id}
+        response = RedirectResponse(url=f"/?sid={session_id}", status_code=303)
+        response.set_cookie(
+            cookie_name,
+            json.dumps(session_data),
+            max_age=3600,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+        return response
 
 
 @router.post("/logout")

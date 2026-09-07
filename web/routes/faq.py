@@ -95,8 +95,8 @@ async def faq_page(request: Request, user=Depends(require_auth)):
             "departments": departments,
             "db_error": db_error,
             "active": "faq",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
         },
@@ -113,10 +113,10 @@ async def add_faq(request: Request, user=Depends(require_writer)):
     final_answer: str | None = sanitize_html(str(form.get("final_answer", ""))) if is_final else None
 
     if not question.strip():
-        request.session["error"] = "Текст вопроса обязателен"
+        request.session["flash_error"] = "Текст вопроса обязателен"
         return RedirectResponse(url="/faq/", status_code=303)
     if is_final and not (final_answer or "").strip():
-        request.session["error"] = "Для конечного элемента нужен ответ"
+        request.session["flash_error"] = "Для конечного элемента нужен ответ"
         return RedirectResponse(url="/faq/", status_code=303)
 
     try:
@@ -127,7 +127,7 @@ async def add_faq(request: Request, user=Depends(require_writer)):
                 # Админ отдела жёстко привязан к своему отделу
                 department_id = dept_id
             if department_id is None:
-                request.session["error"] = "Не выбран отдел"
+                request.session["flash_error"] = "Не выбран отдел"
                 return RedirectResponse(url="/faq/", status_code=303)
 
             parent_id: int | None = parse_form_int(form, "parent_id")
@@ -135,7 +135,7 @@ async def add_faq(request: Request, user=Depends(require_writer)):
                 # Родитель должен существовать и принадлежать тому же отделу
                 parent = await session.get(FAQNode, parent_id)
                 if parent is None or parent.department_id != department_id:
-                    request.session["error"] = "Родительский вопрос не найден"
+                    request.session["flash_error"] = "Родительский вопрос не найден"
                     return RedirectResponse(url="/faq/", status_code=303)
 
             max_order = await session.scalar(
@@ -153,10 +153,10 @@ async def add_faq(request: Request, user=Depends(require_writer)):
             await session.commit()
     except Exception:
         logger.exception("Не удалось добавить FAQ")
-        request.session["error"] = "Не удалось сохранить FAQ. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось сохранить FAQ. Попробуйте позже."
         return RedirectResponse(url="/faq/", status_code=303)
 
-    request.session["success"] = "Элемент FAQ добавлен"
+    request.session["flash_success"] = "Элемент FAQ добавлен"
     return RedirectResponse(url="/faq/", status_code=303)
 
 
@@ -167,21 +167,21 @@ async def delete_faq(request: Request, node_id: int, user=Depends(require_writer
         async with async_session_maker() as session:
             node = await session.get(FAQNode, node_id)
             if not node:
-                request.session["error"] = "Элемент FAQ не найден"
+                request.session["flash_error"] = "Элемент FAQ не найден"
                 return RedirectResponse(url="/faq/", status_code=303)
 
             # IDOR: админ отдела может удалять только FAQ своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
             if not is_super and node.department_id != dept_id:
-                request.session["error"] = "Нет прав для удаления этого элемента FAQ"
+                request.session["flash_error"] = "Нет прав для удаления этого элемента FAQ"
                 return RedirectResponse(url="/faq/", status_code=303)
 
             await session.delete(node)
             await session.commit()
     except Exception:
         logger.exception("Не удалось удалить FAQ")
-        request.session["error"] = "Не удалось удалить FAQ. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить FAQ. Попробуйте позже."
         return RedirectResponse(url="/faq/", status_code=303)
 
-    request.session["success"] = "Элемент FAQ удалён"
+    request.session["flash_success"] = "Элемент FAQ удалён"
     return RedirectResponse(url="/faq/", status_code=303)

@@ -68,8 +68,8 @@ async def knowledge_base_page(request: Request, user=Depends(require_auth)):
             "departments": departments,
             "db_error": db_error,
             "active": "knowledge",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
         },
@@ -98,7 +98,7 @@ async def add_knowledge_base(request: Request, user=Depends(require_writer)):
                 # Админ отдела жёстко привязан к своему отделу
                 department_id = dept_id
             if department_id is None:
-                request.session["error"] = "Не выбран отдел"
+                request.session["flash_error"] = "Не выбран отдел"
                 return RedirectResponse(url="/knowledge/", status_code=303)
 
             session.add(KnowledgeBase(
@@ -109,10 +109,10 @@ async def add_knowledge_base(request: Request, user=Depends(require_writer)):
             await session.commit()
     except Exception:
         logger.exception("Не удалось добавить запись в базу знаний")
-        request.session["error"] = "Не удалось сохранить запись. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось сохранить запись. Попробуйте позже."
         return RedirectResponse(url="/knowledge/", status_code=303)
 
-    request.session["success"] = "Запись добавлена в базу знаний"
+    request.session["flash_success"] = "Запись добавлена в базу знаний"
     return RedirectResponse(url="/knowledge/", status_code=303)
 
 
@@ -123,22 +123,22 @@ async def delete_knowledge_base(request: Request, kb_id: int, user=Depends(requi
         async with async_session_maker() as session:
             kb = await session.get(KnowledgeBase, kb_id)
             if not kb:
-                request.session["error"] = "Запись не найдена"
+                request.session["flash_error"] = "Запись не найдена"
                 return RedirectResponse(url="/knowledge/", status_code=303)
 
             # IDOR: админ отдела может удалять только записи своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
             if not is_super and kb.department_id != dept_id:
-                request.session["error"] = "Нет прав для удаления этой записи"
+                request.session["flash_error"] = "Нет прав для удаления этой записи"
                 return RedirectResponse(url="/knowledge/", status_code=303)
 
             await session.delete(kb)
             await session.commit()
     except Exception:
         logger.exception("Не удалось удалить запись базы знаний")
-        request.session["error"] = "Не удалось удалить запись. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить запись. Попробуйте позже."
         return RedirectResponse(url="/knowledge/", status_code=303)
 
-    request.session["success"] = "Запись удалена"
+    request.session["flash_success"] = "Запись удалена"
     return RedirectResponse(url="/knowledge/", status_code=303)
 

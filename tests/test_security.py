@@ -302,21 +302,35 @@ class TestAppSecurityIntegration:
     """Интеграционные тесты безопасности FastAPI-приложения."""
 
     @pytest.fixture
-    def client(self):
-        """Создаём TestClient с настроенными переменными окружения."""
+    def client(self, monkeypatch):
+        """Создаём TestClient с настроенными переменными окружения и in-memory БД."""
         os.environ["SESSION_SECRET_KEY"] = "test_secret_key_for_security_tests_1234567890"
         os.environ["WEB_ADMIN_USERNAME"] = "testadmin"
         os.environ["WEB_ADMIN_PASSWORD"] = "test_password_123"
 
-        from web.main import app
-        from web.routes.auth import _LOGIN_ATTEMPTS
+        # Подменяем БД на in-memory SQLite
+        import asyncio
+        import core.database as database_module
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+        from core.models import Base
 
-        _LOGIN_ATTEMPTS.clear()
+        engine = create_async_engine("sqlite+aiosqlite://")
+
+        async def _async_setup():
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+
+        asyncio.run(_async_setup())
+
+        maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        monkeypatch.setattr(database_module, "async_session_maker", maker, raising=True)
+
+        from web.main import app
 
         client = TestClient(app, raise_server_exceptions=False)
         yield client
 
-        _LOGIN_ATTEMPTS.clear()
+        asyncio.run(engine.dispose())
 
     def test_security_headers_present(self, client):
         """Проверка наличия заголовков безопасности в ответе."""
@@ -390,7 +404,7 @@ class TestAppSecurityIntegration:
         """Ошибка пароля не должна ломать следующую попытку входа."""
         from web.routes import auth
 
-        async def reject_credentials(username, password):
+        async def reject_credentials(session, username, password):
             return None
 
         monkeypatch.setattr(auth, "_authenticate", reject_credentials)
@@ -406,10 +420,17 @@ class TestAppSecurityIntegration:
                 "password": "wrong",
                 "csrf_token": csrf_token,
             },
+            follow_redirects=False,
         )
 
-        assert response.status_code == 401
-        assert re.search(r'name="csrf_token" value="[^"]+"', response.text)
+        # Теперь возвращается 302 redirect на страницу логина
+        assert response.status_code == 302
+        assert "/auth/login" in response.headers.get("location", "")
+
+        # Страница логина должна содержать CSRF-токен
+        new_login_page = client.get("/auth/login")
+        assert new_login_page.status_code == 200
+        assert re.search(r'name="csrf_token" value="[^"]+"', new_login_page.text)
 
     def test_login_without_csrf_token_returns_403(self, client):
         """POST на вход без CSRF-токена — 403 (или 500 из-за group exception)."""

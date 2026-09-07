@@ -41,19 +41,22 @@ class TestPasswords:
 
 class TestRateLimiting:
     async def test_not_limited_initially(self, db_session_maker):
-        assert await _is_rate_limited("1.2.3.4") is False
+        async with db_session_maker() as session:
+            assert await _is_rate_limited(session, "1.2.3.4") is False
 
     async def test_limited_after_five_failures(self, db_session_maker):
         for _ in range(5):
             await _record_failed_attempt("1.2.3.4")
-        assert await _is_rate_limited("1.2.3.4") is True
+        async with db_session_maker() as session:
+            assert await _is_rate_limited(session, "1.2.3.4") is True
 
     async def test_clear_attempts_resets_limit(self, db_session_maker):
         for _ in range(5):
             await _record_failed_attempt("1.2.3.4")
-        assert await _is_rate_limited("1.2.3.4") is True
-        await _clear_attempts("1.2.3.4")
-        assert await _is_rate_limited("1.2.3.4") is False
+        async with db_session_maker() as session:
+            assert await _is_rate_limited(session, "1.2.3.4") is True
+            await _clear_attempts("1.2.3.4")
+            assert await _is_rate_limited(session, "1.2.3.4") is False
 
     async def test_window_is_15_minutes(self):
         from web.routes.auth import _LOGIN_MAX_ATTEMPTS, _LOGIN_WINDOW_SECONDS
@@ -67,6 +70,8 @@ class TestRoles:
         assert role_of({"role": "SUPERADMIN"}) == is_superadmin_role()
 
     def test_role_backward_compat_lowercase(self):
+        # .upper() делает "superadmin" → "SUPERADMIN" валидным WebRole.
+        # Обратная совместимость сохраняется неявно.
         assert is_superadmin({"role": "superadmin"}) is True
 
     def test_department_admin_cannot_see_all(self):

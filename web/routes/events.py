@@ -68,8 +68,8 @@ async def events_page(request: Request, user=Depends(require_auth)):
             "departments": departments,
             "db_error": db_error,
             "active": "events",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
         },
@@ -85,7 +85,7 @@ async def add_event(request: Request, user=Depends(require_writer)):
     event_date_str: str = str(form.get("event_date", ""))
 
     if not title.strip():
-        request.session["error"] = "Название события обязательно"
+        request.session["flash_error"] = "Название события обязательно"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
@@ -93,7 +93,7 @@ async def add_event(request: Request, user=Depends(require_writer)):
         if event_date.tzinfo is None:
             event_date = event_date.replace(tzinfo=UTC)
     except ValueError:
-        request.session["error"] = "Некорректная дата события"
+        request.session["flash_error"] = "Некорректная дата события"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
@@ -105,7 +105,7 @@ async def add_event(request: Request, user=Depends(require_writer)):
                 # Админ отдела жёстко привязан к своему отделу
                 department_id = dept_id
             if department_id is None:
-                request.session["error"] = "Не выбран отдел"
+                request.session["flash_error"] = "Не выбран отдел"
                 return RedirectResponse(url="/events/", status_code=303)
 
             session.add(Event(
@@ -117,10 +117,10 @@ async def add_event(request: Request, user=Depends(require_writer)):
             await session.commit()
     except Exception:
         logger.exception("Не удалось создать событие")
-        request.session["error"] = "Не удалось сохранить событие. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось сохранить событие. Попробуйте позже."
         return RedirectResponse(url="/events/", status_code=303)
 
-    request.session["success"] = "Событие создано"
+    request.session["flash_success"] = "Событие создано"
     return RedirectResponse(url="/events/", status_code=303)
 
 
@@ -131,22 +131,22 @@ async def delete_event(request: Request, event_id: int, user=Depends(require_wri
         async with async_session_maker() as session:
             event = await session.get(Event, event_id)
             if not event:
-                request.session["error"] = "Событие не найдено"
+                request.session["flash_error"] = "Событие не найдено"
                 return RedirectResponse(url="/events/", status_code=303)
 
             # IDOR: админ отдела может удалять только события своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
             if not is_super and event.department_id != dept_id:
-                request.session["error"] = "Нет прав для удаления этого события"
+                request.session["flash_error"] = "Нет прав для удаления этого события"
                 return RedirectResponse(url="/events/", status_code=303)
 
             await session.delete(event)
             await session.commit()
     except Exception:
         logger.exception("Не удалось удалить событие")
-        request.session["error"] = "Не удалось удалить событие. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить событие. Попробуйте позже."
         return RedirectResponse(url="/events/", status_code=303)
 
-    request.session["success"] = "Событие удалено"
+    request.session["flash_success"] = "Событие удалено"
     return RedirectResponse(url="/events/", status_code=303)
 

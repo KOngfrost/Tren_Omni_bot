@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ error_title }} - OSS Web Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .error-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-page);
+            padding: 20px;
+        }
+
+        .error-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--line);
+            border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg);
+            width: 100%;
+            max-width: 520px;
+            padding: 40px 32px;
+            text-align: center;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        .error-code {
+            font-size: 96px;
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1;
+            margin-bottom: 8px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            animation: fadeIn 0.8s ease-out 0.3s both;
+        }
+
+        .error-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            animation: fadeIn 0.8s ease-out 0.4s both;
+        }
+
+        .error-message {
+            color: var(--text-secondary);
+            font-size: 15px;
+            line-height: 1.7;
+            margin-bottom: 28px;
+            animation: fadeIn 0.8s ease-out 0.5s both;
+        }
+
+        .error-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeIn 0.8s ease-out 0.6s both;
+        }
+
+        .error-actions .btn {
+            min-width: 140px;
+        }
+
+        @media (max-width: 480px) {
+            .error-code {
+                font-size: 64px;
+            }
+            .error-card {
+                padding: 32px 20px;
+            }
+            .error-actions {
+                flex-direction: column;
+            }
+            .error-actions .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-page">
+        <div class="error-card">
+            <div class="error-icon">{{ error_icon }}</div>
+            <div class="error-code">{{ error_code }}</div>
+            <div class="error-title">{{ error_title }}</div>
+            <div class="error-message">{{ error_message }}</div>
+            <div class="error-actions">
+                {% if show_refresh %}
+                <button class="btn btn-primary" onclick="window.location.reload()">
+                    ↻ Обновить страницу
+                </button>
+                {% endif %}
+                {% if show_back %}
+                <button class="btn btn-secondary" onclick="window.history.back()">
+                    ← Вернуться назад
+                </button>
+                {% endif %}
+                {% if show_home %}
+                <a class="btn btn-secondary" href="/">
+                    ⌂ На главную
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

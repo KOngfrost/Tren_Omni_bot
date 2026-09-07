@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import async_session_maker
-from core.models import Admin, Department, User, UserRole, WebRole, WebUser
+from core.models import Department, WebRole, WebUser
 
 logger = logging.getLogger(__name__)
 
@@ -53,31 +53,10 @@ async def require_auth(request: Request) -> dict:
             request.session["user"] = canonical
             return canonical
 
-        # Legacy VK-admin sessions are resolved by their database identity.
-        admin_user_id = user.get("user_id")
-        if admin_user_id is not None:
-            admin = await session.get(Admin, admin_user_id)
-            if admin is None:
-                request.session.clear()
-                raise HTTPException(
-                    status_code=302, detail="Session expired",
-                    headers={"Location": "/auth/login"},
-                )
-            canonical = {
-                **user,
-                "role": (
-                    WebRole.SUPERADMIN.value
-                    if admin.role == UserRole.SUPERADMIN
-                    else WebRole.DEPARTMENT_ADMIN.value
-                ),
-                "department_id": admin.department_id,
-            }
-            request.session["user"] = canonical
-            return canonical
+        # Bootstrap-сессии (суперадмин из .env, пока web_users не заведены)
+        if role_of(user) == WebRole.SUPERADMIN and user.get("bootstrap"):
+            return user
 
-    # Bootstrap sessions have no database identity and are explicitly marked.
-    if role_of(user) == WebRole.SUPERADMIN and user.get("bootstrap"):
-        return user
     request.session.clear()
     raise HTTPException(
         status_code=302, detail="Session expired", headers={"Location": "/auth/login"}
@@ -90,11 +69,6 @@ def _normalize_role(role: str | None) -> WebRole | None:
     try:
         return WebRole(role.upper())
     except ValueError:
-        # Обратная совместимость со старыми значениями "superadmin"/"admin"
-        if role.lower() == "superadmin":
-            return WebRole.SUPERADMIN
-        if role.lower() == "admin":
-            return WebRole.DEPARTMENT_ADMIN
         return None
 
 
@@ -149,14 +123,12 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
     if role == WebRole.SUPERADMIN or role == WebRole.VIEWER:
         return True, None
     if role == WebRole.DEPARTMENT_ADMIN:
-        # Проверяем department_id через БД, а не из сессии
         web_user_id = user.get("web_user_id")
         if web_user_id:
             try:
                 web_user = await session.get(WebUser, web_user_id)
                 if web_user and web_user.is_active:
                     return False, web_user.department_id
-                # Если пользователь не найден или неактивен — ограничиваем доступ
                 return False, None
             except Exception:
                 logger.warning(
@@ -164,26 +136,11 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
                     "возвращаю None (ограниченный доступ)"
                 )
                 return False, None
-        # web_user_id отсутствует — проверяем legacy-пользователя (Admin из VK)
-        admin_user_id = user.get("user_id")
-        if admin_user_id:
-            admin = await session.get(Admin, admin_user_id)
-            if admin:
-                return False, admin.department_id
         logger.warning(
             "DEPARTMENT_ADMIN без подтверждённой идентичности (user_id=%s)",
             user.get("user_id", "unknown"),
         )
         return False, None
-
-    # Обратная совместимость: сессии, созданные до web_users
-    admin_user_id = user.get("user_id")
-    if admin_user_id:
-        admin = await session.get(Admin, admin_user_id)
-        if admin and admin.role == UserRole.SUPERADMIN:
-            return True, None
-        if admin:
-            return False, admin.department_id
     return False, None
 
 
@@ -207,13 +164,6 @@ async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
             web_user = await session.get(WebUser, web_user_id)
             if web_user and web_user.department_id:
                 dept = await session.get(Department, web_user.department_id)
-                return [dept] if dept else []
-
-        admin_user_id = user.get("user_id")
-        if admin_user_id:
-            admin = await session.get(Admin, admin_user_id)
-            if admin and admin.department_id:
-                dept = await session.get(Department, admin.department_id)
                 return [dept] if dept else []
 
     return []

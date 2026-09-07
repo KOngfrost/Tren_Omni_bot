@@ -101,7 +101,7 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
             context = await _load_dept_context(session, dept_id, user)
 
             if context is None:
-                request.session["error"] = "Отдел не найден или нет прав доступа"
+                request.session["flash_error"] = "Отдел не найден или нет прав доступа"
                 return RedirectResponse(url="/", status_code=303)
 
             # Отделы для навигации/переключателя (суперадмин — все)
@@ -124,7 +124,7 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
                 "db_error": True,
                 "active": "dept",
                 "csrf_token": csrf_token,
-                "error": request.session.pop("error", None),
+                "flash_error": request.session.pop("flash_error", None),
                 "session_id": request.state.session_id,
             },
         )
@@ -145,8 +145,8 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
             "db_error": False,
             "active": "dept",
             "csrf_token": csrf_token,
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "session_id": request.state.session_id,
         },
     )

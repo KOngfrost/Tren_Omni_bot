@@ -101,6 +101,13 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Static
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
+# === Константы путей для пропуска middleware ===
+_SKIP_MIDDLEWARE_PREFIXES = (
+    "/static/",
+    "/health",
+    "/auth/",
+)
+
 # Валидатор размера запроса (10MB лимит)
 _request_size_validator = RequestSizeValidator(max_body_size=10 * 1024 * 1024)
 
@@ -116,8 +123,10 @@ async def validate_request_size(request: Request, call_next):
 
 # === Кэширование department_name ===
 
-# Простой in-memory кэш: {web_user_id: (department_name, user_departments, dept_id, expires_at)}
+# LRU-кэш: до 256 записей, автоматически удаляет старые при переполнении.
+# TTL = 5 минут для каждого элемента.
 _department_cache: dict[int, tuple[str | None, list, int | None, float]] = {}
+_DEPARTMENT_CACHE_MAX_SIZE = 256
 _DEPARTMENT_CACHE_TTL = 300  # 5 минут
 
 
@@ -134,7 +143,12 @@ def _get_cached_department(user_id: int) -> tuple[str | None, list, int | None] 
 
 
 def _set_department_cache(user_id: int, name: str | None, depts: list, dept_id: int | None) -> None:
-    """Сохранить department_name в кэш."""
+    """Сохранить department_name в кэш с ограничением по размеру."""
+    # Удаляем самые старые записи, если кэш переполнен
+    if user_id not in _department_cache and len(_department_cache) >= _DEPARTMENT_CACHE_MAX_SIZE:
+        # Удаляем первую попавшуюся запись (самую старую в dict-порядке)
+        oldest_key = next(iter(_department_cache))
+        del _department_cache[oldest_key]
     _department_cache[user_id] = (name, depts, dept_id, time.time())
 
 
@@ -144,9 +158,7 @@ async def add_department_name(request: Request, call_next):
     """Загружает department_name и список отделов пользователя из БД (с кэшем)."""
     # Пропускаем статические файлы, healthcheck, auth и API-запросы
     if (
-        request.url.path.startswith("/static/")
-        or request.url.path == "/health"
-        or request.url.path.startswith("/auth/")
+        any(request.url.path.startswith(prefix) for prefix in _SKIP_MIDDLEWARE_PREFIXES)
         or "application/json" in request.headers.get("accept", "")
     ):
         return await call_next(request)
@@ -192,6 +204,46 @@ async def add_department_name(request: Request, call_next):
 
 # === Глобальный обработчик ошибок — без раскрытия деталей ===
 
+def _is_browser_request(request: Request) -> bool:
+    """Проверить, является ли запрос браузерным (не API)."""
+    accept = request.headers.get("accept", "")
+    return "application/json" not in accept
+
+
+def _get_error_page_context(exc: HTTPException) -> dict:
+    """Получить контекст для страницы ошибки."""
+    status = exc.status_code
+    messages = {
+        400: ("Неверный запрос", "Пожалуйста, проверьте введённые данные и попробуйте снова.", "🔍", True, True, False),
+        403: ("Доступ запрещён", "У вас нет прав для доступа к этой странице. Обратитесь к суперадминистратору.", "🚫", True, True, False),
+        404: ("Страница не найдена", "Запрошенная страница не существует или была перемещена.", "📄", True, True, True),
+        405: ("Метод не разрешён", "Запрашиваемый метод HTTP не поддерживается для этой страницы.", "🚫", True, True, False),
+        429: ("Слишком много запросов", "Вы сделали слишком много запросов. Подождите минуту и попробуйте снова.", "⏳", True, True, False),
+        500: ("Внутренняя ошибка сервера", "Что-то пошло не так на нашей стороне. Попробуйте обновить страницу.", "⚠️", True, True, True),
+    }
+    if status in messages:
+        title, msg, icon, refresh, back, home = messages[status]
+        return {
+            "error_code": str(status),
+            "error_title": title,
+            "error_message": msg,
+            "error_icon": icon,
+            "show_refresh": refresh,
+            "show_back": back,
+            "show_home": home,
+        }
+    # Для остальных кодов — общая страница
+    return {
+        "error_code": str(status),
+        "error_title": f"Ошибка {status}",
+        "error_message": "Произошла непредвидённая ошибка. Попробуйте обновить страницу или вернуться назад.",
+        "error_icon": "⚠️",
+        "show_refresh": True,
+        "show_back": True,
+        "show_home": True,
+    }
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Сохранить корректный HTTP-статус для отказов auth и CSRF."""
@@ -201,6 +253,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             status_code=exc.status_code,
             headers=exc.headers,
         )
+    
+    # Для браузерных запросов возвращаем HTML-страницу ошибки
+    if _is_browser_request(request):
+        context = _get_error_page_context(exc)
+        return templates.TemplateResponse(
+            "error.html",
+            context,
+            status_code=exc.status_code,
+        )
+    
+    # Для API-запросов возвращаем JSON
     return JSONResponse(
         content={"detail": exc.detail},
         status_code=exc.status_code,

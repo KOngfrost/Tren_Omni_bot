@@ -83,8 +83,8 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "departments": departments,
             "db_error": db_error,
             "active": "admins",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "created_credentials": request.session.pop("created_credentials", None),
             "session_id": request.state.session_id,
@@ -94,107 +94,180 @@ async def admins_page(request: Request, user=Depends(require_auth)):
 
 
 @router.post("/")
-async def add_admin(request: Request, user=Depends(require_auth)):  # noqa: C901 — длинная цепочка валидации формы
-    """Добавление нового администратора.
-
-    Безопасность:
-    - CSRF: защищён middleware CSRFMiddleware (токен из сессии)
-    - Rate limiting: не более 20 запросов на IP за 5 минут
-    - Только суперадмин может назначать роль superadmin
-    - Обычный админ может назначать только роль admin
-    - Данные из форм санитизируются
-    """
+async def add_admin(request: Request, user=Depends(require_auth)):
+    """Добавление нового администратора."""
     require_crud_rate_limit(request)
     form = await request.form()
-    try:
-        vk_id: int = int(form.get("vk_id", 0))
-    except (TypeError, ValueError):
-        request.session["error"] = "VK ID должен быть числом"
+
+    # === Шаг 1: Валидация входных данных ===
+    errors = _validate_add_admin_form(form)
+    if errors:
+        request.session["flash_error"] = errors
         return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    vk_id: int = _parse_vk_id(form)
     full_name: str = sanitize_html(form.get("full_name", ""))
-    department_id: str | None = form.get("department_id")
+    department_id_raw: str | None = form.get("department_id")
     role: str = form.get("role", "admin")
     username: str = sanitize_html(str(form.get("username", "")).strip())
     password: str = str(form.get("password", ""))
 
-    # Проверка прав: только суперадмин может назначать роль superadmin/viewer
+    # === Шаг 2: Проверка прав и определение department_id ===
     try:
         async with async_session_maker() as session:
-            if role not in ("admin", "superadmin", "viewer"):
-                request.session["error"] = "Неизвестная роль администратора"
-                return RedirectResponse(url="/admin/admins/", status_code=302)
-            if role in ("superadmin", "viewer") and not is_superadmin(user):
-                request.session["error"] = "Только суперадмин может назначать эту роль"
+            allowed_roles = _check_role_permissions(user, role)
+            if allowed_roles is not None:
+                request.session["flash_error"] = allowed_roles
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
-            selected_department_id: int | None = int(department_id) if department_id else None
-            if not is_superadmin(user):
-                # Обычный админ назначает админов только в свой отдел
-                selected_department_id = user.get("department_id")
-                if selected_department_id is None:
-                    request.session["error"] = "У вашего аккаунта не указан отдел"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-
+            # Генерация учётных данных
             if not username:
                 username = f"dept_admin_{vk_id}"
             if not password:
                 password = secrets.token_urlsafe(12)
             if len(password) < 8:
-                request.session["error"] = "Пароль должен быть не короче 8 символов"
+                request.session["flash_error"] = "Пароль должен быть не короче 8 символов"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            # Проверка уникальности username
             if await session.scalar(select(WebUser).where(WebUser.username == username)):
-                request.session["error"] = "Такой логин уже занят"
+                request.session["flash_error"] = "Такой логин уже занят"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
-            # Получаем или создаём пользователя VK (наблюдателю он не нужен:
-            # VIEWER существует только в веб-панели)
-            db_user: User | None = None
-            if role != "viewer":
-                db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
-                if not db_user:
-                    db_user = User(vk_id=vk_id, full_name=full_name or None)
-                    session.add(db_user)
-                    await session.commit()
-                    await session.refresh(db_user)
-                elif full_name:
-                    db_user.full_name = full_name
-                    await session.commit()
-
-                # Проверяем, нет ли уже такого админа
-                existing: Admin | None = await session.scalar(
-                    select(Admin).where(Admin.user_id == db_user.id)
-                )
-                if existing:
-                    request.session["error"] = "Этот пользователь уже является админом"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-
-            web_role = {
-                "superadmin": WebRole.SUPERADMIN,
-                "viewer": WebRole.VIEWER,
-            }.get(role, WebRole.DEPARTMENT_ADMIN)
-
-            if role == "admin":
-                # Создаём запись админа (VK + веб-панель)
-                session.add(Admin(
-                    user_id=db_user.id,
-                    department_id=selected_department_id,
-                    role=UserRole(role),
-                ))
-            session.add(WebUser(
+            # === Шаг 3: БД-логика ===
+            await _create_admin_records(
+                session=session,
+                vk_id=vk_id,
+                full_name=full_name,
+                department_id_raw=department_id_raw,
+                is_super=user_get_department_id(user),
+                user_is_super=is_superadmin(user),
+                role=role,
                 username=username,
                 password_hash=hash_password(password),
-                role=web_role,
-                department_id=selected_department_id,
-            ))
-            await session.commit()
+            )
     except Exception:
         logger.exception("Не удалось добавить администратора")
-        request.session["error"] = "Не удалось сохранить изменения. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось сохранить изменения. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
-    request.session["success"] = "Администратор успешно добавлен"
+    # === Шаг 4: Ответ ===
+    request.session["flash_success"] = "Администратор успешно добавлен"
     request.session["created_credentials"] = {"username": username, "password": password}
     return RedirectResponse(url="/admin/admins/", status_code=302)
+
+
+def _parse_vk_id(form) -> int:
+    """Парсит vk_id из формы."""
+    try:
+        return int(form.get("vk_id", 0))
+    except (TypeError, ValueError):
+        raise ValueError("VK ID должен быть числом")
+
+
+def _validate_add_admin_form(form) -> str | None:
+    """Валидация формы. Возвращает сообщение об ошибке или None."""
+    try:
+        _parse_vk_id(form)
+    except ValueError:
+        return "VK ID должен быть числом"
+
+    role: str = form.get("role", "admin")
+    if role not in ("admin", "superadmin", "viewer"):
+        return "Неизвестная роль администратора"
+
+    password: str = str(form.get("password", ""))
+    if len(password) < 8:
+        return "Пароль должен быть не короче 8 символов"
+
+    return None
+
+
+def user_get_department_id(user: dict) -> int | None:
+    """Извлекает department_id из сессии пользователя."""
+    return user.get("department_id")
+
+
+def _check_role_permissions(user: dict, role: str) -> str | None:
+    """Проверяет права пользователя на назначение роли."""
+    if role in ("superadmin", "viewer") and not is_superadmin(user):
+        return "Только суперадмин может назначать эту роль"
+    return None
+
+
+async def _create_admin_records(
+    session: "async_session_maker",
+    vk_id: int,
+    full_name: str,
+    department_id_raw: str | None,
+    is_super: int | None,
+    user_is_super: bool,
+    role: str,
+    username: str,
+    password_hash: str,
+) -> None:
+    """Создаёт записи Admin и WebUser в БД."""
+    # Определяем department_id
+    if not user_is_super:
+        selected_department_id = is_super
+        if selected_department_id is None:
+            raise ValueError("У вашего аккаунта не указан отдел")
+    else:
+        selected_department_id: int | None = int(department_id_raw) if department_id_raw else None
+
+    # Получаем или создаём пользователя VK (VIEWER — только веб-панель)
+    db_user: User | None = None
+    if role != "viewer":
+        db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
+        if not db_user:
+            db_user = User(vk_id=vk_id, full_name=full_name or None)
+            session.add(db_user)
+            await session.commit()
+            await session.refresh(db_user)
+        elif full_name:
+            db_user.full_name = full_name
+            await session.commit()
+
+        # Проверяем, нет ли уже такого админа
+        existing: Admin | None = await session.scalar(
+            select(Admin).where(Admin.user_id == db_user.id)
+        )
+        if existing:
+            raise ValueError("Этот пользователь уже является админом")
+
+    web_role = {
+        "superadmin": WebRole.SUPERADMIN,
+        "viewer": WebRole.VIEWER,
+    }.get(role, WebRole.DEPARTMENT_ADMIN)
+
+    if role == "admin":
+        admin = Admin(
+            user_id=db_user.id,
+            department_id=selected_department_id,
+            role=UserRole(role),
+        )
+        session.add(admin)
+        await session.flush()  # Получаем admin.id
+
+        # Связываем WebUser с Admin через admin_id
+        session.add(WebUser(
+            username=username,
+            password_hash=password_hash,
+            role=web_role,
+            admin_id=admin.id,
+            department_id=selected_department_id,
+        ))
+    else:
+        # superadmin/viewer — без записи Admin
+        session.add(WebUser(
+            username=username,
+            password_hash=password_hash,
+            role=web_role,
+            admin_id=None,
+            department_id=selected_department_id,
+        ))
+
+    await session.commit()
 
 
 @router.post("/{admin_id}/delete")
@@ -209,19 +282,19 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
     """
     require_crud_rate_limit(request)
     if not is_superadmin(user):
-        request.session["error"] = "Только суперадмин может удалять администраторов"
+        request.session["flash_error"] = "Только суперадмин может удалять администраторов"
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     try:
         async with async_session_maker() as session:
             admin = await session.get(Admin, admin_id)
             if not admin:
-                request.session["error"] = "Администратор не найден"
+                request.session["flash_error"] = "Администратор не найден"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
             # Нельзя удалить самого себя (для legacy-админов с user_id в сессии)
             if user.get("user_id") == admin.id:
-                request.session["error"] = "Нельзя удалить себя"
+                request.session["flash_error"] = "Нельзя удалить себя"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
             if admin.role == UserRole.SUPERADMIN:
@@ -229,29 +302,17 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
                     select(func.count(Admin.id)).where(Admin.role == UserRole.SUPERADMIN)
                 )
                 if superadmin_count is not None and superadmin_count <= 1:
-                    request.session["error"] = "Нельзя удалить последнего суперадмина"
+                    request.session["flash_error"] = "Нельзя удалить последнего суперадмина"
                     return RedirectResponse(url="/admin/admins/", status_code=302)
 
-            # Находим и удаляем связанного WebUser (если есть)
-            # Ищем по department_id и роли, так как прямой связи между Admin и WebUser нет
-            web_user_stmt = select(WebUser).where(
-                WebUser.department_id == admin.department_id,
-                WebUser.role.in_([WebRole.DEPARTMENT_ADMIN, WebRole.SUPERADMIN])
+            # Находим и удаляем связанного WebUser по прямой ссылке admin_id
+            web_user = await session.scalar(
+                select(WebUser).where(WebUser.admin_id == admin.id)
             )
-            web_users = (await session.execute(web_user_stmt)).scalars().all()
-
-            # Удаляем связанных веб-пользователей (обычно это один пользователь)
-            # Это очищает логин и пароль удалённого админа
-            deleted_web_users_count = 0
-            for web_user in web_users:
-                # Проверяем, что это не текущий пользователь (для web_user_id в сессии)
-                if user.get("web_user_id") == web_user.id:
-                    continue
+            if web_user and user.get("web_user_id") != web_user.id:
                 await session.delete(web_user)
-                deleted_web_users_count += 1
 
             # Логируем действие удаления (сохраняем для аудита)
-            # Действие привязываем к пользователю, чтобы сохранить историю
             deletion_log = Log(
                 user_id=admin.user_id,
                 action="admin_deleted",
@@ -259,23 +320,21 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
             )
             session.add(deletion_log)
 
-            # Удаляем самого админа (очищаем admin id)
-            # Действия пользователя (логи) сохраняются, так как они привязаны к User
+            # Удаляем самого админа (действия пользователя сохраняются через User)
             await session.delete(admin)
             await session.commit()
 
             logger.info(
-                "Удалён администратор id=%s, department_id=%s, связанных web_users: %d, лог сохранён",
+                "Удалён администратор id=%s, department_id=%s",
                 admin_id,
                 admin.department_id,
-                deleted_web_users_count,
             )
     except Exception:
         logger.exception("Не удалось удалить администратора")
-        request.session["error"] = "Не удалось удалить администратора. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить администратора. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
-    request.session["success"] = "Администратор удалён"
+    request.session["flash_success"] = "Администратор удалён"
     return RedirectResponse(url="/admin/admins/", status_code=302)
 
 
@@ -291,19 +350,19 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
     """
     require_crud_rate_limit(request)
     if not is_superadmin(user):
-        request.session["error"] = "Только суперадмин может удалять веб-пользователей"
+        request.session["flash_error"] = "Только суперадмин может удалять веб-пользователей"
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     try:
         async with async_session_maker() as session:
             web_user = await session.get(WebUser, web_user_id)
             if not web_user:
-                request.session["error"] = "Веб-пользователь не найден"
+                request.session["flash_error"] = "Веб-пользователь не найден"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
             # Нельзя удалить самого себя
             if user.get("web_user_id") == web_user.id:
-                request.session["error"] = "Нельзя удалить себя"
+                request.session["flash_error"] = "Нельзя удалить себя"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
             # Проверяем, что это не последний суперадмин
@@ -312,7 +371,7 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
                     select(func.count(WebUser.id)).where(WebUser.role == WebRole.SUPERADMIN)
                 )
                 if superadmin_count is not None and superadmin_count <= 1:
-                    request.session["error"] = "Нельзя удалить последнего суперадмина"
+                    request.session["flash_error"] = "Нельзя удалить последнего суперадмина"
                     return RedirectResponse(url="/admin/admins/", status_code=302)
 
             await session.delete(web_user)
@@ -325,8 +384,8 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
             )
     except Exception:
         logger.exception("Не удалось удалить веб-пользователя")
-        request.session["error"] = "Не удалось удалить веб-пользователя. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось удалить веб-пользователя. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
-    request.session["success"] = "Веб-пользователь удалён"
+    request.session["flash_success"] = "Веб-пользователь удалён"
     return RedirectResponse(url="/admin/admins/", status_code=302)

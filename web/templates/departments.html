@@ -18,11 +18,11 @@
 {% endif %}
 
 <div class="card">
-    {% if success %}
-    <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
+    {% if flash_success %}
+    <div class="alert alert-success">{{ flash_success }}</div>
+
+    {% if flash_error %}
+    <div class="alert alert-error">{{ flash_error }}</div>
     {% endif %}
 
     <div class="departments-grid">

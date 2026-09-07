@@ -227,12 +227,14 @@ class WebUser(Base):
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # формат: pbkdf2_sha256$iterations$salt$hash
     role = Column(SAEnum(WebRole), default=WebRole.VIEWER, nullable=False)
+    admin_id = Column(Integer, ForeignKey("admins.id", ondelete="CASCADE"), nullable=True)
     department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     department: Mapped["Department | None"] = relationship("Department")
+    admin: Mapped["Admin | None"] = relationship("Admin")
 
 
 class ReportRun(Base):

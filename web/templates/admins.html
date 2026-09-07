@@ -19,11 +19,11 @@
 
 <div class="card">
     
-    {% if success %}
-    <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
+    {% if flash_success %}
+    <div class="alert alert-success">{{ flash_success }}</div>
+
+    {% if flash_error %}
+    <div class="alert alert-error">{{ flash_error }}</div>
     {% endif %}
     {% if created_credentials %}
     <div class="alert alert-success">Данные для входа созданы. Логин: <strong>{{ created_credentials.username }}</strong>, пароль: <strong>{{ created_credentials.password }}</strong>. Сохраните их сейчас: повторно пароль не показывается.</div>
@@ -84,7 +84,9 @@
 
     <div class="card">
         <div class="admins-grid">
+            {% set web_user_counter = namespace(value=0) %}
             {% for web_user in web_users %}
+            {% set web_user_counter.value = web_user_counter.value + 1 %}
             <div class="admin-card">
                 <div class="admin-card-top">
                     <div class="admin-avatar">
@@ -106,7 +108,7 @@
                     <span class="admin-dept">{{ web_user.department.name if web_user.department else 'Без отдела' }}</span>
                 </div>
                 <div class="admin-card-footer">
-                    <span class="admin-id">#{{ web_user.id }}</span>
+                    <span class="admin-id">#{{ web_user_counter.value }}</span>
                     <form method="post" action="/admin/admins/web-users/{{ web_user.id }}/delete"
                                   data-confirm="Удалить этого веб-пользователя?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

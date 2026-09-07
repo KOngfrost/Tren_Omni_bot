@@ -81,6 +81,21 @@
         if (answerTextarea) answerTextarea.required = show;
     };
 
+    window.togglePasswordVisibility = function () {
+        var input = document.getElementById('password');
+        var btn = document.querySelector('.toggle-password');
+        if (!input || !btn) return;
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.setAttribute('aria-label', 'Скрыть пароль');
+            btn.querySelector('.icon-eye-open').textContent = '🙈';
+        } else {
+            input.type = 'password';
+            btn.setAttribute('aria-label', 'Показать пароль');
+            btn.querySelector('.icon-eye-open').textContent = '👁';
+        }
+    };
+
     document.addEventListener('change', function (event) {
         if (event.target.matches('[data-filter-table]')) window.filterTable();
         if (event.target.matches('[data-toggle-answer]')) window.toggleAnswer();

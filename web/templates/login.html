@@ -12,8 +12,8 @@
             </div>
         </div>
         
-        {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
+        {% if flash_error %}
+        <div class="alert alert-error">{{ flash_error }}</div>
         {% endif %}
         
         <form method="POST" action="/auth/login">
@@ -24,7 +24,12 @@
             </div>
             <div class="form-group">
                 <label for="password">Пароль</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Введите пароль">
+                <div class="password-input-wrapper">
+                    <input type="password" id="password" name="password" required>
+                    <button type="button" class="toggle-password" aria-label="Показать пароль" onclick="togglePasswordVisibility()">
+                        <span class="icon-eye-open">👁</span>
+                    </button>
+                </div>
             </div>
             <button type="submit" class="btn btn-primary btn-full">Войти</button>
         </form>

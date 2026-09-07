@@ -109,8 +109,8 @@ async def tickets_page(
             "status_choices": STATUS_CHOICES,
             "db_error": db_error,
             "active": "tickets",
-            "success": request.session.pop("success", None),
-            "error": request.session.pop("error", None),
+            "flash_success": request.session.pop("flash_success", None),
+            "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
             "current_page": current_page,
             "total_pages": total_pages,
@@ -215,7 +215,7 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
     note: str = "" if vk_sent else " (VK-уведомление не доставлено)"
-    request.session["success"] = f"Ответ на заявку #{ticket_id} отправлен{note}"
+    request.session["flash_success"] = f"Ответ на заявку #{ticket_id} отправлен{note}"
     return RedirectResponse(url="/tickets/", status_code=303)
 
 
@@ -247,13 +247,13 @@ async def set_ticket_status(ticket_id: int, request: Request, user: dict = Depen
             admin_username=user.get("username", "unknown"),
         )
     except StatusTransitionError as error:
-        request.session["error"] = str(error)
+        request.session["flash_error"] = str(error)
         return RedirectResponse(url="/tickets/", status_code=303)
 
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-    request.session["success"] = f"Статус заявки #{ticket_id}: {new_status.value}"
+    request.session["flash_success"] = f"Статус заявки #{ticket_id}: {new_status.value}"
     return RedirectResponse(url="/tickets/", status_code=303)
 
 
@@ -284,5 +284,5 @@ async def assign_ticket(ticket_id: int, request: Request, user: dict = Depends(r
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка или отдел не найдены")
 
-    request.session["success"] = f"Заявка #{ticket_id} передана в отдел"
+    request.session["flash_success"] = f"Заявка #{ticket_id} передана в отдел"
     return RedirectResponse(url="/tickets/", status_code=303)

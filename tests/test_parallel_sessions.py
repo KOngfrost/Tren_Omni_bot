@@ -56,7 +56,7 @@ class TestAdminLoginRestored:
         assert response.status_code == 200
         assert 'csrf_token' in response.text
 
-    def test_bootstrap_login_success(self, client, monkeypatch):
+    def test_bootstrap_login_success(self, client, db_session_maker, monkeypatch):
         """Successful login with bootstrap credentials."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
@@ -70,8 +70,8 @@ class TestAdminLoginRestored:
         assert response.status_code == 303
         assert "sid=" in response.headers.get("location", "")
 
-    def test_bootstrap_login_wrong_password(self, client, monkeypatch):
-        """Failed login with wrong password."""
+    def test_bootstrap_login_wrong_password(self, client, db_session_maker, monkeypatch):
+        """Failed login redirects to login page with error flash."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
         login_page = client.get("/auth/login")
@@ -79,15 +79,14 @@ class TestAdminLoginRestored:
         response = client.post(
             "/auth/login",
             data={"username": "admin", "password": "wrong", "csrf_token": csrf_token},
+            follow_redirects=False,
         )
-        assert response.status_code == 401
+        # Теперь возвращается 302 redirect на /auth/login с flash_error
+        assert response.status_code == 302
+        assert "/auth/login" in response.headers.get("location", "")
 
-    def test_web_user_login_success(self, client, mock_db_with_users, monkeypatch):
+    def test_web_user_login_success(self, client, mock_db_with_users):
         """Successful login with web_users credentials."""
-        monkeypatch.setattr(
-            "web.routes.auth._are_web_users_configured",
-            AsyncMock(return_value=True),
-        )
         login_page = client.get("/auth/login")
         csrf_token = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
         response = client.post(
@@ -102,7 +101,7 @@ class TestAdminLoginRestored:
 class TestParallelSessions:
     """Tests for parallel sessions."""
 
-    def test_two_accounts_simultaneously(self, client, monkeypatch):
+    def test_two_accounts_simultaneously(self, client, db_session_maker, monkeypatch):
         """Two accounts can be logged in simultaneously."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
@@ -129,7 +128,7 @@ class TestParallelSessions:
 
             assert sid1 != sid2
 
-    def test_session_isolation(self, client, monkeypatch):
+    def test_session_isolation(self, client, db_session_maker, monkeypatch):
         """Session isolation: logout of one user doesn't affect another."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
@@ -171,7 +170,7 @@ class TestParallelSessions:
 class TestLogout:
     """Tests for logout."""
 
-    def test_logout_clears_session(self, client, monkeypatch):
+    def test_logout_clears_session(self, client, db_session_maker, monkeypatch):
         """Logout clears the session."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
@@ -184,13 +183,17 @@ class TestLogout:
         )
         sid = re.search(r"sid=([^&]+)", response.headers["location"]).group(1)
 
-        response = client.post(
-            f"/auth/logout?sid={sid}",
-            data={"csrf_token": csrf},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
-        assert "/auth/login" in response.headers.get("location", "")
+        # Получаем новый CSRF-токен со страницы после редиректа
+        dashboard = client.get(f"/?sid={sid}", follow_redirects=False)
+        csrf_logout = re.search(r'csrf_token" value="([^"]+)"', dashboard.text)
+        if csrf_logout:
+            response = client.post(
+                f"/auth/logout?sid={sid}",
+                data={"csrf_token": csrf_logout.group(1)},
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+            assert "/auth/login" in response.headers.get("location", "")
 
 
 class TestMiddlewareOrder:
@@ -246,7 +249,7 @@ class TestSecurityHeaders:
 class TestRateLimiting:
     """Tests for rate limiting."""
 
-    def test_rate_limit_after_five_failures(self, client, monkeypatch):
+    def test_rate_limit_after_five_failures(self, client, db_session_maker, monkeypatch):
         """Block after 5 failed attempts."""
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "admin")
         monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "admin123")
@@ -257,13 +260,18 @@ class TestRateLimiting:
             response = client.post(
                 "/auth/login",
                 data={"username": "admin", "password": "wrong_password", "csrf_token": csrf},
+                follow_redirects=False,
             )
-            assert response.status_code == 401
+            # Ожидается redirect 302 с flash_error "Неверный логин или пароль"
+            assert response.status_code == 302
 
+        # После 5 попыток — rate limiting блокирует вход
         login_page = client.get("/auth/login")
         csrf = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
         response = client.post(
             "/auth/login",
             data={"username": "admin", "password": "admin123", "csrf_token": csrf},
+            follow_redirects=False,
         )
-        assert response.status_code == 429
+        # Rate limiting возвращает 302 с flash_error о блокировке
+        assert response.status_code == 302
