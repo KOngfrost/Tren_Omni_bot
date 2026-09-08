@@ -22,7 +22,6 @@ setup_logging()
 # Флаг, чтобы планировщик запускался только один раз
 _scheduler_started = False
 _scheduler_loop: asyncio.AbstractEventLoop | None = None
-_startup_registered = False
 
 # Ссылки на фоновые задачи: без сильной ссылки GC может уничтожить задачу
 _background_tasks: set[asyncio.Task] = set()
@@ -83,14 +82,9 @@ async def _start_scheduler() -> None:
 def run_vk_polling() -> None:
     retry_delay = 5
 
-    # vkbottle 4.11 ожидает в on_startup asyncio-функцию (awaitable callback).
-    global _startup_registered
-    if not _startup_registered:
-        vk_bot.on_startup.append(_start_scheduler)
-        _startup_registered = True
-
     while True:
         try:
+            vk_bot.on_startup = [_start_scheduler()]
             vk_bot.run()
             logger.warning("VK polling stopped; retrying in %s seconds", retry_delay)
         except (aiohttp.ClientError, OSError, socket.gaierror, TimeoutError) as error:

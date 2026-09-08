@@ -13,7 +13,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -68,7 +68,7 @@ async def admins_page(request: Request, user=Depends(require_auth)):
                 .order_by(
                     # SUPERADMIN (значение "superadmin") должен быть первым
                     # Используем case для явного порядка: 0 для суперадмина, 1 для остальных
-                    func.case(
+                    case(
                         (Admin.role == UserRole.SUPERADMIN, 0),
                         else_=1,
                     ),
@@ -269,12 +269,22 @@ async def _create_admin_records(
             department_id=selected_department_id,
         ))
     else:
-        # superadmin/viewer — без записи Admin
+        # superadmin/viewer — тоже создаём запись Admin (без привязки к отделу)
+        if db_user is None:
+            raise ValueError("Не удалось создать пользователя")
+        admin = Admin(
+            user_id=db_user.id,
+            department_id=selected_department_id,
+            role=UserRole(role) if role == "superadmin" else UserRole.ADMIN,
+        )
+        session.add(admin)
+        await session.flush()
+
         session.add(WebUser(
             username=username,
             password_hash=password_hash,
             role=web_role,
-            admin_id=None,
+            admin_id=admin.id,
             department_id=selected_department_id,
         ))
 

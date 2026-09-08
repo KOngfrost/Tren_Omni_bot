@@ -39,14 +39,13 @@ from core.commands import (
     COMMANDS_REPORT,
     COMMAND_REPORT_BY_DATE,
     COMMAND_REPORT_BY_PERIOD,
-    COMMAND_TICKET_DETAILS,
     COMMANDS_START,
 )
 from core.config import settings
 from core.bot_core import BotCore
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
-from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus
+from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus, User
 from core.reporting import build_daily_report, get_report_for_date, get_report_for_period, parse_report_date, send_report_to_vk
 from core.ticket_service import (
     STATUS_LABELS,
@@ -254,7 +253,7 @@ async def my_tickets_handler(message: Message):
     )
 
 
-@vk_bot.on.private_message(text=COMMAND_TICKET_DETAILS)
+@vk_bot.on.private_message(RegexRule(r"(?i)^Подробнее(?:\s*#(\d+))?$"))
 async def ticket_details_handler(message: Message):
     """История заявки: «Подробнее #N» — номер, отдел, тема, статус, вся переписка."""
     touch_heartbeat()
@@ -267,18 +266,21 @@ async def ticket_details_handler(message: Message):
         return
 
     ticket_id = int(match.group(1))
-    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=50)
-    ticket = next((t for t in tickets if t.id == ticket_id), None)
+    async with async_session_maker() as session:
+        ticket = await session.scalar(
+            select(Ticket)
+            .join(User, Ticket.user_id == User.id)
+            .options(selectinload(Ticket.department), selectinload(Ticket.user))
+            .where(Ticket.id == ticket_id, User.vk_id == message.from_id)
+        )
 
-    if ticket is None:
+    if ticket is None or ticket.id is None:
         await message.answer(
             f"Заявка #{ticket_id} не найдена среди ваших заявок.",
             keyboard=build_main_keyboard(),
         )
         return
 
-    if ticket.id is None:
-        return
     history = await get_ticket_messages(ticket.id)
     await message.answer(
         format_ticket_details(ticket, history),
@@ -598,7 +600,11 @@ async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
         is_super, dept_id = await get_admin_scope_for_vk_id(session, vk_id)
         if is_super:
             return True
+        # Если у пользователя нет доступа к отделу (не администратор), deny
+        if dept_id is None:
+            return False
         ticket = await session.get(Ticket, ticket_id)
+        # Заявка должна существовать И принадлежать отделу пользователя
         return ticket is not None and ticket.department_id == dept_id
 
 
@@ -774,8 +780,12 @@ async def report_by_period_input(message: Message):
     if not await BotCore.is_admin(user):
         return
 
-    normalized = re.sub(r"^с\s+|\s+по\s+", " ", message.text.strip())
-    parts = re.split(r"\s*[-–—\s]\s*", normalized, maxsplit=1)
+    normalized = message.text.strip()
+    # Убираем предлоги "с" и "по" с возможными пробелами вокруг
+    normalized = re.sub(r"^\s*с\s+", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\s+по\s+", " ", normalized, flags=re.IGNORECASE)
+    # Разбиваем по тире (разные варианты: -, –, —)
+    parts = re.split(r"\s*[-–—]\s*", normalized, maxsplit=1)
     if len(parts) != 2:
         await message.answer("Неверный формат. Введите две даты через тире (например: 31.08.2026 - 15.09.2026)")
         return

@@ -69,15 +69,7 @@
                     </td>
                     <td data-label="Отдел">{{ ticket.department.name if ticket.department else '—' }}</td>
                     <td data-label="Статус">
-                        {% if ticket.status.value == 'NEW' %}
-                        <span class="badge badge-new">{{ ticket.status|status_label }}</span>
-                        {% elif ticket.status.value == 'IN_PROGRESS' %}
-                        <span class="badge badge-in-progress">{{ ticket.status|status_label }}</span>
-                        {% elif ticket.status.value in ('COMPLETED', 'COMPLETED_AUTO') %}
-                        <span class="badge badge-completed">{{ ticket.status|status_label }}</span>
-                        {% else %}
-                        <span class="badge badge-anonymous">{{ ticket.status|status_label }}</span>
-                        {% endif %}
+                        <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
                     </td>
                     <td data-label="Аноним">
                         {% if ticket.is_anonymous %}

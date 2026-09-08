@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Admin, Log
+from core.models import Admin, Log, Ticket
 from web.dependencies import get_admin_scope, require_auth
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
@@ -45,13 +45,6 @@ async def logs_page(
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
-            allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
-
-            # Общее количество для пагинации
-            count_stmt = select(func.count(Log.id))
-            if not is_super:
-                count_stmt = count_stmt.where(Log.user_id.in_(allowed_user_ids))
-            total = int((await session.scalar(count_stmt)) or 0)
 
             logs_stmt = (
                 select(Log)
@@ -61,9 +54,22 @@ async def logs_page(
                 .limit(LOGS_PER_PAGE)
             )
             if not is_super:
-                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
+                # Администратор видит логи в рамках своего отдела
+                logs_stmt = (
+                    logs_stmt
+                    .join(Ticket, Log.ticket_id == Ticket.id)
+                    .where(Ticket.department_id == dept_id)
+                )
+                count_stmt = (
+                    select(func.count(Log.id))
+                    .join(Ticket, Log.ticket_id == Ticket.id)
+                    .where(Ticket.department_id == dept_id)
+                )
+            else:
+                count_stmt = select(func.count(Log.id))
             logs_result = await session.execute(logs_stmt)
             logs = list(logs_result.scalars().all())
+            total = int((await session.scalar(count_stmt)) or 0)
     except Exception as e:
         db_error = True
         logger.error("Не удалось загрузить логи: %s", e)

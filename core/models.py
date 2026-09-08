@@ -60,30 +60,6 @@ def sanitize_xss(value: str) -> str:
         return re.sub(r'<[^>]+>', '', value)
 
 
-@event.listens_for(Text, "before_insert", propagate=True)
-@event.listens_for(Text, "before_update", propagate=True)
-def sanitize_text_columns(target, value, oldvalue, initiator):
-    """Автоматическая санитизация всех Text-колонок перед записью.
-
-    Применяется ко всем моделям, использующим Text-колонки:
-    - Ticket.description
-    - Ticket.topic
-    - Ticket.response_text
-    - TicketMessage.message
-    - Log.details
-    и др.
-    """
-    # Получаем имя колонки из initiator
-    if initiator is not None:
-        col_name = initiator.key
-        # Санитизируем только текстовые поля с пользовательским вводом
-        if col_name in ("description", "topic", "message", "response_text",
-                        "details", "answer", "question", "final_answer",
-                        "keywords", "title", "button_text"):
-            sanitized = sanitize_xss(target.__dict__.get(col_name))
-            if sanitized != target.__dict__.get(col_name):
-                target.__dict__[col_name] = sanitized
-
 
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
@@ -401,3 +377,40 @@ class VkOutbox(Base):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sent_at = Column(DateTime(timezone=True), nullable=True)
+
+
+# ==========================================
+# Автоматическая XSS-санитизация на уровне моделей
+# ==========================================
+# Event listeners для автоматической санитизации пользовательского ввода
+# перед записью в БД. В отличие от некорректной реализации на TypeDecorator Text,
+# эти listeners прикреплены к конкретным моделям и корректно вызываются.
+
+def _sanitize_model_text_fields(mapper, connection, target):
+    """Санитизирует текстовые поля модели перед INSERT/UPDATE."""
+    for col_name in ("description", "topic", "message", "response_text",
+                     "details", "answer", "question", "final_answer",
+                     "keywords", "title", "button_text"):
+        current_value = getattr(target, col_name, None)
+        if current_value is not None:
+            sanitized = sanitize_xss(current_value)
+            if sanitized != current_value:
+                setattr(target, col_name, sanitized)
+
+
+# Прикрепляем listeners к моделям, содержащим текстовые поля с пользовательским вводом.
+# Все модели уже определены к этому моменту.
+event.listen(Ticket, "before_insert", _sanitize_model_text_fields)
+event.listen(Ticket, "before_update", _sanitize_model_text_fields)
+event.listen(TicketMessage, "before_insert", _sanitize_model_text_fields)
+event.listen(TicketMessage, "before_update", _sanitize_model_text_fields)
+event.listen(Log, "before_insert", _sanitize_model_text_fields)
+event.listen(Log, "before_update", _sanitize_model_text_fields)
+event.listen(KnowledgeBase, "before_insert", _sanitize_model_text_fields)
+event.listen(KnowledgeBase, "before_update", _sanitize_model_text_fields)
+event.listen(FAQNode, "before_insert", _sanitize_model_text_fields)
+event.listen(FAQNode, "before_update", _sanitize_model_text_fields)
+event.listen(Event, "before_insert", _sanitize_model_text_fields)
+event.listen(Event, "before_update", _sanitize_model_text_fields)
+event.listen(Registration, "before_insert", _sanitize_model_text_fields)
+event.listen(Registration, "before_update", _sanitize_model_text_fields)
