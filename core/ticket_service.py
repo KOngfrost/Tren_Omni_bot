@@ -1,3 +1,4 @@
+
 """Сервис заявок: единая бизнес-логика для VK-бота и веб-панели.
 
 Используется:
@@ -558,7 +559,9 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
         # Уведомляем администраторов отдела через outbox
         if ticket.department and ticket.department_id:
             admins = await session.scalars(
-                select(Admin).where(Admin.department_id == ticket.department_id)
+                select(Admin)
+                .options(selectinload(Admin.user))
+                .where(Admin.department_id == ticket.department_id)
             )
             for admin in admins:
                 if admin.user and admin.user.vk_id:

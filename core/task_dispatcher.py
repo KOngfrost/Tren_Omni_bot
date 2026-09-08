@@ -1,3 +1,4 @@
+
 """Выделенный фоновый диспетчер: гарантия «ровно один исполнитель».
 
 Проблема: при масштабировании веб-панели на несколько uvicorn-воркеров
@@ -55,19 +56,23 @@ async def single_instance_guard(lock_name: str) -> AsyncIterator[bool]:
     dev/тестах) замок не нужен — всегда True.
     """
     engine = database_module.engine
+
     conn = None
     acquired = False
     key = _lock_key(lock_name)
+
     try:
-        if engine is not None and engine.dialect.name == "postgresql":
-            conn = await engine.connect()
-            result = await conn.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": key})
-            acquired = bool(result.scalar())
-            # Завершаем неявную транзакцию: session-level замок при commit
-            # НЕ снимается, а соединение остаётся чистым.
-            await conn.commit()
-            if not acquired:
-                logger.debug("Диспетчер '%s': лидер — другой процесс", lock_name)
+        if engine is None or engine.dialect.name != "postgresql":
+            yield True
+            return
+        conn = await engine.connect()
+        result = await conn.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": key})
+        acquired = bool(result.scalar())
+        # Завершаем неявную транзакцию: session-level замок при commit
+        # НЕ снимается, а соединение остаётся чистым.
+        await conn.commit()
+        if not acquired:
+            logger.debug("Диспетчер '%s': лидер — другой процесс", lock_name)
         yield acquired
     finally:
         if conn is not None:

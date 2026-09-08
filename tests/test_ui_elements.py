@@ -29,12 +29,13 @@ def client(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("SESSION_HTTPS_ONLY", "false")
 
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
     import core.database as database_module
     import core.outbox as outbox_module
     import core.reporting as reporting_module
     import core.ticket_service as ticket_service_module
     from core.models import Base
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     engine = create_async_engine("sqlite+aiosqlite://")
 

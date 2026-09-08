@@ -117,10 +117,11 @@ async def faq_handler(message: Message):
     if not nodes:
         await message.answer("В FAQ пока нет опубликованных вопросов.", keyboard=build_main_keyboard())
         return
-    lines = ["Частые вопросы:"]
-    for node in nodes:
-        lines.append(f"\n#{node.id} {node.button_text or node.question}")
-    lines.append("\nВведите: FAQ #номер")
+    lines = [
+        "Частые вопросы:",
+        *[f"\n#{node.id} {node.button_text or node.question}" for node in nodes],
+        "\nВведите: FAQ #номер",
+    ]
     await message.answer("".join(lines), keyboard=build_main_keyboard())
 
 
@@ -131,9 +132,10 @@ async def knowledge_base_handler(message: Message):
     if not entries:
         await message.answer("В базе знаний пока нет опубликованных материалов.", keyboard=build_main_keyboard())
         return
-    lines = ["Материалы базы знаний:"]
-    for entry in entries:
-        lines.append(f"\n{entry.keywords}: {entry.answer}")
+    lines = [
+        "Материалы базы знаний:",
+        *[f"\n{entry.keywords}: {entry.answer}" for entry in entries],
+    ]
     await message.answer("".join(lines), keyboard=build_main_keyboard())
 
 
