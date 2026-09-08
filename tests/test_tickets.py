@@ -31,8 +31,10 @@ def test_transition_completed_to_auto_allowed():
     assert can_transition(TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO)
 
 
-def test_transition_auto_is_final():
-    assert not can_transition(TicketStatus.COMPLETED_AUTO, TicketStatus.IN_PROGRESS)
+def test_transition_auto_can_reopen():
+    # При ответе студента статус COMPLETED_AUTO возвращается в IN_PROGRESS
+    assert can_transition(TicketStatus.COMPLETED_AUTO, TicketStatus.IN_PROGRESS)
+    assert not can_transition(TicketStatus.COMPLETED_AUTO, TicketStatus.NEW)
 
 
 def test_validate_transition_raises():

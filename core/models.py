@@ -439,7 +439,7 @@ def _sanitize_model_text_fields(mapper, connection, target):
 
         # Старое и новое значение из history
         history = sa_inspect(target).attrs[col_name].history
-        incoming = history.unchanged + history.added  # type: ignore[operator]
+        incoming = list(history.unchanged or ()) + list(history.added or ())
         if not incoming:
             continue
 
