@@ -15,9 +15,7 @@
 
 import re
 
-from sqlalchemy import select
-
-from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, TicketStatus, User
+from core.models import TicketStatus
 from core.ticket_service import ALLOWED_TRANSITIONS, create_ticket, status_label
 
 
@@ -97,7 +95,8 @@ class TestFullUserPathWebPanel:
             follow_redirects=False,
         )
         assert resp.status_code == 303
-        assert "sid=" in resp.headers.get("location", "")
+        assert resp.headers.get("location") == "/"
+        assert "session=" in resp.headers.get("set-cookie", "")
 
     def test_dashboard_accessible_after_login(self, web_client):
         """Шаг 2: после входа доступен дашборд."""
@@ -162,17 +161,15 @@ class TestTicketLifecycle:
         import asyncio
 
         async def _run():
-            from core.database import async_session_maker
-            async with async_session_maker() as session:
-                ticket = await create_ticket(
-                    topic="Сломался кран",
-                    description="Не работает водопровод",
-                    vk_id=999,
-                    keep_identity=True,
-                )
-                assert ticket.status == TicketStatus.NEW
-                assert ticket.topic == "Сломался кран"
-                return ticket.id
+            ticket = await create_ticket(
+                topic="Сломался кран",
+                description="Не работает водопровод",
+                vk_id=999,
+                keep_identity=True,
+            )
+            assert ticket.status == TicketStatus.NEW
+            assert ticket.topic == "Сломался кран"
+            return ticket.id
 
         ticket_id = asyncio.run(_run())
         assert ticket_id > 0
@@ -180,18 +177,17 @@ class TestTicketLifecycle:
     def test_full_status_chain_via_service(self, web_client):
         """Полная цепочка смены статусов через ticket_service."""
         import asyncio
-        from core.ticket_service import change_ticket_status, StatusTransitionError
+
+        from core.ticket_service import StatusTransitionError, change_ticket_status
 
         async def _run():
-            from core.database import async_session_maker
-            async with async_session_maker() as session:
-                ticket = await create_ticket(
-                    topic="Тема заявки",
-                    description="Описание",
-                    vk_id=777,
-                    keep_identity=True,
-                )
-                ticket_id = ticket.id
+            ticket = await create_ticket(
+                topic="Тема заявки",
+                description="Описание",
+                vk_id=777,
+                keep_identity=True,
+            )
+            ticket_id = ticket.id
 
             # NEW → IN_PROGRESS
             t = await change_ticket_status(ticket_id, TicketStatus.IN_PROGRESS, "admin1")

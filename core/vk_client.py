@@ -6,6 +6,7 @@
 а текстовые сообщения студентам — через outbox-воркер (core/outbox.py).
 """
 
+import asyncio
 import logging
 import random
 
@@ -24,12 +25,14 @@ OUTBOX_MAX_ATTEMPTS = 5
 # Единый HTTP-клиент для всех VK-запросов. Переиспользует TCP-соединения
 # (keep-alive), что заметно ускоряет доставку при ответах на сотни заявок.
 _client: httpx.AsyncClient | None = None
+_client_loop: asyncio.AbstractEventLoop | None = None
 
 
 def get_vk_client() -> httpx.AsyncClient:
     """Вернуть общий HTTP-клиент (создаётся один раз, переиспользует пул)."""
-    global _client
-    if _client is None or _client.is_closed:
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client.is_closed or _client_loop is not loop:
         _client = httpx.AsyncClient(
             timeout=10.0,
             limits=httpx.Limits(
@@ -37,15 +40,17 @@ def get_vk_client() -> httpx.AsyncClient:
                 max_keepalive_connections=20,
             ),
         )
+        _client_loop = loop
     return _client
 
 
 async def close_vk_client() -> None:
     """Закрыть общий HTTP-клиент при завершении процесса."""
-    global _client
+    global _client, _client_loop
     if _client is not None:
         await _client.aclose()
         _client = None
+        _client_loop = None
 
 
 async def send_vk_message(vk_id: int, text: str) -> bool:

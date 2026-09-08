@@ -115,12 +115,6 @@
         if (window.CSRF_TOKEN) {
             headers['X-CSRF-Token'] = window.CSRF_TOKEN;
         }
-        // Добавляем session_id из URL, чтобы middleware нашли сессию
-        var sid = window.location.search.match(/sid=([^&]+)/);
-        if (sid) {
-            var separator = url.indexOf('?') !== -1 ? '&' : '?';
-            url = url + separator + 'sid=' + sid[1];
-        }
         try {
             var response = await fetch(url, Object.assign({}, options, { headers: headers }));
             var contentType = response.headers.get('content-type') || '';

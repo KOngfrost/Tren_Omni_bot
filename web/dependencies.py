@@ -60,7 +60,7 @@ async def require_auth(request: Request) -> dict:
                 )
             canonical = {
                 "username": web_user.username,
-                "role": web_user.role.value,
+                "role": web_user.role.value if web_user.role else WebRole.VIEWER.value,
                 "web_user_id": web_user.id,
                 "department_id": web_user.department_id,
             }
@@ -128,7 +128,8 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
     """Определить область видимости пользователя.
 
     Возвращает (is_super, dept_id):
-    - суперадмин/VIEWER: (True, None) — видят все отделы;
+    - суперадмин: (True, None) — видит все отделы;
+    - VIEWER: (True, None) — видит все отделы, но не получает write-доступ;
     - админ отдела: (False, department_id) — видят только свой отдел.
 
     БЕЗОПАСНОСТЬ: department_id для DEPARTMENT_ADMIN проверяется через БД
@@ -136,7 +137,9 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
     эскалацию прав при компрометации сессионного cookie.
     """
     role = role_of(user)
-    if role == WebRole.SUPERADMIN or role == WebRole.VIEWER:
+    if role == WebRole.SUPERADMIN:
+        return True, None
+    if role == WebRole.VIEWER:
         return True, None
     if role == WebRole.DEPARTMENT_ADMIN:
         web_user_id = user.get("web_user_id")
@@ -170,9 +173,9 @@ async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
     """
     role = role_of(user)
     if role == WebRole.SUPERADMIN or role == WebRole.VIEWER:
-        return (await session.execute(
+        return list((await session.execute(
             select(Department).order_by(Department.name)
-        )).scalars().all()
+        )).scalars().all())
 
     if role == WebRole.DEPARTMENT_ADMIN:
         web_user_id = user.get("web_user_id")

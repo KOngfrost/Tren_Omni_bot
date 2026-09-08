@@ -43,7 +43,9 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
                 .where(*scope)
                 .group_by(Ticket.status)
             )
-            ticket_counts = dict(rows.all())
+            ticket_counts = {
+                status: count for status, count in rows.all() if status is not None
+            }
 
             # Последние заявки
             recent_stmt = (

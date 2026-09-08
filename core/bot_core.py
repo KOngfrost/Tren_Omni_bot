@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 
 from core.config import settings
 from core.database import async_session_maker
-from core.models import Admin, Log, Ticket, User
+from core.models import Admin, Log, Ticket, TicketStatus, User
 
 
 class BotCore:
@@ -66,7 +66,7 @@ class BotCore:
                 select(func.count(Ticket.id))
                 .join(User, Ticket.user_id == User.id)
                 .where(User.vk_id == user.vk_id)
-                .where(Ticket.status.not_in(("COMPLETED", "COMPLETED_AUTO")))
+                .where(Ticket.status.not_in((TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO)))
             )
             return int(count or 0)
 

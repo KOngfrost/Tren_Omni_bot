@@ -81,7 +81,6 @@ student_bot/
 │       ├── csrf.py            # CSRF-защита
 │       ├── middleware.py      # Rate limiting, middleware
 │       ├── session_middleware.py      # Stateful сессии
-│       └── session_middleware_asgi.py # ASGI сессии
 │
 ├── alembic/                   # Миграции БД
 │   ├── alembic.ini            # Конфигурация Alembic

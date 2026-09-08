@@ -21,6 +21,8 @@ setup_logging()
 
 # Флаг, чтобы планировщик запускался только один раз
 _scheduler_started = False
+_scheduler_loop: asyncio.AbstractEventLoop | None = None
+_startup_registered = False
 
 # Ссылки на фоновые задачи: без сильной ссылки GC может уничтожить задачу
 _background_tasks: set[asyncio.Task] = set()
@@ -53,10 +55,12 @@ async def _start_scheduler() -> None:
     Вызывается ОДИН раз при старте бота (через on_startup vkbottle).
     Флаг _scheduler_started защищает от повторного запуска при retry.
     """
-    global _scheduler_started
-    if _scheduler_started:
+    global _scheduler_started, _scheduler_loop
+    current_loop = asyncio.get_running_loop()
+    if _scheduler_started and _scheduler_loop is current_loop:
         return
     _scheduler_started = True
+    _scheduler_loop = current_loop
 
     start_report_scheduler(vk_bot.api)
     logger.info("Планировщик отчётов запущен")
@@ -80,7 +84,10 @@ def run_vk_polling() -> None:
     retry_delay = 5
 
     # vkbottle 4.11 ожидает в on_startup asyncio-функцию (awaitable callback).
-    vk_bot.on_startup.append(_start_scheduler)
+    global _startup_registered
+    if not _startup_registered:
+        vk_bot.on_startup.append(_start_scheduler)
+        _startup_registered = True
 
     while True:
         try:

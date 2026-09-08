@@ -34,4 +34,6 @@ def status_badge_class(status: TicketStatus | str | None) -> str:
             status = TicketStatus(status)
         except ValueError:
             return "badge-anonymous"
-    return STATUS_BADGE_CLASS.get(status, "badge-anonymous")
+    if status is None:
+        return "badge-anonymous"
+    return STATUS_BADGE_CLASS.get(status) or "badge-anonymous"

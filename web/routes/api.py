@@ -16,15 +16,14 @@ from sqlalchemy import func, select
 
 from core.database import async_session_maker
 from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, WebUser
-from web.dependencies import require_superadmin
+from web.dependencies import get_admin_scope, require_auth, require_superadmin
 from web.routes.auth import require_crud_rate_limit
+from web.schemas import MAX_DEPARTMENT_NAME_LEN, DepartmentNamePayload
 from web.security.middleware import sanitize_html
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-MAX_DEPARTMENT_NAME_LEN = 80
 
 
 def api_success(data=None):
@@ -38,11 +37,18 @@ def api_error(message, status_code=400):
 
 
 def _serialize_department(dept, usage=None):
-    """Сериализовать отдел в словарь для JSON с обработкой NULL."""
+    """Сериализовать отдел в словарь для JSON с обработкой NULL.
+
+    created_at читается через getattr: у модели Department исторически нет
+    этой колонки (есть только id и name), а раньше прямой доступ
+    dept.created_at падал с AttributeError → 500 на create/rename.
+    Если колонку добавят миграцией, сериализатор подхватит её автоматически.
+    """
+    created_at = getattr(dept, "created_at", None)
     result = {
         "id": dept.id,
         "name": dept.name or "",
-        "created_at": dept.created_at.isoformat() if dept.created_at else None,
+        "created_at": created_at.isoformat() if created_at else None,
     }
     if usage is not None:
         result["usage"] = usage
@@ -82,28 +88,107 @@ async def _get_department_usage(session, dept_id):
     }
 
 
+async def _get_all_departments_usage(session, dept_ids):
+    """Получить статистику для всех отделов одним запросом.
+
+    Возвращает dict: dept_id -> {tickets, knowledge, faq, events, web_users}.
+    Для отделов без данных возвращается dict с нулями.
+    """
+    if not dept_ids:
+        return {}
+
+    usage_map: dict[int, dict[str, int]] = {
+        dept_id: {
+            "tickets": 0,
+            "knowledge": 0,
+            "faq": 0,
+            "events": 0,
+            "web_users": 0,
+        }
+        for dept_id in dept_ids
+    }
+
+    # Tickets
+    results = await session.execute(
+        select(Ticket.department_id, func.count(Ticket.id))
+        .where(Ticket.department_id.in_(dept_ids))
+        .group_by(Ticket.department_id)
+    )
+    for dept_id, count in results:
+        if dept_id in usage_map:
+            usage_map[dept_id]["tickets"] = count
+
+    # KnowledgeBase
+    results = await session.execute(
+        select(KnowledgeBase.department_id, func.count(KnowledgeBase.id))
+        .where(KnowledgeBase.department_id.in_(dept_ids))
+        .group_by(KnowledgeBase.department_id)
+    )
+    for dept_id, count in results:
+        if dept_id in usage_map:
+            usage_map[dept_id]["knowledge"] = count
+
+    # FAQNode
+    results = await session.execute(
+        select(FAQNode.department_id, func.count(FAQNode.id))
+        .where(FAQNode.department_id.in_(dept_ids))
+        .group_by(FAQNode.department_id)
+    )
+    for dept_id, count in results:
+        if dept_id in usage_map:
+            usage_map[dept_id]["faq"] = count
+
+    # Event
+    results = await session.execute(
+        select(Event.department_id, func.count(Event.id))
+        .where(Event.department_id.in_(dept_ids))
+        .group_by(Event.department_id)
+    )
+    for dept_id, count in results:
+        if dept_id in usage_map:
+            usage_map[dept_id]["events"] = count
+
+    # WebUser
+    results = await session.execute(
+        select(WebUser.department_id, func.count(WebUser.id))
+        .where(WebUser.department_id.in_(dept_ids))
+        .group_by(WebUser.department_id)
+    )
+    for dept_id, count in results:
+        if dept_id in usage_map:
+            usage_map[dept_id]["web_users"] = count
+
+    return usage_map
+
+
 # ==========================================
 # API: Получение списка отделов
 # ==========================================
 
 
 @router.get("/departments/")
-async def api_get_departments(user=Depends(require_superadmin)):
+async def api_get_departments(user=Depends(require_auth)):
     """Получить список всех отделов с статистикой.
 
     Используется клиентским store для синхронизации состояния.
     """
     try:
         async with async_session_maker() as session:
+            is_super, dept_id = await get_admin_scope(session, user)
+            department_stmt = select(Department).order_by(Department.name)
+            if not is_super:
+                department_stmt = department_stmt.where(Department.id == dept_id)
             departments = list(
-                (await session.execute(select(Department).order_by(Department.name)))
+                (await session.execute(department_stmt))
                 .scalars()
                 .all()
             )
-            result = []
-            for dept in departments:
-                usage = await _get_department_usage(session, dept.id)
-                result.append(_serialize_department(dept, usage))
+            dept_ids = [d.id for d in departments]
+            usage_map = await _get_all_departments_usage(session, dept_ids)
+            result = [
+                _serialize_department(dept, usage_map.get(dept.id))
+                for dept in departments
+            ]
             return api_success(result)
     except Exception as e:
         logger.error("API: не удалось загрузить отделы: %s", e)
@@ -118,8 +203,8 @@ async def api_get_department(dept_id: int, user=Depends(require_superadmin)):
             dept = await session.get(Department, dept_id)
             if not dept:
                 return api_error("Отдел не найден", 404)
-            usage = await _get_department_usage(session, dept.id)
-            return api_success(_serialize_department(dept, usage))
+            usage_map = await _get_all_departments_usage(session, [dept_id])
+            return api_success(_serialize_department(dept, usage_map.get(dept_id)))
     except Exception as e:
         logger.error("API: не удалось загрузить отдел %s: %s", dept_id, e)
         return api_error("Не удалось загрузить данные отдела.", 500)
@@ -140,11 +225,13 @@ async def api_create_department(request: Request, user=Depends(require_superadmi
     require_crud_rate_limit(request)
 
     try:
-        body = await request.json()
+        # Pydantic-схема (web/schemas.py): невалидное тело (массив вместо
+        # объекта, null в name) даёт 400, а не AttributeError → 500.
+        payload = DepartmentNamePayload.model_validate(await request.json())
     except Exception:
         return api_error("Некорректный формат запроса (ожидается JSON)")
 
-    name = sanitize_html(str(body.get("name", ""))).strip()
+    name = sanitize_html(payload.name).strip()
 
     if not name:
         return api_error("Название отдела не может быть пустым")
@@ -165,12 +252,12 @@ async def api_create_department(request: Request, user=Depends(require_superadmi
             await session.commit()
 
             await session.refresh(dept)
-            usage = await _get_department_usage(session, dept.id)
+            usage_map = await _get_all_departments_usage(session, [dept.id])
             logger.info("API: создан отдел id=%s, name=%s", dept.id, dept.name)
-            return api_success(_serialize_department(dept, usage))
-    except Exception as e:
+            return api_success(_serialize_department(dept, usage_map.get(dept.id)))
+    except Exception:
         logger.exception("API: не удалось создать отдел")
-        return api_error(f"Ошибка создания отдела: {str(e)}", 500)
+        return api_error("Не удалось создать отдел", 500)
 
 
 # ==========================================
@@ -186,11 +273,11 @@ async def api_rename_department(
     require_crud_rate_limit(request)
 
     try:
-        body = await request.json()
+        payload = DepartmentNamePayload.model_validate(await request.json())
     except Exception:
         return api_error("Некорректный формат запроса")
 
-    name = sanitize_html(str(body.get("name", ""))).strip()
+    name = sanitize_html(payload.name).strip()
 
     if not name:
         return api_error("Название отдела не может быть пустым")
@@ -214,12 +301,12 @@ async def api_rename_department(
             dept.name = name
             await session.commit()
 
-            usage = await _get_department_usage(session, dept.id)
+            usage_map = await _get_all_departments_usage(session, [dept.id])
             logger.info("API: отдел id=%s переименован в '%s'", dept_id, name)
-            return api_success(_serialize_department(dept, usage))
-    except Exception as e:
+            return api_success(_serialize_department(dept, usage_map.get(dept.id)))
+    except Exception:
         logger.exception("API: не удалось переименовать отдел %s", dept_id)
-        return api_error(f"Ошибка переименования: {str(e)}", 500)
+        return api_error("Не удалось переименовать отдел", 500)
 
 
 # ==========================================
@@ -240,7 +327,8 @@ async def api_delete_department(
             if not dept:
                 return api_error("Отдел не найден", 404)
 
-            usage = await _get_department_usage(session, dept_id)
+            usage_map = await _get_all_departments_usage(session, [dept_id])
+            usage = usage_map.get(dept_id, {})
             if any(usage.values()):
                 parts = ", ".join(f"{k}: {v}" for k, v in usage.items() if v)
                 return api_error(
@@ -254,6 +342,6 @@ async def api_delete_department(
 
             logger.info("API: удалён отдел id=%s, name=%s", dept_id, dept_name)
             return api_success({"id": dept_id, "deleted": True})
-    except Exception as e:
+    except Exception:
         logger.exception("API: не удалось удалить отдел %s", dept_id)
-        return api_error(f"Ошибка удаления: {str(e)}", 500)
+        return api_error("Не удалось удалить отдел", 500)

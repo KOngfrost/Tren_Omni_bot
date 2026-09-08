@@ -32,7 +32,7 @@
                         {% else %}Админ отдела{% endif %}
                     </small>
                     {% if department_name %}<small>{{ department_name }}</small>{% endif %}
-                    <form method="post" action="/auth/logout{{ '?sid=' + session_id if session_id else '' }}">
+                    <form method="post" action="/auth/logout">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token|default('') }}">
                         <button class="btn-logout" type="submit">Выйти</button>
                     </form>
@@ -41,24 +41,24 @@
             <button class="mobile-nav-toggle" type="button" aria-controls="sidebar-nav" aria-expanded="false">Меню</button>
             <nav class="sidebar-nav" id="sidebar-nav" aria-label="Основная навигация">
                 <span class="nav-label">Рабочая область</span>
-                <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">⌂</span>Обзор</a>
-                <a class="nav-link {% if active == 'tickets' %}active{% endif %}" href="/tickets/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">▣</span>Заявки</a>
-                <a class="nav-link {% if active == 'knowledge' %}active{% endif %}" href="/knowledge/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">▤</span>База знаний</a>
-                <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">?</span>FAQ</a>
-                <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">◷</span>События</a>
-                <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">≡</span>Журнал</a>
+                <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="ico">⌂</span>Обзор</a>
+                <a class="nav-link {% if active == 'tickets' %}active{% endif %}" href="/tickets/"><span class="ico">▣</span>Заявки</a>
+                <a class="nav-link {% if active == 'knowledge' %}active{% endif %}" href="/knowledge/"><span class="ico">▤</span>База знаний</a>
+                <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/"><span class="ico">?</span>FAQ</a>
+                <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico">◷</span>События</a>
+                <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico">≡</span>Журнал</a>
                 {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin', 'VIEWER'] %}
                 <span class="nav-label nav-label-spaced">Отделы</span>
                 {% for dept in request.state.user_departments %}
-                <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">◈</span>{{ dept.name }}</a>
+                <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/"><span class="ico">◈</span>{{ dept.name }}</a>
                 {% else %}
-                <a class="nav-link muted" href="/departments/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">◈</span>Отделы не созданы</a>
+                <a class="nav-link muted" href="/departments/"><span class="ico">◈</span>Отделы не созданы</a>
                 {% endfor %}
                 {% if user.role in ['SUPERADMIN', 'superadmin'] %}
-                <a class="nav-link {% if active == 'departments' %}active{% endif %}" href="/departments/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">⊕</span>Управление отделами</a>
+                <a class="nav-link {% if active == 'departments' %}active{% endif %}" href="/departments/"><span class="ico">⊕</span>Управление отделами</a>
                 {% endif %}
                 <span class="nav-label nav-label-spaced">Доступ</span>
-                <a class="nav-link {% if active == 'admins' %}active{% endif %}" href="/admin/admins/{{ '?sid=' + session_id if session_id else '' }}"><span class="ico">♙</span>Администраторы</a>
+                <a class="nav-link {% if active == 'admins' %}active{% endif %}" href="/admin/admins/"><span class="ico">♙</span>Администраторы</a>
                 {% endif %}
             </nav>
         </aside>

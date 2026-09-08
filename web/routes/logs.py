@@ -45,7 +45,7 @@ async def logs_page(
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
-            allowed_user_ids: select = select(Admin.user_id).where(Admin.department_id == dept_id)
+            allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
 
             # Общее количество для пагинации
             count_stmt = select(func.count(Log.id))
@@ -98,7 +98,7 @@ async def export_logs(user=Depends(require_auth)):
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
-            allowed_user_ids: select = select(Admin.user_id).where(Admin.department_id == dept_id)
+            allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
             logs_stmt = (
                 select(Log)
                 .options(selectinload(Log.user))
@@ -114,7 +114,7 @@ async def export_logs(user=Depends(require_auth)):
 
     csv_content: str = "\ufeffID,Пользователь,Действие,Детали,Дата\n"
     for log in logs:
-        username: str = escape_for_csv(log.user.full_name if log.user else "Аноним")
+        username: str = escape_for_csv((log.user.full_name or "Аноним") if log.user else "Аноним")
         action: str = escape_for_csv(log.action or "")
         details: str = escape_for_csv(sanitize_csv_field(log.details or ""))
         date_str: str = log.created_at.strftime("%Y-%m-%d %H:%M") if log.created_at else ""

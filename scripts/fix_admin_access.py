@@ -103,11 +103,11 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 users_query = await session.execute(
                     select(WebUser).where(WebUser.username == username)
                 )
-                users = [users_query.scalar()]
-                users = [u for u in users if u is not None]
+                user = users_query.scalar()
+                users: list[WebUser] = [user] if user is not None else []
             else:
                 users_query = await session.execute(select(WebUser))
-                users = users_query.scalars().all()
+                users = list(users_query.scalars().all())
 
             if not users:
                 print(f"  ⚠️ Пользователь '{username}' не найден. Создаю нового...")
@@ -165,10 +165,13 @@ async def test_password(username: str, password: str):
 async def main():
     parser = argparse.ArgumentParser(description="Восстановление доступа к веб-админке")
     parser.add_argument("--password", help="Новый пароль (если не указан — спросит)")
-    parser.add_argument("--username", help="Имя пользователя (если не указан — сбросит всех)")
+    parser.add_argument("--username", help="Имя пользователя для сброса")
+    parser.add_argument("--all", action="store_true", help="Явно сбросить пароли всех пользователей")
     parser.add_argument("--role", default="SUPERADMIN", choices=["SUPERADMIN", "DEPARTMENT_ADMIN", "VIEWER"],
                        help="Роль для пользователя (по умолчанию SUPERADMIN)")
     args = parser.parse_args()
+    if not args.username and not args.all:
+        parser.error("Укажите --username или явно подтвердите массовый сброс через --all")
 
     import getpass
 

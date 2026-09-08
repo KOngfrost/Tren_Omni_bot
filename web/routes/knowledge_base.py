@@ -88,6 +88,9 @@ async def add_knowledge_base(request: Request, user=Depends(require_writer)):
     form = await request.form()
     keywords: str = sanitize_html(str(form.get("keywords", "")))
     answer: str = sanitize_html(str(form.get("answer", "")))
+    if not keywords.strip() or not answer.strip():
+        request.session["flash_error"] = "Ключевые слова и ответ не могут быть пустыми"
+        return RedirectResponse(url="/knowledge/", status_code=303)
 
     try:
         async with async_session_maker() as session:

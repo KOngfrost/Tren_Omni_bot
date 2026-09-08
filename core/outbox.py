@@ -16,7 +16,7 @@
 import asyncio
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # выносить больше сообщений за проход, чем делать частые мелкие опросы.
 OUTBOX_BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", "50"))
 OUTBOX_RETRY_DELAY_SECONDS = int(os.getenv("OUTBOX_INTERVAL_SECONDS", "30"))
+OUTBOX_CLAIM_TIMEOUT_SECONDS = int(os.getenv("OUTBOX_CLAIM_TIMEOUT_SECONDS", "300"))
 
 
 # Ссылки на запущенные задачи доставки: без сильной ссылки GC может
@@ -67,7 +68,19 @@ async def deliver_pending_messages(
 ) -> int:
     """Доставить одну партию отложенных сообщений. Возвращает число попыток."""
     delivered = 0
+    message_ids: list[int] = []
+    stale_before = datetime.now(UTC) - timedelta(seconds=OUTBOX_CLAIM_TIMEOUT_SECONDS)
     async with async_session_maker() as session:
+        stale = await session.scalars(
+            select(VkOutbox)
+            .where(VkOutbox.status == "sending")
+            .where(VkOutbox.claimed_at.is_not(None))
+            .where(VkOutbox.claimed_at < stale_before)
+            .with_for_update(skip_locked=True)
+        )
+        for message in stale:
+            message.status = "pending"
+        await session.flush()
         pending = await session.scalars(
             select(VkOutbox)
             .where(VkOutbox.status == "pending")
@@ -75,41 +88,74 @@ async def deliver_pending_messages(
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
-        for message in pending:
-            ok = await send_vk_message(message.vk_id, message.text)
-            message.attempts += 1
+        messages = list(pending)
+        for message in messages:
+            message.status = "sending"
+            message.claimed_at = datetime.now(UTC)
+            if message.id is not None:
+                message_ids.append(message.id)
+        await session.commit()
+
+    for message_id in message_ids:
+        async with async_session_maker() as session:
+            claimed = await session.get(VkOutbox, message_id)
+            if claimed is None or claimed.status != "sending":
+                continue
+            if claimed.vk_id is None or claimed.text is None:
+                continue
+            vk_id, text = claimed.vk_id, claimed.text
+
+        ok = await send_vk_message(vk_id, text)
+        async with async_session_maker() as session:
+            result = await session.get(VkOutbox, message_id)
+            if result is None or result.status != "sending":
+                continue
+            result.attempts = (result.attempts or 0) + 1
             if ok:
-                message.status = "sent"
-                message.sent_at = datetime.now(UTC)
-                message.error = None
+                result.status = "sent"
+                result.claimed_at = None
+                result.sent_at = datetime.now(UTC)
+                result.error = None
                 delivered += 1
-                logger.info("Outbox: сообщение #%s доставлено vk_id=%s", message.id, message.vk_id)
+                logger.info("Outbox: сообщение #%s доставлено vk_id=%s", result.id, result.vk_id)
             else:
-                message.error = "VK API недоступен или токен не задан"
-                if message.attempts >= OUTBOX_MAX_ATTEMPTS:
-                    message.status = "failed"
+                result.error = "VK API недоступен или токен не задан"
+                if result.attempts >= OUTBOX_MAX_ATTEMPTS:
+                    result.status = "failed"
+                    result.claimed_at = None
                     logger.error(
                         "Outbox: сообщение #%s окончательно не доставлено vk_id=%s",
-                        message.id,
-                        message.vk_id,
+                        result.id,
+                        result.vk_id,
                     )
                 else:
                     logger.warning(
                         "Outbox: сообщение #%s пока не доставлено (попытка %s/%s)",
-                        message.id,
-                        message.attempts,
+                        result.id,
+                        result.attempts,
                         OUTBOX_MAX_ATTEMPTS,
                     )
-        await session.commit()
+                    result.status = "pending"
+                    result.claimed_at = None
+            await session.commit()
     return delivered
 
 
 async def outbox_worker_loop(interval: float | None = None) -> None:
-    """Бесконечный цикл доставки outbox (запускается в event loop бота)."""
+    """Бесконечный цикл доставки outbox (бот и/или фоновые задачи панели).
+
+    Single-instance: при нескольких процессах (бот + uvicorn-воркеры
+    веб-панели) advisory-lock из core/task_dispatcher.py гарантирует, что
+    партию за тик доставляет ровно один процесс; остальные пропускают тик.
+    """
+    from core.task_dispatcher import single_instance_guard
+
     delay = interval or OUTBOX_RETRY_DELAY_SECONDS
     while True:
         try:
-            await deliver_pending_messages()
+            async with single_instance_guard("outbox-worker") as is_leader:
+                if is_leader:
+                    await deliver_pending_messages()
         except Exception:
             # Ни одна ошибка не должна ронять воркер
             logger.exception("Outbox worker: ошибка при доставке")

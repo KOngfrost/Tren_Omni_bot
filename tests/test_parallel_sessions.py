@@ -68,7 +68,8 @@ class TestAdminLoginRestored:
             follow_redirects=False,
         )
         assert response.status_code == 303
-        assert "sid=" in response.headers.get("location", "")
+        assert response.headers.get("location") == "/"
+        assert "session=" in response.headers.get("set-cookie", "")
 
     def test_bootstrap_login_wrong_password(self, client, db_session_maker, monkeypatch):
         """Failed login redirects to login page with error flash."""
@@ -95,7 +96,8 @@ class TestAdminLoginRestored:
             follow_redirects=False,
         )
         assert response.status_code == 303
-        assert "sid=" in response.headers.get("location", "")
+        assert response.headers.get("location") == "/"
+        assert "session=" in response.headers.get("set-cookie", "")
 
 
 class TestParallelSessions:
@@ -114,7 +116,7 @@ class TestParallelSessions:
                 follow_redirects=False,
             )
             assert resp1.status_code == 303
-            sid1 = re.search(r"sid=([^&]+)", resp1.headers["location"]).group(1)
+            assert "session=" in resp1.headers.get("set-cookie", "")
 
             login2 = client2.get("/auth/login")
             csrf2 = re.search(r'csrf_token" value="([^"]+)"', login2.text).group(1)
@@ -124,9 +126,9 @@ class TestParallelSessions:
                 follow_redirects=False,
             )
             assert resp2.status_code == 303
-            sid2 = re.search(r"sid=([^&]+)", resp2.headers["location"]).group(1)
+            assert "session=" in resp2.headers.get("set-cookie", "")
 
-            assert sid1 != sid2
+            assert client.cookies.get("session") != client2.cookies.get("session")
 
     def test_session_isolation(self, client, db_session_maker, monkeypatch):
         """Session isolation: logout of one user doesn't affect another."""
@@ -140,7 +142,7 @@ class TestParallelSessions:
                 data={"username": "admin", "password": "admin123", "csrf_token": csrf1},
                 follow_redirects=False,
             )
-            sid1 = re.search(r"sid=([^&]+)", resp1.headers["location"]).group(1)
+            assert "session=" in resp1.headers.get("set-cookie", "")
 
             login2 = client2.get("/auth/login")
             csrf2 = re.search(r'csrf_token" value="([^"]+)"', login2.text).group(1)
@@ -149,21 +151,21 @@ class TestParallelSessions:
                 data={"username": "admin", "password": "admin123", "csrf_token": csrf2},
                 follow_redirects=False,
             )
-            sid2 = re.search(r"sid=([^&]+)", resp2.headers["location"]).group(1)
+            assert "session=" in resp2.headers.get("set-cookie", "")
 
-            assert sid1 != sid2
+            assert client.cookies.get("session") != client2.cookies.get("session")
 
             # First user logs out
-            csrf_logout = re.search(r'csrf_token" value="([^"]+)"', client.get(f"/?sid={sid1}").text)
+            csrf_logout = re.search(r'csrf_token" value="([^"]+)"', client.get("/").text)
             if csrf_logout:
                 client.post(
-                    f"/auth/logout?sid={sid1}",
+                    "/auth/logout",
                     data={"csrf_token": csrf_logout.group(1)},
                     follow_redirects=False,
                 )
 
             # Second user should still be logged in
-            dash2 = client2.get(f"/?sid={sid2}", follow_redirects=False)
+            dash2 = client2.get("/", follow_redirects=False)
             assert dash2.status_code in (200, 302, 303)
 
 
@@ -181,14 +183,12 @@ class TestLogout:
             data={"username": "admin", "password": "admin123", "csrf_token": csrf},
             follow_redirects=False,
         )
-        sid = re.search(r"sid=([^&]+)", response.headers["location"]).group(1)
-
         # Получаем новый CSRF-токен со страницы после редиректа
-        dashboard = client.get(f"/?sid={sid}", follow_redirects=False)
+        dashboard = client.get("/", follow_redirects=False)
         csrf_logout = re.search(r'csrf_token" value="([^"]+)"', dashboard.text)
         if csrf_logout:
             response = client.post(
-                f"/auth/logout?sid={sid}",
+                "/auth/logout",
                 data={"csrf_token": csrf_logout.group(1)},
                 follow_redirects=False,
             )
@@ -204,28 +204,13 @@ class TestMiddlewareOrder:
         from starlette.middleware.sessions import SessionMiddleware
 
         from web.main import app
-        from web.security.session_middleware_asgi import SessionAuthMiddleware
-
         middleware_classes = [m.cls if hasattr(m, "cls") else type(m) for m in app.user_middleware]
 
         session_idx = None
-        session_auth_idx = None
         for i, m in enumerate(middleware_classes):
             if m == SessionMiddleware:
                 session_idx = i
-            if m == SessionAuthMiddleware:
-                session_auth_idx = i
-
         assert session_idx is not None
-        assert session_auth_idx is not None
-        # In Starlette, add_middleware uses insert(0), so:
-        # - First added middleware has HIGHER index and runs FIRST (outermost)
-        # - Last added middleware has LOWER index and runs LAST (innermost)
-        # SessionMiddleware should run BEFORE SessionAuthMiddleware,
-        # so SessionMiddleware should have a LOWER index.
-        assert session_idx < session_auth_idx, (
-            "SessionMiddleware should run before SessionAuthMiddleware"
-        )
 
 
 class TestSecurityHeaders:

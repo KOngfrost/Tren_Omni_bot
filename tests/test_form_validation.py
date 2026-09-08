@@ -15,12 +15,9 @@ SQLite, из conftest.py); прямые проверки данных — чер
 import re
 
 
-def _get_sid(web_client):
-    """Получить session_id из cookies после логина."""
-    for key in web_client.cookies.keys():
-        if "session_" in key:
-            return key.replace("session_", "")
-    return None
+def _get_session_cookie(web_client):
+    """Получить подписанную cookie Starlette-сессии после логина."""
+    return web_client.cookies.get("session")
 
 
 def _login(web_client):
@@ -329,13 +326,8 @@ class TestKnowledgeBaseFormValidation:
         assert not any("<script>" in n[0] for n in rows), rows
         assert "кран" in rows[0][0]
 
-    def test_kb_empty_keywords_saved_unsafely(self, web_client):
-        """Дефект (см. Bug Log): сервер не проверяет пустые keywords/answer.
-
-        На клиенте стоит required, но на сервере нет проверки —
-        пустые строки сохраняются в БД. Тест фиксирует фактическое
-        поведение как отклонение от ожиданий ТЗ (обязательные поля).
-        """
+    def test_kb_empty_keywords_rejected(self, web_client):
+        """Пустые ключевые слова и ответ отклоняются на сервере."""
         _login(web_client)
         dept_id = _seed_department(web_client, "Жилбыт")
 
@@ -348,7 +340,4 @@ class TestKnowledgeBaseFormValidation:
         assert resp.status_code == 303
 
         rows = _db_query(web_client, "SELECT keywords, answer FROM knowledge_base")
-        # Фактически: запись с пустыми строками сохраняется (сервер не валидирует).
-        # Ожидание по ТЗ: обязательные поля должны проверяться на сервере.
-        assert len(rows) == 1
-        assert rows[0][0] == "" and rows[0][1] == ""
+        assert len(rows) == 0

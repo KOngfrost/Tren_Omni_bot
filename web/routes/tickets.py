@@ -160,7 +160,7 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
         "id": ticket.id,
         "topic": ticket.topic,
         "description": ticket.description,
-        "status": {"value": ticket.status.value},
+        "status": {"value": ticket.status.value if ticket.status else ""},
         "is_anonymous": ticket.is_anonymous,
         "auto_closed": ticket.auto_closed,
         "response_text": ticket.response_text,
@@ -270,8 +270,8 @@ async def assign_ticket(ticket_id: int, request: Request, user: dict = Depends(r
     require_crud_rate_limit(request)
     form = await request.form()
     try:
-        department_id: int = int(form.get("department_id", 0))
-    except ValueError:
+        department_id: int = int(str(form.get("department_id", 0)))
+    except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Некорректный отдел") from None
 
     await _load_ticket_for_user(ticket_id, user)

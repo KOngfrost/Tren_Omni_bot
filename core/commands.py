@@ -13,6 +13,13 @@ COMMANDS_START = (
 
 # Просмотр заявок пользователя
 COMMANDS_MY_TICKETS = ("Мои заявки", "мои заявки")
+COMMANDS_FAQ = ("FAQ", "faq", "Частые вопросы", "частые вопросы")
+COMMANDS_KNOWLEDGE = ("База знаний", "база знаний")
+COMMAND_CREATE_TICKET = "Создать заявку"
+# Формат команд для ответа студента
+STUDENT_REPLY_PATTERN = r"(?i)^Ответ #(\d+)\s+(.+)$"
+COMMANDS_EVENTS = ("Мероприятия", "мероприятия", "События", "события")
+COMMAND_REGISTER_EVENT_PATTERN = r"(?i)^Записаться #(\d+)$"
 
 # Команда «Подробнее» (с номером заявки)
 COMMAND_TICKET_DETAILS = "Подробнее"
@@ -21,7 +28,7 @@ COMMAND_TICKET_DETAILS = "Подробнее"
 COMMANDS_ADMIN = ("Админ", "админ")
 
 # Обычное меню (вернуться к основному)
-COMMANDS_REGULAR_MENU = ("Обыльное меню", "обычное меню")
+COMMANDS_REGULAR_MENU = ("Обычное меню", "обычное меню")
 
 # Заявки администратора
 COMMANDS_ADMIN_TICKETS = ("Заявки администратора", "заявки администратора")
@@ -53,7 +60,7 @@ COMMAND_REVEAL_IDENTITY = "Остаться не анонимным"
 COMMANDS_ANONYMOUS_STAY = (COMMAND_STAY_ANONYMOUS, COMMAND_REVEAL_IDENTITY)
 
 # Формат команд для ответа администратора
-ADMIN_REPLY_PATTERN = r"^Ответ #(\d+):\s*(.+)$"
+ADMIN_REPLY_PATTERN = r"(?i)^Ответ #(\d+):\s*(.+)$"
 
 # Формат команд для смены статуса
-ADMIN_STATUS_PATTERN = r"^Статус #(\d+):\s*(.+)$"
+ADMIN_STATUS_PATTERN = r"(?i)^Статус #(\d+):\s*(.+)$"

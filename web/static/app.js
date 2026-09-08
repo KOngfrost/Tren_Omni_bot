@@ -47,13 +47,6 @@
         // Очистить текущий список
         deptContainer.innerHTML = '';
 
-        // Получить session_id из URL
-        var sidParam = '';
-        var sidMatch = window.location.search.match(/sid=([^&]+)/);
-        if (sidMatch) {
-            sidParam = '?sid=' + sidMatch[1];
-        }
-
         // Активный отдел (если на странице фрейма)
         var activeDeptId = null;
         var deptMatch = window.location.pathname.match(/^\/dept\/(\d+)\//);
@@ -65,7 +58,7 @@
             // Отделов нет — показать ссылку на управление
             var emptyLink = document.createElement('a');
             emptyLink.className = 'nav-link muted';
-            emptyLink.href = '/departments/' + sidParam;
+            emptyLink.href = '/departments/';
             emptyLink.innerHTML = '<span class="ico">◈</span>Отделы не созданы';
             deptContainer.appendChild(emptyLink);
         } else {
@@ -74,7 +67,7 @@
                 var link = document.createElement('a');
                 var isActive = (activeDeptId === dept.id);
                 link.className = 'nav-link' + (isActive ? ' active' : '');
-                link.href = '/dept/' + dept.id + '/' + sidParam;
+                link.href = '/dept/' + dept.id + '/';
                 link.innerHTML = '<span class="ico">◈</span>' + escapeHtml(dept.name);
                 deptContainer.appendChild(link);
             });
@@ -186,10 +179,6 @@
             var item = question.closest('.faq-item');
             if (item) item.classList.toggle('open');
         }
-        var switcher = event.target.closest('#dept-switcher');
-        if (switcher && switcher.value) {
-            window.location.href = switcher.value;
-        }
         var togglePw = event.target.closest('.toggle-password');
         if (togglePw) {
             window.togglePasswordVisibility(togglePw);
@@ -200,6 +189,11 @@
             if (action === 'reload') window.location.reload();
             if (action === 'back') window.history.back();
         }
+    });
+
+    document.addEventListener('change', function (event) {
+        var switcher = event.target.closest('#dept-switcher');
+        if (switcher && switcher.value) window.location.href = switcher.value;
     });
 
     document.addEventListener('keydown', function (event) {

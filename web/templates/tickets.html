@@ -108,11 +108,11 @@
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if current_page > 1 %}
-        <a class="page-link" href="/tickets/?page={{ current_page - 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}{{ '?sid=' + session_id if session_id else ('&' + session_id if query or selected_status or selected_department else '') }}">← Назад</a>
+        <a class="page-link" href="/tickets/?page={{ current_page - 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}">← Назад</a>
         {% endif %}
         <span class="page-info">Страница {{ current_page }} из {{ total_pages }} · заявок: {{ total_tickets }}</span>
         {% if current_page < total_pages %}
-        <a class="page-link" href="/tickets/?page={{ current_page + 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}{{ '?sid=' + session_id if session_id else ('&' + session_id if query or selected_status or selected_department else '') }}">Вперёд →</a>
+        <a class="page-link" href="/tickets/?page={{ current_page + 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}">Вперёд →</a>
         {% endif %}
     </div>
     {% else %}

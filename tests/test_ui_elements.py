@@ -30,9 +30,9 @@ def client(monkeypatch):
     monkeypatch.setenv("SESSION_HTTPS_ONLY", "false")
 
     import core.database as database_module
-    import core.ticket_service as ticket_service_module
-    import core.reporting as reporting_module
     import core.outbox as outbox_module
+    import core.reporting as reporting_module
+    import core.ticket_service as ticket_service_module
     from core.models import Base
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -88,12 +88,9 @@ def _login(client):
     return client.cookies
 
 
-def _get_sid(client):
-    """Получить session_id из cookies."""
-    for key in client.cookies.keys():
-        if "session_" in key:
-            return key.replace("session_", "")
-    return None
+def _get_session_cookie(client):
+    """Получить подписанную cookie Starlette-сессии."""
+    return client.cookies.get("session")
 
 
 # ==========================================
@@ -152,9 +149,8 @@ class TestSidebarNavigation:
     def test_sidebar_contains_all_nav_links_when_logged_in(self, client):
         """После входа боковая панель содержит все навигационные ссылки."""
         _login(client)
-        sid = _get_sid(client)
-        assert sid is not None, "Session cookie not found after login"
-        resp = client.get(f"/?sid={sid}")
+        assert _get_session_cookie(client) is not None, "Session cookie not found after login"
+        resp = client.get("/")
         assert resp.status_code == 200
         assert '/tickets/' in resp.text
         assert '/knowledge/' in resp.text
@@ -165,8 +161,7 @@ class TestSidebarNavigation:
     def test_logout_button_present_in_sidebar(self, client):
         """Кнопка «Выйти» отображается в боковой панели."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/?sid={sid}")
+        resp = client.get("/")
         assert "btn-logout" in resp.text
         assert "Выйти" in resp.text
 
@@ -187,8 +182,8 @@ class TestSidebarNavigation:
         )
         assert response.status_code == 303
         location = response.headers.get("location", "")
-        assert "sid=" in location
-        assert location.startswith("/?sid=")
+        assert location == "/"
+        assert "session=" in response.headers.get("set-cookie", "")
 
 # ==========================================
 # A.1 Кнопки и навигация — страницы модулей
@@ -200,8 +195,7 @@ class TestDashboardButtons:
     def test_dashboard_contains_stat_cards(self, client):
         """Дашборд содержит карточки статистики."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/?sid={sid}")
+        resp = client.get("/")
         assert resp.status_code == 200
         assert "stat-card" in resp.text
         assert "Всего заявок" in resp.text
@@ -212,8 +206,7 @@ class TestDashboardButtons:
     def test_dashboard_contains_action_buttons(self, client):
         """Дашборд содержит кнопки действий."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/?sid={sid}")
+        resp = client.get("/")
         assert "btn-secondary" in resp.text  # «Все заявки»
         assert "btn-primary" in resp.text  # «Управление админами»
 
@@ -224,8 +217,7 @@ class TestTicketsPageButtons:
     def test_tickets_page_contains_filter_button(self, client):
         """Страница заявок содержит кнопку «Применить» для фильтров."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/tickets/?sid={sid}")
+        resp = client.get("/tickets/")
         assert resp.status_code == 200
         assert "filter-bar" in resp.text
         assert 'type="submit"' in resp.text
@@ -234,16 +226,14 @@ class TestTicketsPageButtons:
     def test_tickets_page_contains_search_input(self, client):
         """Страница заявок содержит поле поиска."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/tickets/?sid={sid}")
+        resp = client.get("/tickets/")
         assert 'name="q"' in resp.text
         assert "Поиск" in resp.text
 
     def test_tickets_page_contains_status_filter(self, client):
         """Страница заявок содержит выпадающий список статусов."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/tickets/?sid={sid}")
+        resp = client.get("/tickets/")
         assert 'name="status"' in resp.text
         assert "Все статусы" in resp.text
 
@@ -254,8 +244,7 @@ class TestFAQPageButtons:
     def test_faq_page_contains_add_button(self, client):
         """Страница FAQ содержит кнопку «Добавить вопрос»."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/faq/?sid={sid}")
+        resp = client.get("/faq/")
         assert resp.status_code == 200
         assert "Добавить вопрос" in resp.text
         assert 'data-open-modal="modal"' in resp.text
@@ -267,8 +256,7 @@ class TestEventsPageButtons:
     def test_events_page_contains_create_button(self, client):
         """Страница событий содержит кнопку «Создать событие»."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/events/?sid={sid}")
+        resp = client.get("/events/")
         assert resp.status_code == 200
         assert "Создать событие" in resp.text
         assert 'data-open-modal="modal"' in resp.text
@@ -280,8 +268,7 @@ class TestKnowledgeBaseButtons:
     def test_kb_page_contains_add_button(self, client):
         """Страница базы знаний содержит кнопку «Добавить запись»."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/knowledge/?sid={sid}")
+        resp = client.get("/knowledge/")
         assert resp.status_code == 200
         assert "Добавить запись" in resp.text
         assert 'data-open-modal="modal"' in resp.text
@@ -293,8 +280,7 @@ class TestDepartmentsPageButtons:
     def test_departments_page_contains_create_button(self, client):
         """Страница отделов содержит кнопку «Создать отдел»."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/departments/?sid={sid}")
+        resp = client.get("/departments/")
         assert resp.status_code == 200
         assert "Создать отдел" in resp.text
         assert 'data-open-modal="create-modal"' in resp.text
@@ -306,8 +292,7 @@ class TestLogsPageButtons:
     def test_logs_page_contains_export_button(self, client):
         """Страница логов содержит кнопку экспорта в CSV."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/logs/?sid={sid}")
+        resp = client.get("/logs/")
         assert resp.status_code == 200
         assert "Экспорт" in resp.text
         assert 'href="/logs/export"' in resp.text
@@ -319,8 +304,7 @@ class TestAdminsPageButtons:
     def test_admins_page_contains_add_button(self, client):
         """Страница администраторов содержит кнопку «Добавить админа»."""
         _login(client)
-        sid = _get_sid(client)
-        resp = client.get(f"/admin/admins/?sid={sid}")
+        resp = client.get("/admin/admins/")
         assert resp.status_code == 200
         assert "Добавить админа" in resp.text
         assert 'data-open-modal="modal"' in resp.text

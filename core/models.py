@@ -2,6 +2,7 @@ import enum
 
 import bleach
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -132,7 +133,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    vk_id = Column(Integer, unique=True, nullable=False)
+    vk_id = Column(BigInteger, unique=True, nullable=False)
     full_name = Column(String, nullable=True)
     dormitory = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -213,7 +214,7 @@ class TicketMessage(Base):
         nullable=False,
     )
     author_type = Column(SAEnum(MessageAuthorType), nullable=False)
-    author_vk_id = Column(Integer, nullable=True)  # VK ID автора, если это студент
+    author_vk_id = Column(BigInteger, nullable=True)  # VK ID автора, если это студент
     message = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -392,10 +393,11 @@ class VkOutbox(Base):
 
     # Статусы: pending (ожидает доставки) | sent | failed (лимит попыток исчерпан)
     id = Column(Integer, primary_key=True, autoincrement=True)
-    vk_id = Column(Integer, nullable=False)
+    vk_id = Column(BigInteger, nullable=False)
     text = Column(Text, nullable=False)
     status = Column(String(16), default="pending", nullable=False)
     attempts = Column(Integer, default=0, nullable=False)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sent_at = Column(DateTime(timezone=True), nullable=True)

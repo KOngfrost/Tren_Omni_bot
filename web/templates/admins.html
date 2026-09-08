@@ -68,11 +68,11 @@
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
                 {% endif %}
-                <form method="post" action="/admin/admins/{{ admin.id }}/delete"
+                {% if user.role in ['SUPERADMIN', 'superadmin'] %}<form method="post" action="/admin/admins/{{ admin.id }}/delete"
                               data-confirm="Удалить этого суперадмина?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>
+                </form>{% endif %}
             </div>
         </div>
         {% else %}
@@ -117,11 +117,11 @@
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
                 {% endif %}
-                <form method="post" action="/admin/admins/{{ admin.id }}/delete"
+                {% if user.role in ['SUPERADMIN', 'superadmin'] %}<form method="post" action="/admin/admins/{{ admin.id }}/delete"
                               data-confirm="Удалить этого админа?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>
+                </form>{% endif %}
             </div>
         </div>
         {% else %}

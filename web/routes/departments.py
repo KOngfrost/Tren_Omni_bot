@@ -13,12 +13,14 @@ import logging
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
+from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from core.database import async_session_maker
 from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, WebUser
 from web.dependencies import require_superadmin
 from web.routes.auth import require_crud_rate_limit
+from web.schemas import MAX_DEPARTMENT_NAME_LEN, DepartmentNamePayload
 from web.security.csrf import get_csrf_token
 from web.security.middleware import sanitize_html
 from web.templating import templates
@@ -26,8 +28,6 @@ from web.templating import templates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-MAX_DEPARTMENT_NAME_LEN = 80
 
 
 async def _department_usage(session, dept_id: int) -> dict:
@@ -57,7 +57,8 @@ async def departments_page(request: Request, user=Depends(require_superadmin)):
                 select(Department).order_by(Department.name)
             )).scalars().all())
             for dept in departments:
-                usage[dept.id] = await _department_usage(session, dept.id)
+                if dept.id is not None:
+                    usage[dept.id] = await _department_usage(session, dept.id)
     except Exception as e:
         db_error = True
         logger.error("Не удалось загрузить отделы: %s", e)
@@ -84,7 +85,12 @@ async def create_department(request: Request, user=Depends(require_superadmin)):
     """Создание отдела (POST, CSRF, только суперадмин)."""
     require_crud_rate_limit(request)
     form = await request.form()
-    name = sanitize_html(str(form.get("name", ""))).strip()
+    try:
+        payload = DepartmentNamePayload.model_validate(dict(form))
+    except ValidationError:
+        # Поле name отсутствует или не строка — трактуем как пустое имя
+        payload = DepartmentNamePayload()
+    name = sanitize_html(payload.name).strip()
 
     if not name:
         request.session["flash_error"] = "Название отдела не может быть пустым"
@@ -118,7 +124,12 @@ async def rename_department(request: Request, dept_id: int, user=Depends(require
     """Переименование отдела (POST, CSRF, только суперадмин)."""
     require_crud_rate_limit(request)
     form = await request.form()
-    name = sanitize_html(str(form.get("name", ""))).strip()
+    try:
+        payload = DepartmentNamePayload.model_validate(dict(form))
+    except ValidationError:
+        # Поле name отсутствует или не строка — трактуем как пустое имя
+        payload = DepartmentNamePayload()
+    name = sanitize_html(payload.name).strip()
 
     if not name:
         request.session["flash_error"] = "Название отдела не может быть пустым"

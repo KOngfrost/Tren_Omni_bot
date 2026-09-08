@@ -11,10 +11,14 @@
 - Логирование в файлы (core/logging_config.py)
 """
 
+import asyncio
+import contextlib
 import logging
 import os
 import time
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -30,22 +34,42 @@ from core.database import async_session_maker
 # Настраиваем логирование при старте веб-панели
 from core.logging_config import setup_logging
 from web.security.csrf import CSRFMiddleware
-from web.security.middleware import (
-    RequestSizeValidator,
-    SecurityHeadersMiddleware,
-    UserDepartmentsMiddleware,
-)
-from web.security.session_middleware_asgi import SessionAuthMiddleware
+from web.security.middleware import RequestSizeValidator, SecurityHeadersMiddleware
 from web.templating import templates
 
 setup_logging(log_dir=os.path.join(os.path.dirname(__file__), "..", "logs"))
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Жизненный цикл: фоновые задачи веб-панели.
+
+    Outbox-воркер запускается и в панели, чтобы доставка VK-уведомлений
+    не останавливалась при перезапуске бота. При WEB_WORKERS>1 фактическим
+    исполнителем становится один процесс (PostgreSQL advisory lock,
+    см. core/task_dispatcher.py). Отключается переменной WEB_OUTBOX_WORKER=false.
+    """
+    worker_task: asyncio.Task[None] | None = None
+    if settings.WEB_OUTBOX_WORKER:
+        from core.outbox import outbox_worker_loop
+
+        worker_task = asyncio.create_task(outbox_worker_loop())
+        logger.info("Outbox-воркер веб-панели запущен")
+    yield
+    if worker_task is not None:
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
+        logger.info("Outbox-воркер веб-панели остановлен")
+
+
 app = FastAPI(
     title="oss-web-panel",
     description="Веб-админка OSS Bot: управление обращениями студентов",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # === Middleware безопасности ===
@@ -68,14 +92,7 @@ app.add_middleware(
 # ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал
 app.add_middleware(CSRFMiddleware)
 
-# 3. Поддержка параллельных сессий через уникальные session_id
-# Каждый пользователь получает уникальный session_id, который используется
-# для имени cookie: session_<session_id>. session_id передаётся через
-# query-параметр ?sid=<session_id>.
-# ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал.
-app.add_middleware(SessionAuthMiddleware)
-
-# 4. Session middleware с безопасными настройками (для CSRF)
+# 3. Подписанная cookie-сессия с безопасными настройками (для CSRF и auth)
 # ДОЛЖЕН выполняться ДО SessionAuthMiddleware и CSRFMiddleware,
 # чтобы scope["session"] был создан до того, как они попытаются его прочитать.
 _session_secret = settings.session_secret_key
@@ -97,12 +114,7 @@ app.add_middleware(
     path="/",
 )
 
-# 5. Загрузка отделов пользователя для бокового меню
-# ДОЛЖЕН выполняться ПОСЛЕ SessionAuthMiddleware, чтобы сессия уже была доступна.
-# Решает проблему рассинхронизации: отделы загружаются для каждого запроса.
-app.add_middleware(UserDepartmentsMiddleware)
-
-# 6. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
+# 4. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
 # (outermost - выполняется первым)
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -164,6 +176,8 @@ def _set_department_cache(user_id: int, name: str | None, depts: list, dept_id: 
 @app.middleware("http")
 async def add_department_name(request: Request, call_next):
     """Загружает department_name и список отделов пользователя из БД (с кэшем)."""
+    session = request.scope.get("session", {})
+    request.state.session_id = session.get("session_id")
     # Пропускаем статические файлы, healthcheck, auth и API-запросы
     if (
         any(request.url.path.startswith(prefix) for prefix in _SKIP_MIDDLEWARE_PREFIXES)
@@ -172,7 +186,7 @@ async def add_department_name(request: Request, call_next):
         return await call_next(request)
 
     try:
-        user = request.session.get("user")
+        user = session.get("user")
         if user:
             from web.dependencies import get_admin_scope, get_departments_for_user
 
@@ -198,6 +212,13 @@ async def add_department_name(request: Request, call_next):
                 # Сохраняем в кэш
                 if web_user_id:
                     _set_department_cache(web_user_id, department_name, user_departments, dept_id)
+
+            # The selected department belongs to the current URL, not the user.
+            dept_id = None
+            if request.url.path.startswith("/dept/"):
+                parts = request.url.path.strip("/").split("/")
+                if len(parts) >= 2 and parts[1].isdigit():
+                    dept_id = int(parts[1])
 
             request.state.department_name = department_name
             request.state.user_departments = user_departments

@@ -5,6 +5,7 @@ import logging
 import re
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from core.vk_compat import patch_vkbottle_logging
@@ -27,7 +28,12 @@ from core.commands import (
     COMMANDS_CULTURE,
     COMMANDS_HOUSING,
     COMMANDS_INFORMATION,
+    COMMANDS_FAQ,
+    COMMANDS_KNOWLEDGE,
+    COMMANDS_EVENTS,
+    COMMAND_REGISTER_EVENT_PATTERN,
     COMMANDS_MY_TICKETS,
+    STUDENT_REPLY_PATTERN,
     COMMANDS_QUESTION,
     COMMANDS_REGULAR_MENU,
     COMMANDS_REPORT,
@@ -40,16 +46,18 @@ from core.config import settings
 from core.bot_core import BotCore
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
-from core.models import Ticket, TicketStatus
+from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus
 from core.reporting import build_daily_report, get_report_for_date, get_report_for_period, parse_report_date, send_report_to_vk
 from core.ticket_service import (
     STATUS_LABELS,
     StatusTransitionError,
     change_ticket_status,
     create_ticket,
+    find_knowledge_entry,
     format_ticket_details,
     format_ticket_list,
     get_ticket_messages,
+    add_student_reply,
     get_user_tickets,
     reply_to_ticket,
     status_label,
@@ -96,6 +104,100 @@ class ReportStates(BaseStateGroup):
 class TicketStates(BaseStateGroup):
     WAITING_DESCRIPTION = "waiting_description"
     WAITING_IDENTITY_CHOICE = "waiting_identity_choice"
+
+
+@vk_bot.on.private_message(text=COMMANDS_FAQ)
+async def faq_handler(message: Message):
+    async with async_session_maker() as session:
+        nodes = list(await session.scalars(
+            select(FAQNode)
+            .where(FAQNode.parent_id.is_(None))
+            .order_by(FAQNode.order_index, FAQNode.id)
+        ))
+    if not nodes:
+        await message.answer("В FAQ пока нет опубликованных вопросов.", keyboard=build_main_keyboard())
+        return
+    lines = ["Частые вопросы:"]
+    for node in nodes:
+        lines.append(f"\n#{node.id} {node.button_text or node.question}")
+    lines.append("\nВведите: FAQ #номер")
+    await message.answer("".join(lines), keyboard=build_main_keyboard())
+
+
+@vk_bot.on.private_message(text=COMMANDS_KNOWLEDGE)
+async def knowledge_base_handler(message: Message):
+    async with async_session_maker() as session:
+        entries = list(await session.scalars(select(KnowledgeBase).order_by(KnowledgeBase.id).limit(20)))
+    if not entries:
+        await message.answer("В базе знаний пока нет опубликованных материалов.", keyboard=build_main_keyboard())
+        return
+    lines = ["Материалы базы знаний:"]
+    for entry in entries:
+        lines.append(f"\n{entry.keywords}: {entry.answer}")
+    await message.answer("".join(lines), keyboard=build_main_keyboard())
+
+
+@vk_bot.on.private_message(RegexRule(r"(?i)^FAQ #(\d+)$"))
+async def faq_answer_handler(message: Message):
+    match = re.search(r"#(\d+)", message.text or "")
+    if match is None:
+        return
+    node_id = int(match.group(1))
+    async with async_session_maker() as session:
+        node = await session.get(FAQNode, node_id)
+        children = list(await session.scalars(
+            select(FAQNode).where(FAQNode.parent_id == node_id).order_by(FAQNode.order_index, FAQNode.id)
+        ))
+    if node is None:
+        await message.answer("Вопрос не найден.", keyboard=build_main_keyboard())
+        return
+    if node.is_final and node.final_answer:
+        await message.answer(node.final_answer, keyboard=build_main_keyboard())
+        return
+    lines = [node.question or "Вопрос"]
+    lines.extend(
+        f"\n#{child.id} {child.button_text or child.question or 'Вопрос'}"
+        for child in children
+    )
+    await message.answer("".join(lines), keyboard=build_main_keyboard())
+
+
+@vk_bot.on.private_message(text=COMMANDS_EVENTS)
+async def events_handler(message: Message):
+    async with async_session_maker() as session:
+        events = list(await session.scalars(
+            select(Event).where(Event.event_date >= func.now()).order_by(Event.event_date.asc()).limit(20)
+        ))
+    if not events:
+        await message.answer("Ближайших мероприятий нет.", keyboard=build_main_keyboard())
+        return
+    lines = ["Ближайшие мероприятия:"]
+    for event in events:
+        date = event.event_date.strftime("%d.%m.%Y %H:%M") if event.event_date else "дата уточняется"
+        lines.append(f"\n#{event.id} {event.title} ({date})\nЗапись: Записаться #{event.id}")
+    await message.answer("".join(lines), keyboard=build_main_keyboard())
+
+
+@vk_bot.on.private_message(RegexRule(COMMAND_REGISTER_EVENT_PATTERN))
+async def register_event_handler(message: Message):
+    match = re.search(r"#(\d+)", message.text or "")
+    if match is None:
+        return
+    event_id = int(match.group(1))
+    user = await BotCore.get_or_create_user(message.from_id)
+    async with async_session_maker() as session:
+        event = await session.get(Event, event_id)
+        if event is None:
+            await message.answer("Мероприятие не найдено.", keyboard=build_main_keyboard())
+            return
+        session.add(Registration(user_id=user.id, event_id=event_id))
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            await message.answer("Вы уже зарегистрированы на это мероприятие.", keyboard=build_main_keyboard())
+            return
+    await message.answer(f"Вы зарегистрированы на «{event.title}».", keyboard=build_main_keyboard())
 
 
 def build_anonymous_choice_keyboard() -> str:
@@ -146,7 +248,7 @@ async def my_tickets_handler(message: Message):
 
     await message.answer(
         format_ticket_list(tickets),
-        keyboard=build_tickets_keyboard([t.id for t in tickets]),
+        keyboard=build_tickets_keyboard([t.id for t in tickets if t.id is not None]),
     )
 
 
@@ -173,10 +275,33 @@ async def ticket_details_handler(message: Message):
         )
         return
 
+    if ticket.id is None:
+        return
     history = await get_ticket_messages(ticket.id)
     await message.answer(
         format_ticket_details(ticket, history),
         keyboard=build_tickets_keyboard([ticket.id]),
+    )
+
+
+@vk_bot.on.private_message(RegexRule(STUDENT_REPLY_PATTERN))
+async def student_ticket_reply_handler(message: Message):
+    """Добавить ответ студента в его собственную заявку."""
+    match = re.match(STUDENT_REPLY_PATTERN, message.text or "")
+    if match is None:
+        return
+    ticket_id = int(match.group(1))
+    reply_text = match.group(2).strip()
+    ticket = await add_student_reply(ticket_id, message.from_id, reply_text)
+    if ticket is None:
+        await message.answer(
+            "Заявка не найдена или ответ в неё недоступен.",
+            keyboard=build_main_keyboard(),
+        )
+        return
+    await message.answer(
+        f"Ответ добавлен в заявку #{ticket_id}. Администратор увидит его в переписке.",
+        keyboard=build_tickets_keyboard([ticket_id]),
     )
 
 
@@ -267,6 +392,50 @@ async def ticket_description_handler(message: Message):
         return
 
     state_peer = await vk_bot.state_dispenser.get(message.from_id)
+    department = state_peer.payload.get("department") if state_peer else None
+
+    # Если пользователь ввел «Создать заявку» после подсказки из базы знаний,
+    # используем уже сохранённое в сессии описание, минуя повторный поиск по БЗ.
+    stored_description = state_peer.payload.get("description") if state_peer else None
+    if stored_description and description.strip().casefold() == "создать заявку":
+        topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
+        department = state_peer.payload.get("department") if state_peer else None
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            TicketStates.WAITING_IDENTITY_CHOICE,
+            description=stored_description,
+            topic=topic,
+            department=department,
+        )
+        await message.answer(
+            "Выберите режим обращения:\n\n"
+            "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n"
+            "«Остаться не анонимным» — администратор сможет ответить вам в VK.",
+            keyboard=build_anonymous_choice_keyboard(),
+        )
+        return
+
+    # Try the knowledge base before opening a ticket for a known routine question.
+    # Логика поиска — в core/ticket_service.py (общая для бота и веб-панели).
+    async with async_session_maker() as session:
+        knowledge_entry = await find_knowledge_entry(session, description, department)
+    if knowledge_entry is not None:
+        topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
+        department = state_peer.payload.get("department") if state_peer else None
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            TicketStates.WAITING_DESCRIPTION,
+            description=description,
+            topic=topic,
+            department=department,
+        )
+        await message.answer(
+            f"Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
+            "Если ответ не подходит, напишите «Создать заявку», чтобы продолжить.",
+            keyboard=build_main_keyboard(),
+        )
+        return
+
     topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
     department = state_peer.payload.get("department") if state_peer else None
     await vk_bot.state_dispenser.set(
@@ -306,7 +475,7 @@ async def ticket_identity_choice_handler(message: Message):
             department_name=department,
         )
 
-        department_name = ticket.department.name if ticket.department else "Общая"
+        department_name = department or "Общая"
         answer_tail = (
             "Администратор сможет ответить вам в этом диалоге."
             if keep_identity
@@ -594,13 +763,17 @@ async def report_by_period_handler(message: Message):
     )
 
 
-@vk_bot.on.private_message(RegexRule(r"^\d{2}\.\d{2}\.\d{4}\s*[-–—]\s*\d{2}\.\d{2}\.\d{4}$"), state=ReportStates.WAITING_DATE_FROM)
+_REPORT_PERIOD_PATTERN = r"^(?:\d{2}\.\d{2}\.\d{4}\s*[-–—]\s*\d{2}\.\d{2}\.\d{4}|с\s+\d{2}\.\d{2}\.\d{4}\s+по\s+\d{2}\.\d{2}\.\d{4})$"
+
+
+@vk_bot.on.private_message(RegexRule(_REPORT_PERIOD_PATTERN), state=ReportStates.WAITING_DATE_FROM)
 async def report_by_period_input(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         return
 
-    parts = re.split(r"\s*[-–—]\s*", message.text.strip())
+    normalized = re.sub(r"^с\s+|\s+по\s+", " ", message.text.strip())
+    parts = re.split(r"\s*[-–—\s]\s*", normalized, maxsplit=1)
     if len(parts) != 2:
         await message.answer("Неверный формат. Введите две даты через тире (например: 31.08.2026 - 15.09.2026)")
         return

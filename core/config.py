@@ -149,6 +149,16 @@ class Settings:
         if origin.strip()
     ]
 
+    # Фоновый outbox-воркер веб-панели (доставка VK-уведомлений из очереди).
+    # При WEB_WORKERS>1 фактическим исполнителем становится ровно один
+    # процесс — PostgreSQL advisory lock (core/task_dispatcher.py).
+    # false — если доставку должна выполнять только процесс бота.
+    WEB_OUTBOX_WORKER = os.getenv("WEB_OUTBOX_WORKER", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     # SMTP (email-рассылка отчётов)
     SMTP_HOST = os.getenv("SMTP_HOST", "")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))

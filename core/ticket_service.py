@@ -16,7 +16,9 @@ from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
 from core.models import (
+    Admin,
     Department,
+    KnowledgeBase,
     Log,
     MessageAuthorType,
     Ticket,
@@ -304,6 +306,7 @@ async def change_ticket_status(
                 ticket.user.vk_id,
                 f"Статус вашей заявки #{ticket.id} изменён: {status_label(ticket.status)}",
             )
+        fire_outbox_delivery()
         return ticket
 
 
@@ -395,6 +398,8 @@ def format_ticket_details(ticket: Ticket, messages: list[TicketMessage]) -> str:
             lines.append(f"Администратор: {ticket.response_text}")
     else:
         for msg in messages:
+            if msg.author_type is None:
+                continue
             author = {
                 MessageAuthorType.USER: "Вы",
                 MessageAuthorType.ADMIN: "Администратор",
@@ -456,7 +461,7 @@ async def create_ticket(
 
         ticket = Ticket(
             user_id=user.id if user else None,
-            department_id=department.id if department else None,
+            department=department,
             topic=topic,
             description=description,
             status=TicketStatus.NEW if keep_identity else TicketStatus.ANONYMOUS,
@@ -478,7 +483,7 @@ async def create_ticket(
         # Журналируем создание
         session.add(
             Log(
-                user_id=None,
+                user_id=user.id if user else None,
                 action="ticket_created",
                 details=f"Создана заявка #{ticket.id}: {topic}",
             )
@@ -501,4 +506,116 @@ async def create_anonymous_ticket(
         vk_id=vk_id,
         keep_identity=keep_identity,
         department_name=department_name,
+    )
+
+
+async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket | None:
+    """Добавить ответ студента в принадлежащую ему заявку.
+
+    Если заявка закрыта (COMPLETED / COMPLETED_AUTO), она возвращается
+    в состояние IN_PROGRESS. Администраторам отдела отправляется
+    уведомление через outbox.
+    """
+    async with ticket_transaction() as session:
+        ticket = await session.scalar(
+            select(Ticket)
+            .join(User, Ticket.user_id == User.id)
+            .options(selectinload(Ticket.user), selectinload(Ticket.department))
+            .where(Ticket.id == ticket_id, User.vk_id == vk_id)
+            .with_for_update()
+        )
+        if ticket is None or ticket.is_anonymous:
+            return None
+
+        # Добавляем сообщение в историю
+        add_ticket_message(session, ticket, MessageAuthorType.USER, message, author_vk_id=vk_id)
+
+        # Если заявка закрыта — возвращаем в обработку
+        reopened = False
+        if ticket.status in COMPLETED_STATUSES:
+            old_status_value = ticket.status.value
+            ticket.status = TicketStatus.IN_PROGRESS
+            reopened = True
+            add_ticket_message(
+                session,
+                ticket,
+                MessageAuthorType.SYSTEM,
+                f"Заявка повторно открыта студентом: статус изменён с {old_status_value} на IN_PROGRESS",
+            )
+
+        # Журнал
+        session.add(
+            Log(
+                user_id=ticket.user_id,
+                action="student_reply",
+                details=(
+                    f"Ответ в заявке #{ticket.id}"
+                    + (" (заявка повторно открыта)" if reopened else "")
+                ),
+            )
+        )
+
+        # Уведомляем администраторов отдела через outbox
+        if ticket.department and ticket.department_id:
+            admins = await session.scalars(
+                select(Admin).where(Admin.department_id == ticket.department_id)
+            )
+            for admin in admins:
+                if admin.user and admin.user.vk_id:
+                    subject = "Повторно открыто" if reopened else "Новый ответ студента"
+                    add_outbox_message(
+                        session,
+                        admin.user.vk_id,
+                        (
+                            f"⚠️ {subject}\n\n"
+                            f"Студент ответил на заявку #{ticket.id}:\n\n"
+                            f"{message}"
+                        ),
+                    )
+            # WebUser уведомления через VK не отправляются (нет vk_id)
+
+        fire_outbox_delivery()
+        return ticket
+
+
+# === База знаний: единая логика поиска для бота и веб-панели ===
+
+
+def keyword_matches(keywords: str, text: str) -> bool:
+    """True, если хотя бы одно ключевое слово встречается в тексте.
+
+    Ключевые слова хранятся строкой через запятую. Сравнение
+    регистронезависимое (casefold); пустые слова игнорируются.
+    """
+    normalized = text.casefold()
+    return any(
+        word.strip().casefold() in normalized
+        for word in keywords.split(",")
+        if word.strip()
+    )
+
+
+async def find_knowledge_entry(
+    session: AsyncSession,
+    description: str,
+    department_name: str | None = None,
+) -> KnowledgeBase | None:
+    """Первая запись БЗ, ключевые слова которой совпадают с описанием.
+
+    Используется:
+    - VK-ботом: подсказка перед созданием заявки (рутинные вопросы);
+    - веб-маршрутами: когда панели понадобится поиск по БЗ.
+
+    Если задан department_name — поиск ограничен записями отдела
+    (записи без отдела в этом случае не рассматриваются).
+    """
+    stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
+    if department_name:
+        stmt = stmt.join(
+            Department, KnowledgeBase.department_id == Department.id
+        ).where(Department.name == department_name)
+    entries = list(await session.scalars(stmt))
+    return next(
+        (entry for entry in entries if keyword_matches(entry.keywords or "", description)),
+        None,
     )

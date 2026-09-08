@@ -14,6 +14,7 @@ import secrets
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
@@ -113,9 +114,10 @@ async def add_admin(request: Request, user=Depends(require_auth)):
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     vk_id: int = _parse_vk_id(form)
-    full_name: str = sanitize_html(form.get("full_name", ""))
-    department_id_raw: str | None = form.get("department_id")
-    role: str = form.get("role", "admin")
+    full_name: str = sanitize_html(str(form.get("full_name", "")))
+    raw_department_id = form.get("department_id")
+    department_id_raw: str | None = str(raw_department_id) if raw_department_id is not None else None
+    role: str = str(form.get("role", "admin"))
     username: str = sanitize_html(str(form.get("username", "")).strip())
     password: str = str(form.get("password", ""))
 
@@ -203,7 +205,7 @@ def _check_role_permissions(user: dict, role: str) -> str | None:
 
 
 async def _create_admin_records(
-    session: "async_session_maker",
+    session: AsyncSession,
     vk_id: int,
     full_name: str,
     department_id_raw: str | None,
@@ -220,7 +222,7 @@ async def _create_admin_records(
         if selected_department_id is None:
             raise ValueError("У вашего аккаунта не указан отдел")
     else:
-        selected_department_id: int | None = int(department_id_raw) if department_id_raw else None
+        selected_department_id = int(department_id_raw) if department_id_raw else None
 
     # Получаем или создаём пользователя VK (VIEWER — только веб-панель)
     db_user: User | None = None
@@ -248,6 +250,8 @@ async def _create_admin_records(
     }.get(role, WebRole.DEPARTMENT_ADMIN)
 
     if role == "admin":
+        if db_user is None:
+            raise ValueError("Не удалось создать пользователя VK")
         admin = Admin(
             user_id=db_user.id,
             department_id=selected_department_id,
@@ -299,8 +303,8 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
                 request.session["flash_error"] = "Администратор не найден"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
-            # Нельзя удалить самого себя (для legacy-админов с user_id в сессии)
-            if user.get("user_id") == admin.id:
+            current_web_user = await session.get(WebUser, user.get("web_user_id"))
+            if current_web_user and current_web_user.admin_id == admin.id:
                 request.session["flash_error"] = "Нельзя удалить себя"
                 return RedirectResponse(url="/admin/admins/", status_code=302)
 
@@ -323,7 +327,7 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
             deletion_log = Log(
                 user_id=admin.user_id,
                 action="admin_deleted",
-                details=f"Удалён администратор id={admin_id}, роль={admin.role.value}, отдел={admin.department_id}"
+                details=f"Удалён администратор id={admin_id}, роль={admin.role.value if admin.role else 'unknown'}, отдел={admin.department_id}"
             )
             session.add(deletion_log)
 
