@@ -1,34 +1,78 @@
+# Environment variables
 .env
 .env.*
 !.env.example
+
+# Python cache
 __pycache__/
 *.py[cod]
+*.class
+*.so
+*.egg-info/
+.installed.cfg
+
+# Virtual environments
 .venv/
 venv/
+env/
+ENV/
+
+# IDE
 .vscode/
 .idea/
-.vkbottle/
-bandit-report.json
-pip-audit-report.json
+*.pem
+*.key
+*.crt
+
+# Testing caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
 .coverage
+.coverage.*
+
+# Logs
 *.log
+*.log.*
+logs/
 Status/
+
+# Reports
+bandit-report.json
+pip-audit-report.json
 *.sql.gz
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Node
 node_modules/
+
+# Test directories
 test/
 
 # Dev-секрет сессий (генерируется автоматически в development-режиме)
 .session_secret
 
 # Локальные артефакты, выводы проверок и черновики
-logs/
 mypy_output.txt
 results.txt
 _o.txt
 _e2e_check.sh
 py2.txt
+
+# Tmp test files
+dept_test.txt
+e2e_final.txt
+form_final.txt
+full_final.txt
+full_result.txt
+result.txt
+single_test.txt
+test_e2e_result.txt
+test_form_result.txt
+test_output.txt
+test_result.txt
+test_ui_result.txt

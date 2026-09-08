@@ -30,16 +30,30 @@ def get_current_user(request: Request) -> dict | None:
 async def require_auth(request: Request) -> dict:
     """Проверить сессию и перечитать актуальные права из БД."""
     user = request.session.get("user")
+    is_api = (
+        request.url.path.startswith("/api/")
+        or "application/json" in request.headers.get("accept", "")
+    )
     if not user:
+        if is_api:
+            raise HTTPException(status_code=401, detail="Не авторизован")
         raise HTTPException(
             status_code=302, detail="Redirect", headers={"Location": "/auth/login"}
         )
     async with async_session_maker() as session:
         web_user_id = user.get("web_user_id")
         if web_user_id is not None:
-            web_user = await session.get(WebUser, web_user_id)
+            try:
+                web_user = await session.get(WebUser, web_user_id)
+            except Exception:
+                # БД недоступна — доверяем данным сессии, чтобы не выкидывать
+                # уже аутентифицированного пользователя при сбоях базы.
+                logger.exception("require_auth: БД недоступна, пропускаем проверку прав")
+                return user
             if web_user is None or not web_user.is_active:
                 request.session.clear()
+                if is_api:
+                    raise HTTPException(status_code=401, detail="Сессия истекла")
                 raise HTTPException(
                     status_code=302, detail="Session expired",
                     headers={"Location": "/auth/login"},
@@ -58,6 +72,8 @@ async def require_auth(request: Request) -> dict:
             return user
 
     request.session.clear()
+    if is_api:
+        raise HTTPException(status_code=401, detail="Сессия истекла")
     raise HTTPException(
         status_code=302, detail="Session expired", headers={"Location": "/auth/login"}
     )

@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}События - OSS Web Panel{% endblock %}
 
 {% block content %}
@@ -21,6 +21,7 @@
     
     {% if flash_success %}
     <div class="alert alert-success">{{ flash_success }}</div>
+    {% endif %}
 
     {% if flash_error %}
     <div class="alert alert-error">{{ flash_error }}</div>

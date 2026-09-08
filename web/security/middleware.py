@@ -224,6 +224,42 @@ def escape_for_csv(value: str) -> str:
     return value
 
 
+# === Инжект отделов пользователя ===
+
+class UserDepartmentsMiddleware(BaseHTTPMiddleware):
+    """Middleware для загрузки отделов текущего пользователя.
+
+    Решает проблему рассинхронизации бокового меню: теперь список отделов
+    загружается для каждого аутентифицированного запроса и доступен в
+    request.state.user_departments.
+
+    Это гарантирует, что боковое меню всегда отражает актуальное состояние
+    отделов, независимо от того, на какой странице находится пользователь.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        # Инициализируем пустой список по умолчанию
+        request.state.user_departments = []
+
+        # Загружаем отделы только для аутентифицированных пользователей
+        user = request.session.get("user") if "session" in request.scope else None
+        if user:
+            try:
+                from core.database import async_session_maker
+                from core.models import Department
+                from web.dependencies import get_departments_for_user
+
+                async with async_session_maker() as session:
+                    departments = await get_departments_for_user(session, user)
+                    request.state.user_departments = departments
+            except Exception:
+                # При ошибке БД — оставляем пустой список, не блокируем запрос
+                logger.warning("Не удалось загрузить отделы для пользователя")
+
+        response = await call_next(request)
+        return response
+
+
 # === Валидация размера запроса ===
 
 class RequestSizeValidator:

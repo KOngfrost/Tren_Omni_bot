@@ -79,8 +79,8 @@ async def _start_scheduler() -> None:
 def run_vk_polling() -> None:
     retry_delay = 5
 
-    # vkbottle 4.11 ожидает в on_startup уже созданный awaitable.
-    vk_bot.on_startup.append(_start_scheduler())
+    # vkbottle 4.11 ожидает в on_startup asyncio-функцию (awaitable callback).
+    vk_bot.on_startup.append(_start_scheduler)
 
     while True:
         try:

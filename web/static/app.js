@@ -1,4 +1,4 @@
-﻿/* oss-web-panel — общий клиентский скрипт */
+/* oss-web-panel — общий клиентский скрипт */
 (function () {
     'use strict';
 
@@ -16,6 +16,150 @@
             }
             return originalFetch.call(this, url, options);
         };
+    }
+
+    // ==========================================
+    // Инициализация хранилища и бокового меню
+    // ==========================================
+
+    /**
+     * Обновить боковое меню на основе данных из Store.
+     * Вызывается при каждом изменении списка отделов.
+     */
+    function renderSidebarDepartments(departments) {
+        var nav = document.getElementById('sidebar-nav');
+        if (!nav) return;
+
+        // Найти или создать контейнер для отделов
+        var deptContainer = document.getElementById('sidebar-depts');
+        if (!deptContainer) {
+            deptContainer = document.createElement('div');
+            deptContainer.id = 'sidebar-depts';
+            // Вставить после навигационной метки "Отделы"
+            var label = nav.querySelector('.nav-label-spaced');
+            if (label && label.parentNode) {
+                label.parentNode.insertBefore(deptContainer, label.nextSibling);
+            } else {
+                nav.appendChild(deptContainer);
+            }
+        }
+
+        // Очистить текущий список
+        deptContainer.innerHTML = '';
+
+        // Получить session_id из URL
+        var sidParam = '';
+        var sidMatch = window.location.search.match(/sid=([^&]+)/);
+        if (sidMatch) {
+            sidParam = '?sid=' + sidMatch[1];
+        }
+
+        // Активный отдел (если на странице фрейма)
+        var activeDeptId = null;
+        var deptMatch = window.location.pathname.match(/^\/dept\/(\d+)\//);
+        if (deptMatch) {
+            activeDeptId = parseInt(deptMatch[1], 10);
+        }
+
+        if (!departments || departments.length === 0) {
+            // Отделов нет — показать ссылку на управление
+            var emptyLink = document.createElement('a');
+            emptyLink.className = 'nav-link muted';
+            emptyLink.href = '/departments/' + sidParam;
+            emptyLink.innerHTML = '<span class="ico">◈</span>Отделы не созданы';
+            deptContainer.appendChild(emptyLink);
+        } else {
+            // Отрисовать каждый отдел
+            departments.forEach(function (dept) {
+                var link = document.createElement('a');
+                var isActive = (activeDeptId === dept.id);
+                link.className = 'nav-link' + (isActive ? ' active' : '');
+                link.href = '/dept/' + dept.id + '/' + sidParam;
+                link.innerHTML = '<span class="ico">◈</span>' + escapeHtml(dept.name);
+                deptContainer.appendChild(link);
+            });
+        }
+    }
+
+    /**
+     * Экранировать HTML для безопасной вставки.
+     */
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * Показать уведомление об ошибке.
+     */
+    function showError(message) {
+        // Удалить предыдущие ошибки
+        var existing = document.querySelectorAll('.alert-flash-error');
+        existing.forEach(function (el) { el.remove(); });
+
+        var alert = document.createElement('div');
+        alert.className = 'alert alert-error alert-flash-error';
+        alert.textContent = message;
+        alert.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;max-width:400px;';
+
+        var main = document.querySelector('.main-content');
+        if (main) {
+            main.insertBefore(alert, main.firstChild);
+        } else {
+            document.body.appendChild(alert);
+        }
+
+        // Авто-скрытие через 5 секунд
+        setTimeout(function () {
+            alert.style.opacity = '0';
+            alert.style.transition = 'opacity 0.3s';
+            setTimeout(function () { alert.remove(); }, 300);
+        }, 5000);
+    }
+
+    /**
+     * Показать уведомление об успехе.
+     */
+    function showSuccess(message) {
+        var existing = document.querySelectorAll('.alert-flash-success');
+        existing.forEach(function (el) { el.remove(); });
+
+        var alert = document.createElement('div');
+        alert.className = 'alert alert-success alert-flash-success';
+        alert.textContent = message;
+        alert.style.cssText = 'position:fixed;top:1rem;right:1rem;z-index:9999;max-width:400px;';
+
+        var main = document.querySelector('.main-content');
+        if (main) {
+            main.insertBefore(alert, main.firstChild);
+        } else {
+            document.body.appendChild(alert);
+        }
+
+        setTimeout(function () {
+            alert.style.opacity = '0';
+            alert.style.transition = 'opacity 0.3s';
+            setTimeout(function () { alert.remove(); }, 300);
+        }, 3000);
+    }
+
+    // Инициализация Store при загрузке страницы
+    if (window.Store) {
+        // Подписаться на изменения отделов для обновления сайдбара
+        window.Store.subscribeDepartments(renderSidebarDepartments);
+
+        // Подписаться на ошибки
+        window.Store.subscribeErrors(function (error) {
+            if (error) showError(error);
+        });
+
+        // Загрузить отделы из API (или из кэша)
+        window.Store.loadDepartments().then(function (result) {
+            if (!result.success) {
+                console.warn('Не удалось загрузить отделы:', result.error);
+            }
+        });
     }
 
     function openModal(id) {
@@ -45,6 +189,16 @@
         var switcher = event.target.closest('#dept-switcher');
         if (switcher && switcher.value) {
             window.location.href = switcher.value;
+        }
+        var togglePw = event.target.closest('.toggle-password');
+        if (togglePw) {
+            window.togglePasswordVisibility(togglePw);
+        }
+        var errorAction = event.target.closest('[data-error-action]');
+        if (errorAction) {
+            var action = errorAction.dataset.errorAction;
+            if (action === 'reload') window.location.reload();
+            if (action === 'back') window.history.back();
         }
     });
 
@@ -81,18 +235,20 @@
         if (answerTextarea) answerTextarea.required = show;
     };
 
-    window.togglePasswordVisibility = function () {
+    window.togglePasswordVisibility = function (btn) {
         var input = document.getElementById('password');
-        var btn = document.querySelector('.toggle-password');
+        if (!btn) btn = document.querySelector('.toggle-password');
         if (!input || !btn) return;
         if (input.type === 'password') {
             input.type = 'text';
             btn.setAttribute('aria-label', 'Скрыть пароль');
-            btn.querySelector('.icon-eye-open').textContent = '🙈';
+            var eye = btn.querySelector('.icon-eye-open');
+            if (eye) eye.textContent = '🙈';
         } else {
             input.type = 'password';
             btn.setAttribute('aria-label', 'Показать пароль');
-            btn.querySelector('.icon-eye-open').textContent = '👁';
+            var eye2 = btn.querySelector('.icon-eye-open');
+            if (eye2) eye2.textContent = '👁';
         }
     };
 
@@ -154,4 +310,106 @@
     document.querySelectorAll('[data-counter]').forEach(function (el, i) {
         setTimeout(function () { animateCounter(el); }, 150 + i * 100);
     });
+
+    // ==========================================
+    // AJAX-обработчики для страницы отделов
+    // ==========================================
+
+    /**
+     * Обработка создания отдела через API (без перезагрузки).
+     */
+    document.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!form.matches('[data-ajax-form="create-department"]')) return;
+
+        event.preventDefault();
+        var input = form.querySelector('input[name="name"]');
+        if (!input || !input.value.trim()) return;
+
+        var name = input.value.trim();
+        if (window.Store) {
+            window.Store.createDepartment(name).then(function (result) {
+                if (result.success) {
+                    showSuccess('Отдел "' + result.data.name + '" создан');
+                    input.value = '';
+                    closeModal('create-modal');
+                } else {
+                    showError(result.error || 'Ошибка создания отдела');
+                }
+            });
+        }
+    });
+
+    /**
+     * Обработка переименования отдела через API.
+     */
+    document.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!form.matches('[data-ajax-form="rename-department"]')) return;
+
+        event.preventDefault();
+        var deptId = form.dataset.deptId;
+        var input = form.querySelector('input[name="name"]');
+        if (!input || !input.value.trim() || !deptId) return;
+
+        var name = input.value.trim();
+        if (window.Store) {
+            window.Store.renameDepartment(parseInt(deptId, 10), name).then(function (result) {
+                if (result.success) {
+                    showSuccess('Отдел переименован в "' + result.data.name + '"');
+                    // Закрыть модалку
+                    var modal = form.closest('.modal');
+                    if (modal) modal.classList.remove('active');
+                    // Обновить карточку на странице
+                    updateDepartmentCard(result.data);
+                } else {
+                    showError(result.error || 'Ошибка переименования');
+                }
+            });
+        }
+    });
+
+    /**
+     * Обработка удаления отдела через API.
+     */
+    document.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-ajax-delete]');
+        if (!btn) return;
+
+        var deptId = btn.dataset.deptId;
+        var deptName = btn.dataset.deptName;
+        if (!deptId) return;
+
+        if (!window.confirm('Удалить отдел "' + (deptName || '') + '"? Удалить можно только пустой отдел.')) return;
+
+        if (window.Store) {
+            window.Store.deleteDepartment(parseInt(deptId, 10)).then(function (result) {
+                if (result.success) {
+                    showSuccess('Отдел удалён');
+                    // Удалить карточку из DOM
+                    var card = document.querySelector('[data-dept-card="' + deptId + '"]');
+                    if (card) {
+                        card.style.transition = 'opacity 0.3s, transform 0.3s';
+                        card.style.opacity = '0';
+                        card.style.transform = 'scale(0.9)';
+                        setTimeout(function () { card.remove(); }, 300);
+                    }
+                } else {
+                    showError(result.error || 'Ошибка удаления');
+                }
+            });
+        }
+    });
+
+    /**
+     * Обновить карточку отдела в DOM после переименования.
+     */
+    function updateDepartmentCard(dept) {
+        var card = document.querySelector('[data-dept-card="' + dept.id + '"]');
+        if (!card) return;
+        var nameEl = card.querySelector('.department-name');
+        if (nameEl) nameEl.textContent = dept.name;
+        var idEl = card.querySelector('.department-id');
+        if (idEl) idEl.textContent = 'ID: ' + dept.id;
+    }
 })();

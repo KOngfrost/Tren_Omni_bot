@@ -32,14 +32,17 @@ router = APIRouter()
 
 @router.get("/")
 async def admins_page(request: Request, user=Depends(require_auth)):
-    """Страница управления администраторами.
+    """Страница управления администраторами с иерархической сортировкой.
+
+    Иерархия отображения:
+    1. Суперадминистраторы (role=SUPERADMIN) — без привязки к отделу, полный доступ
+    2. Администраторы отделов (role=ADMIN) — привязаны к конкретному отделу
 
     IDOR-защита:
-    - Суперадмин видит всех админов и всех веб-пользователей.
+    - Суперадмин видит всех админов.
     - Обычный админ — только тех, кто привязан к его отделу.
     """
     admins: list[Admin] = []
-    web_users: list[WebUser] = []
     departments: list[Department] = []
     db_error: bool = False
 
@@ -52,23 +55,28 @@ async def admins_page(request: Request, user=Depends(require_auth)):
                 dept_stmt = dept_stmt.where(Department.id == dept_id)
             departments = list((await session.execute(dept_stmt)).scalars().all())
 
+            # Загружаем админов с данными VK-профиля и веб-аккаунта
             admins_stmt = (
                 select(Admin)
-                .options(selectinload(Admin.user), selectinload(Admin.department))
-                .order_by(Admin.id)
+                .options(
+                    selectinload(Admin.user),
+                    selectinload(Admin.department),
+                    selectinload(Admin.web_user),
+                )
+                # Иерархическая сортировка: суперадмины первыми, затем по ID
+                .order_by(
+                    # SUPERADMIN (значение "superadmin") должен быть первым
+                    # Используем case для явного порядка: 0 для суперадмина, 1 для остальных
+                    func.case(
+                        (Admin.role == UserRole.SUPERADMIN, 0),
+                        else_=1,
+                    ),
+                    Admin.id,
+                )
             )
             if not is_super:
                 admins_stmt = admins_stmt.where(Admin.department_id == dept_id)
             admins = list((await session.execute(admins_stmt)).scalars().all())
-
-            web_users_stmt = (
-                select(WebUser)
-                .options(selectinload(WebUser.department))
-                .order_by(WebUser.id)
-            )
-            if not is_super:
-                web_users_stmt = web_users_stmt.where(WebUser.department_id == dept_id)
-            web_users = list((await session.execute(web_users_stmt)).scalars().all())
     except Exception as e:
         db_error = True
         logger.error("Не удалось загрузить администраторов: %s", e)
@@ -79,7 +87,6 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "request": request,
             "user": user,
             "admins": admins,
-            "web_users": web_users,
             "departments": departments,
             "db_error": db_error,
             "active": "admins",

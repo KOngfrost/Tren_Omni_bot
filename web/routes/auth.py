@@ -80,16 +80,25 @@ def _get_client_ip(request: Request) -> str:
 
 
 async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
-    """Сколько неудачных попыток за окно в базе."""
+    """Сколько неудачных попыток за окно в базе.
+
+    При недоступности БД мягко деградирует: возвращает 0, чтобы
+    не блокировать вход при проблемах с базой (лучше пропустить,
+    чем выдать 500 и заблокировать всех).
+    """
     cutoff = datetime.now(UTC) - timedelta(seconds=_LOGIN_WINDOW_SECONDS)
-    count: int | None = await session.scalar(
-        select(func.count(LoginAttempt.id)).where(
-            LoginAttempt.ip == ip,
-            LoginAttempt.success.is_(False),
-            LoginAttempt.attempted_at >= cutoff,
+    try:
+        count: int | None = await session.scalar(
+            select(func.count(LoginAttempt.id)).where(
+                LoginAttempt.ip == ip,
+                LoginAttempt.success.is_(False),
+                LoginAttempt.attempted_at >= cutoff,
+            )
         )
-    )
-    return int(count or 0)
+        return int(count or 0)
+    except Exception:
+        logger.warning("Rate-limit: не удалось прочитать попытки входа из БД")
+        return 0
 
 
 async def _is_rate_limited(session: AsyncSession, ip: str) -> bool:

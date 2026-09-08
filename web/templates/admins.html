@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Администраторы - OSS Web Panel{% endblock %}
 
 {% block content %}
@@ -6,7 +6,7 @@
     <div>
         <div class="crumb">Доступ</div>
         <h1>Администраторы</h1>
-        <div class="page-desc">Кто управляет ботом и какими отделами</div>
+        <div class="page-desc">Управление доступом: суперадмины имеют полный доступ, администраторы — в рамках отдела</div>
     </div>
     <div class="actions">
         <button class="btn btn-success" data-open-modal="modal">Добавить админа</button>
@@ -21,6 +21,7 @@
     
     {% if flash_success %}
     <div class="alert alert-success">{{ flash_success }}</div>
+    {% endif %}
 
     {% if flash_error %}
     <div class="alert alert-error">{{ flash_error }}</div>
@@ -29,37 +30,93 @@
     <div class="alert alert-success">Данные для входа созданы. Логин: <strong>{{ created_credentials.username }}</strong>, пароль: <strong>{{ created_credentials.password }}</strong>. Сохраните их сейчас: повторно пароль не показывается.</div>
     {% endif %}
     
+    {% set superadmins = admins|selectattr('role.value', 'equalto', 'superadmin')|list %}
+    {% set dept_admins = admins|selectattr('role.value', 'equalto', 'admin')|list %}
+
+    <div class="page-header" style="margin-top: 1rem;">
+        <div>
+            <h2>Суперадминистраторы</h2>
+            <div class="page-desc">Полный доступ ко всем отделам и функциям панели</div>
+        </div>
+    </div>
     <div class="admins-grid">
-        {% for admin in admins %}
-        <div class="admin-card">
+        {% for admin in superadmins %}
+        <div class="admin-card admin-card-superadmin">
             <div class="admin-card-top">
                 <div class="admin-avatar">
-                    {% set name = admin.user.full_name or 'VK' %}
+                    {% set name = admin.user.full_name if admin.user else 'SA' %}
                     {% set parts = name.split(' ') %}
                     {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
                 </div>
                 <div class="admin-card-top-info">
-                    {% set full_name = admin.user.full_name or 'Без имени' %}
+                    {% set full_name = admin.user.full_name if admin.user else 'Суперадмин' %}
                     {% set name_parts = full_name.split(' ') %}
                     {% if name_parts|length >= 2 %}
-                        {% set initials = (name_parts[0][:1] ~ '.' ~ name_parts[1][:1] ~ '.') | upper %}
+                        {% set display_name = name_parts[0] ~ ' ' ~ name_parts[1][:1] ~ '.' %}
                     {% else %}
-                        {% set initials = (name_parts[0][:1]) | upper %}
+                        {% set display_name = name_parts[0] %}
                     {% endif %}
-                    <div class="admin-name">{{ initials }}</div>
-                    <div class="admin-vk">VK ID: {{ admin.user.vk_id }}</div>
+                    <div class="admin-name">{{ display_name }}</div>
+                    <div class="admin-vk">VK ID: {{ admin.user.vk_id if admin.user else '—' }}</div>
                 </div>
             </div>
             <div class="admin-card-meta">
-                {% if admin.role.value == 'superadmin' %}
                 <span class="badge badge-completed">Суперадмин</span>
-                {% else %}
-                <span class="badge badge-new">Админ</span>
+                <span class="admin-dept">Все отделы</span>
+            </div>
+            <div class="admin-card-footer">
+                {% if admin.web_user %}
+                <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
                 {% endif %}
+                <form method="post" action="/admin/admins/{{ admin.id }}/delete"
+                              data-confirm="Удалить этого суперадмина?">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-danger btn-small">Удалить</button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state grid-full">
+            Суперадминистраторов пока нет
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="page-header" style="margin-top: 2rem;">
+        <div>
+            <h2>Администраторы отделов</h2>
+            <div class="page-desc">Управление в рамках назначенного отдела</div>
+        </div>
+    </div>
+    <div class="admins-grid">
+        {% for admin in dept_admins %}
+        <div class="admin-card">
+            <div class="admin-card-top">
+                <div class="admin-avatar">
+                    {% set name = admin.user.full_name if admin.user else 'VK' %}
+                    {% set parts = name.split(' ') %}
+                    {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
+                </div>
+                <div class="admin-card-top-info">
+                    {% set full_name = admin.user.full_name if admin.user else 'Без имени' %}
+                    {% set name_parts = full_name.split(' ') %}
+                    {% if name_parts|length >= 2 %}
+                        {% set display_name = name_parts[0] ~ ' ' ~ name_parts[1][:1] ~ '.' %}
+                    {% else %}
+                        {% set display_name = name_parts[0] %}
+                    {% endif %}
+                    <div class="admin-name">{{ display_name }}</div>
+                    <div class="admin-vk">VK ID: {{ admin.user.vk_id if admin.user else '—' }}</div>
+                </div>
+            </div>
+            <div class="admin-card-meta">
+                <span class="badge badge-new">Админ отдела</span>
                 <span class="admin-dept">{{ admin.department.name if admin.department else 'Без отдела' }}</span>
             </div>
             <div class="admin-card-footer">
-                <span class="admin-id">#{{ loop.index }}</span>
+                {% if admin.web_user %}
+                <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
+                {% endif %}
                 <form method="post" action="/admin/admins/{{ admin.id }}/delete"
                               data-confirm="Удалить этого админа?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -69,61 +126,10 @@
         </div>
         {% else %}
         <div class="empty-state grid-full">
-            Администраторов пока нет
+            Администраторов отделов пока нет
         </div>
         {% endfor %}
     </div>
-
-    {% if web_users %}
-    <div class="page-header" style="margin-top: 2rem;">
-        <div>
-            <h2>Веб-пользователи</h2>
-            <div class="page-desc">Пользователи веб-панели без привязки к VK</div>
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="admins-grid">
-            {% set web_user_counter = namespace(value=0) %}
-            {% for web_user in web_users %}
-            {% set web_user_counter.value = web_user_counter.value + 1 %}
-            <div class="admin-card">
-                <div class="admin-card-top">
-                    <div class="admin-avatar">
-                        {{ web_user.username[:2] | upper }}
-                    </div>
-                    <div class="admin-card-top-info">
-                        <div class="admin-name">{{ web_user.username }}</div>
-                        <div class="admin-vk">Веб-пользователь</div>
-                    </div>
-                </div>
-                <div class="admin-card-meta">
-                    {% if web_user.role.value == 'SUPERADMIN' %}
-                    <span class="badge badge-completed">Суперадмин</span>
-                    {% elif web_user.role.value == 'DEPARTMENT_ADMIN' %}
-                    <span class="badge badge-new">Админ отдела</span>
-                    {% else %}
-                    <span class="badge badge-pending">Наблюдатель</span>
-                    {% endif %}
-                    <span class="admin-dept">{{ web_user.department.name if web_user.department else 'Без отдела' }}</span>
-                </div>
-                <div class="admin-card-footer">
-                    <span class="admin-id">#{{ web_user_counter.value }}</span>
-                    <form method="post" action="/admin/admins/web-users/{{ web_user.id }}/delete"
-                                  data-confirm="Удалить этого веб-пользователя?">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                    </form>
-                </div>
-            </div>
-            {% else %}
-            <div class="empty-state grid-full">
-                Веб-пользователей пока нет
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 </div>
 
 <!-- Modal -->

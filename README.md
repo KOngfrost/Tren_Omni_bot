@@ -8,7 +8,137 @@ outbox-воркер.
 Веб-панель доступна только внутри вашей Tailscale-сети (`oss-web-panel.<tailnet>.ts.net`).
 Наружу (в интернет) не публикуется ни один порт.
 
-## Состав
+## 📁 Структура проекта
+
+```
+student_bot/
+├── main.py                    # Точка входа: запуск VK-бота
+├── pyproject.toml             # Конфигурация проекта (зависимости, настройки ruff/mypy)
+├── mypy.ini                   # Настройки type-checker mypy
+├── requirements.txt           # Основные зависимости production
+├── requirements-dev.txt       # Зависимости для разработки (тесты, линтеры)
+├── .env.example               # Шаблон конфигурации (заполните .env)
+├── .env                       # Ваша конфигурация (НЕ коммитьте!)
+├── .gitignore                 # Исключения для Git
+│
+├── core/                      # Ядро приложения
+│   ├── __init__.py            # Пакет ядра
+│   ├── config.py              # Конфигурация (читает переменные из .env)
+│   ├── database.py            # Подключение к PostgreSQL, сессии
+│   ├── models.py              # SQLAlchemy модели (Users, Tickets, Logs, WebUsers)
+│   ├── ticket_service.py      # Бизнес-логика заявок (создание, обновление, статусы)
+│   ├── reporting.py           # Генерация ежедневных отчётов
+│   ├── vk_client.py           # Клиент для отправки сообщений через VK API
+│   ├── outbox.py              # Надёжная доставка ответов через outbox-очередь
+│   └── logging_config.py      # Настройка логирования
+│
+├── bots/                      # VK-бот
+│   ├── __init__.py            # Пакет ботов
+│   └── vk/                    # VK-бот на vkbottle
+│       ├── __init__.py        # Пакет VK-бота
+│       ├── keyboards.py       # Клавиатуры для VK-сообщений
+│       └── bot.py           # Инициализация VK-бота (vkbottle, long-poll)
+│
+├── web/                       # Веб-панель администратора
+│   ├── __init__.py            # Пакет веб-приложения
+│   ├── main.py                # FastAPI-приложение, middleware, роутеры
+│   ├── dependencies.py        # Зависимости FastAPI (сессии, БД)
+│   ├── templating.py          # Jinja2 шаблоны
+│   ├── constants.py           # Константы (статусы, роли)
+│   ├── form_utils.py          # Утилиты для форм
+│   ├── static/                # Статические файлы
+│   │   ├── app.js             # JavaScript панели
+│   │   └── style.css          # CSS стили
+│   ├── templates/             # HTML-шаблоны
+│   │   ├── base.html          # Базовый шаблон
+│   │   ├── dashboard.html     # Главная панель
+│   │   ├── login.html         # Страница входа
+│   │   ├── tickets.html       # Список заявок
+│   │   ├── admins.html        # Управление администраторами
+│   │   ├── departments.html   # Управление отделами
+│   │   ├── faq.html           # FAQ
+│   │   ├── knowledge_base.html# База знаний
+│   │   ├── events.html        # События
+│   │   ├── logs.html          # Журнал действий
+│   │   └── error.html         # Страница ошибки
+│   ├── routes/                # Маршруты FastAPI
+│   │   ├── __init__.py        # Пакет маршрутов
+│   │   ├── auth.py            # Аутентификация (вход, выход, rate limiting)
+│   │   ├── admin_panel.py     # CRUD админ-панели
+│   │   ├── api.py             # REST API
+│   │   ├── dashboard.py       # Главная панель
+│   │   ├── tickets.py         # Управление заявками
+│   │   ├── admins.py          # Управление администраторами
+│   │   ├── departments.py     # Управление отделами
+│   │   ├── faq.py             # FAQ
+│   │   ├── knowledge_base.py  # База знаний
+│   │   ├── events.py          # События
+│   │   ├── logs.py            # Журнал
+│   │   └── dept_frame.py      # Фрейм отделов
+│   └── security/              # Безопасность
+│       ├── __init__.py        # Пакет безопасности
+│       ├── passwords.py       # Хеширование паролей (PBKDF2)
+│       ├── csrf.py            # CSRF-защита
+│       ├── middleware.py      # Rate limiting, middleware
+│       ├── session_middleware.py      # Stateful сессии
+│       └── session_middleware_asgi.py # ASGI сессии
+│
+├── alembic/                   # Миграции БД
+│   ├── alembic.ini            # Конфигурация Alembic
+│   ├── env.py                 # Скрипт окружения Alembic
+│   ├── script.py.mako         # Шаблон миграций
+│   └── versions/              # Файлы миграций
+│       └── *.py               # Версии миграций
+│
+├── scripts/                   # Скрипты администрирования
+│   ├── init_superadmin.py     # Создание VK-суперадмина
+│   ├── create_web_user.py     # Создание пользователя веб-панели
+│   ├── healthcheck_bot.py     # Проверка здоровья бота
+│   ├── backup.sh              # Резервное копирование БД
+│   └── restore.sh             # Восстановление БД
+│
+├── tests/                     # Тесты
+│   ├── __init__.py            # Пакет тестов
+│   ├── conftest.py            # Фикстуры pytest
+│   ├── test_auth.py           # Тесты аутентификации
+│   ├── test_config.py         # Тесты конфигурации
+│   ├── test_models.py         # Тесты моделей
+│   ├── test_tickets.py        # Тесты заявок
+│   ├── test_reports.py        # Тесты отчётов
+│   ├── test_faq.py            # Тесты FAQ
+│   ├── test_outbox.py         # Тесты outbox
+│   ├── test_vk_client.py      # Тесты VK-клиента
+│   ├── test_security.py       # Тесты безопасности
+│   ├── test_form_validation.py# Тесты валидации форм
+│   ├── test_ui_elements.py    # Тесты UI-элементов
+│   ├── test_e2e_scenarios.py  # Сценарии end-to-end
+│   └── test_postgres_integration.py  # Интеграция с PostgreSQL
+│
+├── docs/                      # Документация
+│   ├── DEPLOYMENT.md          # Инструкция по развёртыванию
+│   ├── WEB_ADMIN_GUIDE.md     # Руководство администратора панели
+│   └── ADMIN_AND_DATABASE_GUIDE.md  # Администрирование и БД
+│
+├── docker-compose.yml         # Docker Compose (db, migrate, bot, tailscale, web-admin)
+├── Dockerfile                 # Образ для бота и миграций
+├── Dockerfile.web             # Образ для веб-панели
+├── Dockerfile.tailscale       # Образ для Tailscale
+└── .dockerignore              # Исключения для Docker
+```
+
+## 📦 Описание модулей
+
+| Папка | Назначение |
+|---|---|
+| `core/` | Ядро: конфигурация, модели БД, бизнес-логика, отправка сообщений |
+| `bots/vk/` | VK-бот: приём сообщений, клавиатуры, обработка команд |
+| `web/` | Веб-панель: FastAPI-приложение, маршруты, шаблоны, безопасность |
+| `alembic/` | Миграции схемы базы данных PostgreSQL |
+| `scripts/` | Админ-скрипты: создание пользователей, бэкапы, healthcheck |
+| `tests/` | Unit- и интеграционные тесты |
+| `docs/` | Документация по развёртыванию и использованию |
+
+## 🚀 Состав стека
 
 | Компонент | Что делает |
 |---|---|

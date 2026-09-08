@@ -17,9 +17,11 @@ import time
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from core.config import settings
@@ -31,6 +33,7 @@ from web.security.csrf import CSRFMiddleware
 from web.security.middleware import (
     RequestSizeValidator,
     SecurityHeadersMiddleware,
+    UserDepartmentsMiddleware,
 )
 from web.security.session_middleware_asgi import SessionAuthMiddleware
 from web.templating import templates
@@ -94,7 +97,12 @@ app.add_middleware(
     path="/",
 )
 
-# 5. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
+# 5. Загрузка отделов пользователя для бокового меню
+# ДОЛЖЕН выполняться ПОСЛЕ SessionAuthMiddleware, чтобы сессия уже была доступна.
+# Решает проблему рассинхронизации: отделы загружаются для каждого запроса.
+app.add_middleware(UserDepartmentsMiddleware)
+
+# 6. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
 # (outermost - выполняется первым)
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -210,43 +218,63 @@ def _is_browser_request(request: Request) -> bool:
     return "application/json" not in accept
 
 
-def _get_error_page_context(exc: HTTPException) -> dict:
-    """Получить контекст для страницы ошибки."""
-    status = exc.status_code
+def _get_error_page_context(
+    request: Request,
+    status: int,
+    error_id: str | None = None,
+) -> dict:
+    """Получить контекст для страницы ошибки.
+
+    Обязательно включает ``request`` — starlette 0.38+ требует его в контексте
+    шаблона, иначе TemplateResponse бросает ValueError.
+    """
     messages = {
         400: ("Неверный запрос", "Пожалуйста, проверьте введённые данные и попробуйте снова.", "🔍", True, True, False),
         403: ("Доступ запрещён", "У вас нет прав для доступа к этой странице. Обратитесь к суперадминистратору.", "🚫", True, True, False),
         404: ("Страница не найдена", "Запрошенная страница не существует или была перемещена.", "📄", True, True, True),
         405: ("Метод не разрешён", "Запрашиваемый метод HTTP не поддерживается для этой страницы.", "🚫", True, True, False),
+        413: ("Файл слишком большой", "Размер запроса превышает допустимый лимит. Попробуйте загрузить файл поменьше.", "📦", True, True, False),
+        422: ("Некорректные данные", "Проверьте правильность заполнения формы и попробуйте снова.", "📝", True, True, False),
         429: ("Слишком много запросов", "Вы сделали слишком много запросов. Подождите минуту и попробуйте снова.", "⏳", True, True, False),
         500: ("Внутренняя ошибка сервера", "Что-то пошло не так на нашей стороне. Попробуйте обновить страницу.", "⚠️", True, True, True),
     }
     if status in messages:
         title, msg, icon, refresh, back, home = messages[status]
-        return {
-            "error_code": str(status),
-            "error_title": title,
-            "error_message": msg,
-            "error_icon": icon,
-            "show_refresh": refresh,
-            "show_back": back,
-            "show_home": home,
-        }
-    # Для остальных кодов — общая страница
-    return {
+    else:
+        title, msg, icon, refresh, back, home = (
+            f"Ошибка {status}",
+            "Произошла непредвидённая ошибка. Попробуйте обновить страницу или вернуться назад.",
+            "⚠️",
+            True,
+            True,
+            True,
+        )
+    context = {
+        "request": request,
         "error_code": str(status),
-        "error_title": f"Ошибка {status}",
-        "error_message": "Произошла непредвидённая ошибка. Попробуйте обновить страницу или вернуться назад.",
-        "error_icon": "⚠️",
-        "show_refresh": True,
-        "show_back": True,
-        "show_home": True,
+        "error_title": title,
+        "error_message": msg,
+        "error_icon": icon,
+        "show_refresh": refresh,
+        "show_back": back,
+        "show_home": home,
     }
+    if error_id:
+        context["error_id"] = error_id
+    return context
 
 
+@app.exception_handler(StarletteHTTPException)
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Сохранить корректный HTTP-статус для отказов auth и CSRF."""
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException | HTTPException
+):
+    """Сохранить корректный HTTP-статус для отказов auth и CSRF.
+
+    Регистрируется и для StarletteHTTPException (ловит 404 на неизвестных
+    маршрутах), и для HTTPException. Для браузерных запросов возвращает
+    стилизованную страницу error.html, для API — JSON.
+    """
     if exc.status_code in (302, 303) and exc.headers:
         return RedirectResponse(
             url=exc.headers.get("Location", "/auth/login"),
@@ -256,7 +284,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
     # Для браузерных запросов возвращаем HTML-страницу ошибки
     if _is_browser_request(request):
-        context = _get_error_page_context(exc)
+        context = _get_error_page_context(request, exc.status_code)
         return templates.TemplateResponse(
             "error.html",
             context,
@@ -271,12 +299,28 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """422 ошибка валидации: для браузера — страница ошибки, для API — JSON."""
+    if _is_browser_request(request):
+        context = _get_error_page_context(request, 422)
+        return templates.TemplateResponse(
+            "error.html",
+            context,
+            status_code=422,
+        )
+    return JSONResponse(
+        content={"detail": exc.errors()},
+        status_code=422,
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Обрабатывает все необработанные исключения БЕЗ раскрытия деталей.
 
     В dev-режиме возвращает traceback для удобства отладки.
-    В production — обобщённое сообщение + подробный лог.
+    В production — стилизованная страница error.html + код обращения.
     """
     request_id = uuid.uuid4().hex[:12]
     logger.exception(
@@ -285,7 +329,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     is_api = (
         request.url.path.startswith("/tickets/")
-        and "application/json" in request.headers.get("accept", "")
+        or request.url.path.startswith("/api/")
+        or "application/json" in request.headers.get("accept", "")
     )
 
     if not settings.IS_PRODUCTION:
@@ -310,12 +355,10 @@ async def global_exception_handler(request: Request, exc: Exception):
             status_code=500,
             headers={"X-Request-ID": request_id},
         )
-    return HTMLResponse(
-        content=(
-            "<h1>Ошибка сервера</h1>"
-            "<p>Проверьте, что БД запущена: <code>docker-compose up -d</code></p>"
-            f"<p>Код обращения для техподдержки: <code>{request_id}</code></p>"
-        ),
+    context = _get_error_page_context(request, 500, error_id=request_id)
+    return templates.TemplateResponse(
+        "error.html",
+        context,
         status_code=500,
         headers={"X-Request-ID": request_id},
     )
@@ -324,6 +367,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Импорт роутеров
 from web.routes import (
     admin_panel,
+    api,
     auth,
     dashboard,
     departments,
@@ -345,6 +389,7 @@ app.include_router(logs.router, prefix="/logs", tags=["logs"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(dept_frame.router, prefix="/dept", tags=["dept_frame"])
 app.include_router(departments.router, prefix="/departments", tags=["departments"])
+app.include_router(api.router, prefix="/api", tags=["api"])
 
 
 # Healthcheck для мониторинга и docker healthcheck

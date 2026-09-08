@@ -20,15 +20,16 @@
 <div class="card">
     {% if flash_success %}
     <div class="alert alert-success">{{ flash_success }}</div>
+    {% endif %}
 
     {% if flash_error %}
     <div class="alert alert-error">{{ flash_error }}</div>
     {% endif %}
 
-    <div class="departments-grid">
+    <div class="departments-grid" id="departments-grid">
         {% for dept in departments %}
         {% set u = usage.get(dept.id, {}) %}
-        <div class="department-card">
+        <div class="department-card" data-dept-card="{{ dept.id }}">
             <div class="department-card-top">
                 <span class="department-ico">◈</span>
                 <div>
@@ -46,11 +47,10 @@
             <div class="department-actions">
                 <a href="/dept/{{ dept.id }}/{{ '?sid=' + session_id if session_id else '' }}" class="btn btn-secondary btn-small">Открыть фрейм</a>
                 <button class="btn btn-secondary btn-small" data-open-modal="rename-modal-{{ dept.id }}">Переименовать</button>
-                <form method="post" action="/departments/{{ dept.id }}/delete"
-                      data-confirm="Удалить отдел «{{ dept.name }}»? Удалить можно только пустой отдел.">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>
+                <button class="btn btn-danger btn-small"
+                        data-ajax-delete
+                        data-dept-id="{{ dept.id }}"
+                        data-dept-name="{{ dept.name }}">Удалить</button>
             </div>
         </div>
 
@@ -61,7 +61,7 @@
                     <h3>Переименовать «{{ dept.name }}»</h3>
                     <button class="close-btn" data-close-modal="rename-modal-{{ dept.id }}">&times;</button>
                 </div>
-                <form method="POST" action="/departments/{{ dept.id }}/rename">
+                <form data-ajax-form="rename-department" data-dept-id="{{ dept.id }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="form-group">
                         <label for="name-{{ dept.id }}">Новое название</label>
@@ -72,7 +72,7 @@
             </div>
         </div>
         {% else %}
-        <div class="empty-state grid-full">
+        <div class="empty-state grid-full" id="empty-state">
             Отделов пока нет. Создайте первый отдел — он появится в меню «Отделы»
             и получит собственный фрейм с данными только этого отдела.
         </div>
@@ -87,7 +87,7 @@
             <h3>Создать отдел</h3>
             <button class="close-btn" data-close-modal="create-modal">&times;</button>
         </div>
-        <form method="POST" action="/departments/create">
+        <form data-ajax-form="create-department">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
                 <label for="dept-name">Название отдела</label>

@@ -159,6 +159,7 @@ class Admin(Base):
     department: Mapped["Department | None"] = relationship(
         "Department", back_populates="admins"
     )
+    web_user: Mapped["WebUser | None"] = relationship("WebUser", back_populates="admin")
 
 
 class Ticket(Base):

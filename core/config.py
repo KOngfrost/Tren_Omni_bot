@@ -49,7 +49,9 @@ class Settings:
     DB_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", ""))
     DB_PASS = os.getenv("POSTGRES_PASSWORD", os.getenv("DB_PASS", ""))
     DB_NAME = os.getenv("POSTGRES_DB", os.getenv("DB_NAME", "oss_bot"))
-    DB_HOST = os.getenv("DB_HOST", "db")
+    # По умолчанию: localhost для dev, "db" для Docker
+    _default_host = "db" if APP_ENV not in dev_environments else "localhost"
+    DB_HOST = os.getenv("DB_HOST", _default_host)
     DB_PORT = os.getenv("DB_PORT", "5432")
 
     # Настройки пула соединений (используется в core/database.py)
@@ -169,6 +171,16 @@ class Settings:
         не заданы — бросает RuntimeError с понятным сообщением.
         """
         errors = []
+
+        if not self.DB_USER:
+            errors.append(
+                "POSTGRES_USER не задан. Укажите имя пользователя PostgreSQL в .env."
+            )
+
+        if not self.DB_PASS:
+            errors.append(
+                "POSTGRES_PASSWORD не задан. Укажите пароль PostgreSQL в .env."
+            )
 
         if not self.VK_BOT_TOKEN:
             errors.append(
