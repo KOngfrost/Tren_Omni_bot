@@ -354,6 +354,25 @@ class LoginAttempt(Base):
     success = Column(Boolean, default=False, nullable=False)
 
 
+class CrudAttempt(Base):
+    """Попытка выполнения CRUD-операции (для многопроцессного rate limiting).
+
+    Аналогично LoginAttempt — хранилище в БД позволяет единый лимит
+    при нескольких uvicorn-workers.
+    """
+
+    __tablename__ = "crud_attempts"
+    __table_args__ = (
+        Index("ix_crud_attempts_ip_action_attempted", "ip", "action", "attempted_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ip = Column(String(64), nullable=False)
+    action = Column(String(64), nullable=False,
+                    comment="Краткое описание действия (e.g. ticket_status_change)")
+    attempted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class VkOutbox(Base):
     """Сообщения, ожидающие отправки в VK (outbox-паттерн, защита от потери).
 
@@ -387,15 +406,50 @@ class VkOutbox(Base):
 # эти listeners прикреплены к конкретным моделям и корректно вызываются.
 
 def _sanitize_model_text_fields(mapper, connection, target):
-    """Санитизирует текстовые поля модели перед INSERT/UPDATE."""
-    for col_name in ("description", "topic", "message", "response_text",
-                     "details", "answer", "question", "final_answer",
-                     "keywords", "title", "button_text"):
-        current_value = getattr(target, col_name, None)
-        if current_value is not None:
-            sanitized = sanitize_xss(current_value)
-            if sanitized != current_value:
-                setattr(target, col_name, sanitized)
+    """Санитизирует текстовые поля модели перед INSERT/UPDATE.
+
+    Для UPDATE берём историю изменений SQLAlchemy (attributes.get_history),
+    чтобы модифицированные значения действительно попали в результирующий
+    SQL-запрос UPDATE. Модификация target через setattr в before_update не
+    влияет на скомпилированный Changeset.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    for col_name in (
+        "description",
+        "topic",
+        "message",
+        "response_text",
+        "details",
+        "answer",
+        "question",
+        "final_answer",
+        "keywords",
+        "title",
+        "button_text",
+        "name",
+    ):
+        # Поле есть в модели?
+        mapped_col = getattr(target.__class__, col_name, None)
+        if isinstance(mapped_col, str):
+            # Не колонка SQLAlchemy (например __tablename__) — пропускаем
+            continue
+        if mapped_col is None:
+            continue
+
+        # Старое и новое значение из history
+        history = sa_inspect(target).attrs[col_name].history
+        incoming = history.unchanged + history.added  # type: ignore[operator]
+        if not incoming:
+            continue
+
+        new_val = incoming[-1]
+        if new_val is None:
+            continue
+
+        sanitized = sanitize_xss(new_val)
+        if sanitized != new_val:
+            target.__dict__[col_name] = sanitized
 
 
 # Прикрепляем listeners к моделям, содержащим текстовые поля с пользовательским вводом.

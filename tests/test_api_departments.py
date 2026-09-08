@@ -1,6 +1,6 @@
 """Тесты JSON API отделов (web/routes/api.py).
 
-Проверяют контракт ``{success: bool, data?: any, error?: str}`` и защиту
+Проверяют контракт ``{success: bool, data?: any, error?: str}`` и защита
 от класса багов, ради которого заведена задача: ручной разбор
 ``request.json()`` падал с AttributeError/TypeError (ответ 500) на
 невалидном теле — массив вместо объекта, null в поле name, битый JSON.
@@ -16,21 +16,6 @@
 import re
 
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def _reset_crud_rate_limiter():
-    """Изолировать глобальный CRUD rate limiter между тестами.
-
-    Лимитер живёт на уровне модуля web.routes.auth, а TestClient всегда
-    ходит с одного IP ("testclient") — без сброса счётчики копились бы по
-    всему прогону и ломали бы тесты, начиная с 21-го POST-запроса.
-    """
-    from web.routes.auth import _crud_rate_limiter
-
-    _crud_rate_limiter.requests.clear()
-    yield
-    _crud_rate_limiter.requests.clear()
 
 
 def _login(web_client, username="testadmin", password="test_password_123"):
@@ -134,10 +119,23 @@ class TestApiAccessControl:
         )
         assert resp.status_code == 403
 
-    def test_create_rate_limited_429(self, web_client):
+    def test_create_rate_limited_429(self, web_client, monkeypatch):
         """21-я CRUD-операция подряд попадает в rate limit (20 за 5 минут)."""
         _login(web_client)
         csrf = _api_csrf(web_client)
+
+        # Мокаем DBRateLimiter: после 20 вызовов возвращает False
+        call_count = [0]
+
+        async def mock_is_allowed(session, ip, action):
+            call_count[0] += 1
+            return call_count[0] <= 20
+
+        monkeypatch.setattr(
+            "web.routes.auth._crud_rate_limiter.is_allowed",
+            mock_is_allowed,
+        )
+
         responses = [
             _api_post(
                 web_client,

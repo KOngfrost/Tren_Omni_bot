@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 
 from core.database import async_session_maker
-from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, WebUser
+from core.models import Department, Event, FAQNode, KnowledgeBase, Subscription, Ticket, WebUser
 from web.dependencies import require_superadmin
 from web.routes.auth import require_crud_rate_limit
 from web.schemas import MAX_DEPARTMENT_NAME_LEN, DepartmentNamePayload
@@ -41,6 +41,7 @@ async def _department_usage(session, dept_id: int) -> dict:
         "faq": await session.scalar(_count(FAQNode)) or 0,
         "events": await session.scalar(_count(Event)) or 0,
         "web_users": await session.scalar(_count(WebUser)) or 0,
+        "subscriptions": await session.scalar(_count(Subscription)) or 0,
     }
 
 
@@ -83,7 +84,7 @@ async def departments_page(request: Request, user=Depends(require_superadmin)):
 @router.post("/create")
 async def create_department(request: Request, user=Depends(require_superadmin)):
     """Создание отдела (POST, CSRF, только суперадмин)."""
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
     try:
         payload = DepartmentNamePayload.model_validate(dict(form))
@@ -122,8 +123,19 @@ async def create_department(request: Request, user=Depends(require_superadmin)):
 @router.post("/{dept_id}/rename")
 async def rename_department(request: Request, dept_id: int, user=Depends(require_superadmin)):
     """Переименование отдела (POST, CSRF, только суперадмин)."""
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
+    try:
+        payload = DepartmentNamePayload.model_validate(dict(form))
+    except ValidationError:
+        # Поле name отсутствует или не строка — трактуем как пустое имя
+        payload = DepartmentNamePayload()
+    name = sanitize_html(payload.name).strip()
+
+    if not name:
+        request.session["flash_error"] = "Название отдела не может быть пустым"
+        return RedirectResponse(url="/departments/", status_code=303)
+
     try:
         payload = DepartmentNamePayload.model_validate(dict(form))
     except ValidationError:
@@ -172,7 +184,7 @@ async def delete_department(request: Request, dept_id: int, user=Depends(require
     Отдел с привязанными данными удалить нельзя — сначала перенесите
     или удалите его контент. Это честная защита, а не тихая потеря данных.
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     try:
         async with async_session_maker() as session:
             dept = await session.get(Department, dept_id)

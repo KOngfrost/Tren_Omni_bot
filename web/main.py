@@ -2,7 +2,6 @@
 Главный модуль FastAPI-приложения.
 
 Включает:
-- Поддержка параллельных сессий через уникальные session_id (SessionAuthMiddleware)
 - CSRF-защита (CSRFMiddleware)
 - Security Headers (X-Frame-Options, CSP, X-Content-Type-Options и др.)
 - Валидация размера запросов
@@ -93,8 +92,8 @@ app.add_middleware(
 app.add_middleware(CSRFMiddleware)
 
 # 3. Подписанная cookie-сессия с безопасными настройками (для CSRF и auth)
-# ДОЛЖЕН выполняться ДО SessionAuthMiddleware и CSRFMiddleware,
-# чтобы scope["session"] был создан до того, как они попытаются его прочитать.
+# ДОЛЖЕН выполняться ДО CSRFMiddleware,
+# чтобы scope["session"] был создан до того, как он попытается его прочитать.
 _session_secret = settings.session_secret_key
 if not _session_secret:
     raise RuntimeError(

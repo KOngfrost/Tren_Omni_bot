@@ -104,7 +104,7 @@ async def admins_page(request: Request, user=Depends(require_auth)):
 @router.post("/")
 async def add_admin(request: Request, user=Depends(require_auth)):
     """Добавление нового администратора."""
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
 
     # === Шаг 1: Валидация входных данных ===
@@ -118,7 +118,7 @@ async def add_admin(request: Request, user=Depends(require_auth)):
     raw_department_id = form.get("department_id")
     department_id_raw: str | None = str(raw_department_id) if raw_department_id is not None else None
     role: str = str(form.get("role", "admin"))
-    username: str = sanitize_html(str(form.get("username", "")).strip())
+    username: str = sanitize_html(str(form.get("username", "")))
     password: str = str(form.get("password", ""))
 
     # === Шаг 2: Проверка прав и определение department_id ===
@@ -301,7 +301,7 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
     - Нельзя удалить самого себя или последнего суперадмина
     - При удалении Admin также удаляется связанный WebUser (если есть)
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     if not is_superadmin(user):
         request.session["flash_error"] = "Только суперадмин может удалять администраторов"
         return RedirectResponse(url="/admin/admins/", status_code=302)
@@ -369,7 +369,7 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
     - Нельзя удалить самого себя
     - Нельзя удалить последнего суперадмина
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     if not is_superadmin(user):
         request.session["flash_error"] = "Только суперадмин может удалять веб-пользователей"
         return RedirectResponse(url="/admin/admins/", status_code=302)

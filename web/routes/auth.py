@@ -27,7 +27,7 @@ from core.config import settings
 from core.models import Log, LoginAttempt, WebRole, WebUser
 from core.vk_client import send_vk_message
 from web.security.csrf import get_csrf_token
-from web.security.middleware import RateLimiter
+from web.security.middleware import DBRateLimiter, RateLimiter
 from web.security.passwords import verify_password
 from web.templating import templates
 
@@ -55,8 +55,12 @@ _LOGIN_WINDOW_SECONDS = 15 * 60
 # - Создание/удаление пользователей админа
 #
 # Лимит: 20 операций на IP за 5 минут → временная блокировка (1 минута).
-# Используем RateLimiter из middleware.py вместо дублирующейся логики.
-_crud_rate_limiter = RateLimiter(max_requests=20, window_seconds=5 * 60)
+# Используем DBRateLimiter для многопроцессной совместимости.
+_crud_rate_limiter = DBRateLimiter(
+    table_name="crud_attempts",
+    max_requests=20,
+    window_seconds=5 * 60,
+)
 
 
 def _credentials_configured() -> bool:
@@ -313,7 +317,7 @@ async def logout(request: Request):
 # Rate limiting для CRUD-операций
 # ==========================================
 
-def require_crud_rate_limit(request: Request):
+async def require_crud_rate_limit(request: Request):
     """Зависимость FastAPI для rate limiting CRUD-операций.
 
     Использовать как Depends(require_crud_rate_limit) на POST-маршрутах.
@@ -322,9 +326,10 @@ def require_crud_rate_limit(request: Request):
     """
     client_ip = _get_client_ip(request)
 
-    if not _crud_rate_limiter.is_allowed(client_ip):
-        logger.warning("CRUD rate limit превышен для IP %s", client_ip)
-        raise HTTPException(
-            status_code=429,
-            detail="Слишком много запросов. Подождите 1 минуту.",
-        )
+    async with core_db.async_session_maker() as session:
+        if not await _crud_rate_limiter.is_allowed(session, client_ip, "crud_operation"):
+            logger.warning("CRUD rate limit превышен для IP %s", client_ip)
+            raise HTTPException(
+                status_code=429,
+                detail="Слишком много запросов. Подождите 1 минуту.",
+            )

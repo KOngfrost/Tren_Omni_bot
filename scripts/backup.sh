@@ -72,7 +72,8 @@ echo "[$(date '+%F %T')] Backup done, verified: $(du -h "$FILE" | cut -f1)"
 # Ротация: дневные копии старше DAILY_KEEP дней
 find "$BACKUP_DIR" -name "oss_bot_*.sql.gz" -mtime +"$DAILY_KEEP" -delete
 
-# Недельные копии (воскресенье) храним дольше
+echo "[$(date '+%F %T')] INFO: старые дневные копии удалены (keep=${DAILY_KEEP}d)."
+
 for f in "$BACKUP_DIR"/oss_bot_*.sql.gz; do
     d="$(basename "$f" | sed 's/oss_bot_//; s/.sql.gz//')"
     dow="$(date -d "$d" +%u 2>/dev/null || echo 0)"

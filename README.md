@@ -75,12 +75,11 @@ student_bot/
 │   │   ├── events.py          # События
 │   │   ├── logs.py            # Журнал
 │   │   └── dept_frame.py      # Фрейм отделов
-│   └── security/              # Безопасность
-│       ├── __init__.py        # Пакет безопасности
-│       ├── passwords.py       # Хеширование паролей (PBKDF2)
-│       ├── csrf.py            # CSRF-защита
-│       ├── middleware.py      # Rate limiting, middleware
-│       ├── session_middleware.py      # Stateful сессии
+   │   └── security/              # Безопасность
+   │       ├── __init__.py        # Пакет безопасности
+   │       ├── passwords.py       # Хеширование паролей (PBKDF2)
+   │       ├── csrf.py            # CSRF-защита
+   │       └── middleware.py      # Rate limiting, middleware
 │
 ├── alembic/                   # Миграции БД
 │   ├── alembic.ini            # Конфигурация Alembic
@@ -262,10 +261,15 @@ pytest -v
 
 Проект рассчитан на нагрузку более 2500 пользователей. Ключевые настройки:
 
-- Несколько uvicorn-воркеров веб-панели (`WEB_WORKERS`, по умолчанию 4).
+- Веб-панель запускается с одним воркером (`WEB_WORKERS=1`) — без Redis сессии многопроцессность небезопасна.
 - Общий HTTP-клиент VK с keep-alive пулом соединений.
 - Outbox-очередь доставки настраивается через `OUTBOX_BATCH_SIZE` и
   `OUTBOX_INTERVAL_SECONDS`.
+
+Для масштабирования веб-панели необходимо:
+1. Заменить cookie-сессию на Redis-backed SessionMiddleware
+2. Либо использовать внешний store для CSRF-токенов
+3. После этого можно увеличить `WEB_WORKERS`
 
 Подробнее о планировании ёмкости - в разделе "Масштабирование" файла
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

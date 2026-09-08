@@ -13,3 +13,25 @@ from web.constants import status_badge_class  # noqa: E402
 templates.env.filters["status_label"] = status_label
 templates.env.filters["status_badge"] = status_badge_class
 
+from starlette.requests import Request  # noqa: E402
+
+
+def render_admin_template(
+    request: Request,
+    template_name: str,
+    context: dict,
+) -> "TemplateResponse":
+    """Рендерить шаблон админки с автоматическим department_name из request.state.
+
+    Все роуты админки должны использовать эту функцию (или копировать логику),
+    иначе block department_name в base.html всегда останется пустым.
+    """
+    from web.templating import templates as _templates
+
+    merged = {
+        "request": request,
+        "department_name": getattr(request.state, "department_name", None),
+        **context,
+    }
+    return _templates.TemplateResponse(template_name, merged)
+

@@ -15,7 +15,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 
 from core.database import async_session_maker
-from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, WebUser
+from core.models import (
+    Department,
+    Event,
+    FAQNode,
+    KnowledgeBase,
+    Subscription,
+    Ticket,
+    WebUser,
+)
 from web.dependencies import get_admin_scope, require_auth, require_superadmin
 from web.routes.auth import require_crud_rate_limit
 from web.schemas import MAX_DEPARTMENT_NAME_LEN, DepartmentNamePayload
@@ -83,6 +91,11 @@ async def _get_department_usage(session, dept_id):
         "web_users": (
             await session.scalar(
                 select(func.count(WebUser.id)).where(WebUser.department_id == dept_id)
+            ) or 0
+        ),
+        "subscriptions": (
+            await session.scalar(
+                select(func.count(Subscription.id)).where(Subscription.department_id == dept_id)
             ) or 0
         ),
     }
@@ -222,7 +235,7 @@ async def api_create_department(request: Request, user=Depends(require_superadmi
     Принимает JSON: {"name": "Название отдела"}
     Возвращает: {"success": true, "data": {id, name, usage}}
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
 
     try:
         # Pydantic-схема (web/schemas.py): невалидное тело (массив вместо
@@ -270,7 +283,7 @@ async def api_rename_department(
     dept_id: int, request: Request, user=Depends(require_superadmin)
 ):
     """Переименовать отдел. Принимает JSON: {"name": "Новое название"}"""
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
 
     try:
         payload = DepartmentNamePayload.model_validate(await request.json())
@@ -319,7 +332,7 @@ async def api_delete_department(
     dept_id: int, request: Request, user=Depends(require_superadmin)
 ):
     """Удалить пустой отдел. Отдел с данными удалить нельзя."""
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
 
     try:
         async with async_session_maker() as session:

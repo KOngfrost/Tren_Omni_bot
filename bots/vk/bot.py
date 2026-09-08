@@ -191,6 +191,13 @@ async def register_event_handler(message: Message):
         if event is None:
             await message.answer("Мероприятие не найдено.", keyboard=build_main_keyboard())
             return
+        # Проверяем, что мероприятие ещё не прошло
+        if event.event_date < func.now():
+            await message.answer(
+                "Нельзя записаться на прошедшее мероприятие.",
+                keyboard=build_main_keyboard(),
+            )
+            return
         session.add(Registration(user_id=user.id, event_id=event_id))
         try:
             await session.commit()
@@ -781,9 +788,17 @@ async def report_by_period_input(message: Message):
         return
 
     normalized = message.text.strip()
-    # Убираем предлоги "с" и "по" с возможными пробелами вокруг
-    normalized = re.sub(r"^\s*с\s+", "", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\s+по\s+", " ", normalized, flags=re.IGNORECASE)
+    # Убираем предлог "с" в начале и заменяем "по" между двумя датами на тире,
+    # чтобы результат всегда содержал тире и корректно парсился далее.
+    normalized = re.sub(
+        r"^\s*с\s+", "", normalized, flags=re.IGNORECASE
+    )
+    normalized = re.sub(
+        r"(\d{2}\.\d{2}\.\d{4})\s+по\s+(\d{2}\.\d{2}\.\d{4})",
+        r"\1 - \2",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     # Разбиваем по тире (разные варианты: -, –, —)
     parts = re.split(r"\s*[-–—]\s*", normalized, maxsplit=1)
     if len(parts) != 2:

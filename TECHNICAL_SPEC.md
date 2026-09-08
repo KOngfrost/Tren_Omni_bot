@@ -9,7 +9,7 @@
 **Границы MVP:** 
 - Только VK как клиентский канал.
 - Только веб-панель для администраторов (без мобильных приложений).
-- **Отказ от внешней отчётности:** нет генерации Excel и email-рассылок. Вся аналитика доступна только внутри веб-панели.
+- **Отказ от внешней отчётности:** email-рассылок. Вся аналитика доступна как в отчете, так и внутри веб-панели.
 - Приоритет: стабильность ядра, надёжная доставка сообщений (Outbox) и безопасность данных.
 
 ## 2. Архитектура и компоненты
@@ -61,37 +61,60 @@
 Обеспечить одновременную работу нескольких администраторов с разных аккаунтов/браузеров без взаимного влияния.
 
 ### Архитектура
-- **SessionAuthMiddleware**: Plain ASGI middleware, использующий уникальные `session_id` для каждой сессии
-- **Хранение сессий**: In-memory словарь `_sessions` (для production с несколькими workers рекомендуется Redis)
-- **Cookie**: Каждая сессия хранится в отдельном cookie: `session_<session_id>`
-- **Идентификация**: `session_id` передаётся через query-параметр `?sid=<session_id>`
+- **SessionMiddleware**: Starlette SessionMiddleware с подписанными cookie (`secret_key` из `.env`)
+- **Хранение сессий**: In-memory cookie-сессия с `max_age=3600` (1 час)
+- **CSRF-защита**: CSRFMiddleware — токен хранится в сессии, проверяется на все POST-запросы
+- **Rate limiting**: БД-хранилище (`login_attempts`) — 5 неудачных попыток за 15 минут на IP
 
 ### Порядок выполнения middleware
 ```
-SecurityHeaders → Session → SessionAuth → CSRF → CORS → handler
+SecurityHeaders → Session → CSRF → CORS → handler
 ```
 
 ### Безопасность
-- Изоляция сессий: выход одного пользователя не влияет на других
 - CSRF-защита для всех POST-запросов
-- Rate limiting: 5 неудачных попыток за 15 минут на IP
+- Rate limiting: 5 неудачных попыток за 15 минут на IP (хранилище — PostgreSQL)
 - Security headers: X-Frame-Options, CSP, X-Content-Type-Options
 
 ### Тесты
-- `tests/test_parallel_sessions.py`: 11 тестов для проверки:
+- `tests/test_parallel_sessions.py`: тесты для проверки:
   - Входа администратора (bootstrap и web_users)
-  - Параллельных сессий (разных аккаунтов одновременно)
   - Изоляции сессий
   - Выхода из системы
-  - Корректности порядка middleware
   - Заголовков безопасности
   - Rate limiting
 
 ### Масштабирование
 При переходе на несколько uvicorn-workers необходимо:
-1. Заменить in-memory `_sessions` на Redis
-2. Использовать Redis-backed SessionMiddleware
-3. Добавить sticky sessions или shared storage для CSRF-токенов
+1. Ограничить `WEB_WORKERS=1` (без Redis сессии многопроцессность небезопасна)
+2. Либо заменить cookie-сессию на Redis-backed SessionMiddleware
+
+## 6.2. Многопроцессный rate limiting (Реализовано)
+
+### Проблема
+In-memory `RateLimiter` (словарь `requests: dict[str, list[float]]`) хранил состояние
+в памяти каждого процесса Python. При `--workers 4` каждый воркер имел свой лимит,
+что учетверяло доступные запросы и позволяло обходить защиту.
+
+### Решение
+- **DBRateLimiter** (`web/security/middleware.py`): использует таблицу `crud_attempts`
+  для хранения состояния. Работает корректно при любом количестве воркеров.
+- **Таблица `crud_attempts`**: создаётся миграцией `e8f9a0b1c2d3`, индексы по `(ip, action, attempted_at)`.
+- **Применение**: CRUD-операции админ-панели (смена статуса, ответы, создание заявок)
+  используют `DBRateLimiter` с лимитом 20 операций на IP за 5 минут.
+- **Login attempts**: уже использовали БД (`login_attempts`) — доработок не требуется.
+
+## 6.3. Асинхронный SMTP (Реализовано)
+
+### Проблема
+`send_report_email` использовал синхронный `smtplib.SMTP` через `asyncio.to_thread`.
+Хотя вызов не блокирует event loop полностью, использование синхронных сокетов
+внутри асинхронного цикла — технический компромисс.
+
+### Решение
+- Заменён на `aiosmtplib.send()` — полностью асинхронная отправка.
+- Убрана зависимость `smtplib`, добавлена `aiosmtplib==4.0.0`.
+- Вызов `send_report_email` в `_run_report` больше не требует `asyncio.to_thread`.
 
 ---
 

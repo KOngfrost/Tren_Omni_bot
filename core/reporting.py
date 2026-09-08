@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import secrets
-import smtplib
 from datetime import UTC, date, datetime, timedelta
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -9,6 +8,7 @@ from email.mime.text import MIMEText
 from io import BytesIO
 from zoneinfo import ZoneInfo
 
+import aiosmtplib
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from sqlalchemy import select
@@ -194,8 +194,8 @@ def build_daily_report(data: dict, report_date: datetime) -> bytes:
     return output.getvalue()
 
 
-def send_report_email(report_bytes: bytes, filename: str) -> None:
-    """Отправляет отчёт по email через SMTP."""
+async def send_report_email(report_bytes: bytes, filename: str) -> None:
+    """Отправляет отчёт по email через SMTP (асинхронно)."""
     if not settings.SMTP_HOST or not settings.REPORT_EMAILS:
         logger.info("SMTP не настроен, email-рассылка пропущена")
         return
@@ -214,11 +214,15 @@ def send_report_email(report_bytes: bytes, filename: str) -> None:
     attachment.add_header("Content-Disposition", "attachment", filename=filename)
     msg.attach(attachment)
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
-        server.starttls()
-        if settings.SMTP_USER:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.sendmail(settings.SMTP_FROM, settings.REPORT_EMAILS, msg.as_string())
+    await aiosmtplib.send(
+        msg,
+        hostname=settings.SMTP_HOST,
+        port=settings.SMTP_PORT,
+        start_tls=True,
+        username=settings.SMTP_USER,
+        password=settings.SMTP_PASSWORD,
+        timeout=30,
+    )
 
     logger.info("Отчёт отправлен по email: %s", ", ".join(settings.REPORT_EMAILS))
 
@@ -376,7 +380,7 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> No
     email_failed = False
     if email_configured:
         try:
-            await asyncio.to_thread(send_report_email, report_bytes, filename)
+            await send_report_email(report_bytes, filename)
         except Exception:
             logger.exception("Не удалось отправить отчёт по email")
             email_failed = True

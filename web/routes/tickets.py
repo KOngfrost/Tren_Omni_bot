@@ -195,7 +195,7 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
     - Rate limiting: не более 20 запросов на IP за 5 минут
     - IDOR: проверка department_id через БД
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
     message: str = str(form.get("message", "")).strip()
     complete: bool = form.get("complete") == "on"
@@ -229,7 +229,7 @@ async def set_ticket_status(ticket_id: int, request: Request, user: dict = Depen
     - IDOR: проверка department_id через БД
     - Валидация переходов статусов через ticket_service
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
     new_status_raw: str = str(form.get("status", ""))
 
@@ -267,7 +267,7 @@ async def assign_ticket(ticket_id: int, request: Request, user: dict = Depends(r
     - Только суперадмин может передавать заявки
     - IDOR: проверка department_id через БД
     """
-    require_crud_rate_limit(request)
+    await require_crud_rate_limit(request)
     form = await request.form()
     try:
         department_id: int = int(str(form.get("department_id", 0)))

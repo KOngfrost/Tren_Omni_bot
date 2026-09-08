@@ -54,14 +54,14 @@ async def logs_page(
                 .limit(LOGS_PER_PAGE)
             )
             if not is_super:
-                # Администратор видит логи в рамках своего отдела
                 logs_stmt = (
-                    logs_stmt
+                    logs_stmt.where(Log.ticket_id.isnot(None))
                     .join(Ticket, Log.ticket_id == Ticket.id)
                     .where(Ticket.department_id == dept_id)
                 )
                 count_stmt = (
                     select(func.count(Log.id))
+                    .where(Log.ticket_id.isnot(None))
                     .join(Ticket, Log.ticket_id == Ticket.id)
                     .where(Ticket.department_id == dept_id)
                 )
@@ -112,7 +112,18 @@ async def export_logs(user=Depends(require_auth)):
                 .limit(10000)  # Лимит для экспорта
             )
             if not is_super:
-                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
+                logs_stmt = logs_stmt.where(
+                    (Log.user_id.in_(allowed_user_ids))
+                    | (Log.ticket_id.isnot(None) & Log.ticket_id.in_(
+                        select(Ticket.id).where(Ticket.department_id == dept_id)
+                    ))
+                    | (Log.action.in_((
+                        "kb_create", "kb_update", "kb_delete",
+                        "faq_create", "faq_update", "faq_delete",
+                        "event_create", "event_update", "event_delete",
+                        "department_rename", "department_delete",
+                    )))
+                )
             logs_result = await session.execute(logs_stmt)
             logs: list[Log] = list(logs_result.scalars().all())
     except Exception:

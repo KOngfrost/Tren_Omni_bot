@@ -86,7 +86,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # === Rate Limiting ===
 
 class RateLimiter:
-    """Простой rate limiter на основе sliding window."""
+    """Простой rate limiter на основе sliding window (in-memory).
+
+    WARNING: НЕ подходит для многопроцессного запуска (uvicorn --workers > 1).
+    Используйте DBRateLimiter для production с несколькими воркерами.
+    """
 
     def __init__(self, max_requests: int, window_seconds: int):
         self.max_requests = max_requests
@@ -107,6 +111,60 @@ class RateLimiter:
 
         self.requests[key].append(now)
         return True
+
+
+class DBRateLimiter:
+    """DB-backed rate limiter для многопроцессного окружения.
+
+    Использует таблицу crud_attempts (или login_attempts) для хранения
+    состояния, что обеспечивает единый лимит при нескольких uvicorn-workers.
+
+    Пример использования:
+        limiter = DBRateLimiter("crud_attempts", max_requests=20, window_seconds=300)
+        if not await limiter.is_allowed(session, ip, "ticket_status_change"):
+            raise HTTPException(429, "Too many requests")
+    """
+
+    def __init__(self, table_name: str, max_requests: int, window_seconds: int):
+        self.table_name = table_name
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+
+    async def is_allowed(self, session, ip: str, action: str) -> bool:
+        """Проверить, не превышен ли лимит для IP+action."""
+        from datetime import UTC, datetime, timedelta
+        from sqlalchemy import text
+
+        cutoff = datetime.now(UTC) - timedelta(seconds=self.window_seconds)
+
+        # Посчитать попытки за окно
+        try:
+            count_stmt = text(
+                f"SELECT COUNT(*) FROM {self.table_name} "
+                f"WHERE ip = :ip AND attempted_at >= :cutoff"
+            )
+            count_result = await session.execute(
+                count_stmt, {"ip": ip, "cutoff": cutoff}
+            )
+            count = int(count_result.scalar() or 0)
+
+            if count >= self.max_requests:
+                return False
+
+            # Записать новую попытку
+            insert_stmt = text(
+                f"INSERT INTO {self.table_name} (ip, attempted_at) "
+                f"VALUES (:ip, NOW())"
+            )
+            await session.execute(insert_stmt, {"ip": ip})
+            await session.commit()
+            return True
+
+        except Exception:
+            # При ошибке БД — мягко деградируем: не блокируем, но и не считаем
+            # Это лучше, чем 500 для пользователя
+            logger.warning("DBRateLimiter: ошибка при проверке лимита (таблица %s может отсутствовать)", self.table_name)
+            return True
 
 
 # Глобальные лимитеры

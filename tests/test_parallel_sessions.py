@@ -200,7 +200,7 @@ class TestMiddlewareOrder:
     """Tests for middleware order."""
 
     def test_middleware_order(self):
-        """SessionMiddleware should run before SessionAuthMiddleware."""
+        """SessionMiddleware must be registered before CSRFMiddleware."""
         from starlette.middleware.sessions import SessionMiddleware
 
         from web.main import app

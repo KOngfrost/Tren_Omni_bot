@@ -80,8 +80,8 @@ ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {
         TicketStatus.IN_PROGRESS,
         TicketStatus.COMPLETED,
     },
-    TicketStatus.COMPLETED: {TicketStatus.COMPLETED_AUTO},
-    TicketStatus.COMPLETED_AUTO: set(),
+    TicketStatus.COMPLETED: {TicketStatus.IN_PROGRESS, TicketStatus.COMPLETED_AUTO},
+    TicketStatus.COMPLETED_AUTO: {TicketStatus.IN_PROGRESS},
     TicketStatus.ANONYMOUS: {
         TicketStatus.IN_PROGRESS,
         TicketStatus.TRANSFERRED_ADMIN,
@@ -541,7 +541,7 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
                 session,
                 ticket,
                 MessageAuthorType.SYSTEM,
-                f"Заявка повторно открыта студентом: статус изменён с {old_status_value} на IN_PROGRESS",
+                f"Заявка повторно открыта студентом: статус изменён с «{old_status_value}» на «В обработке»",
             )
 
         # Журнал
