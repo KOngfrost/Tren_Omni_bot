@@ -24,9 +24,9 @@
 <div class="card">
     <!-- Фильтры -->
     <form class="filter-bar" method="get" action="/tickets/">
-        <input type="text" id="search" name="q" placeholder="Поиск по теме или описанию..."
+        <input type="text" id="search" name="q" placeholder="Поиск по номеру, теме, описанию или автору..."
                value="{{ query }}">
-        <select id="status-filter" name="status" data-filter-table>
+        <select id="status-filter" name="status">
             <option value="">Все статусы</option>
             {% for value, label in status_choices %}
             <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
@@ -34,7 +34,7 @@
             <option value="COMPLETED_AUTO" {% if selected_status == 'COMPLETED_AUTO' %}selected{% endif %}>Выполнено (авто)</option>
             <option value="ANONYMOUS" {% if selected_status == 'ANONYMOUS' %}selected{% endif %}>Анонимное</option>
         </select>
-        <select id="dept-filter" name="department_id" data-filter-table>
+        <select id="dept-filter" name="department_id">
             <option value="">Все отделы</option>
             {% for dept in departments %}
             <option value="{{ dept.id }}" {% if selected_department == dept.id %}selected{% endif %}>{{ dept.name }}</option>

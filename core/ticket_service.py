@@ -434,16 +434,68 @@ def mask_anonymous_data(full_name: str | None, is_anonymous: bool) -> str:
 # === Создание обращений ===
 
 
+_CANONICAL_KEYWORDS: tuple[tuple[str, ...], ...] = (
+    ("культ",),
+    ("жил", "жыл", "быт"),
+    ("корп",),
+    ("информ",),
+)
+
+
+def _match_department_by_keywords(name: str, candidates: list[Department]) -> Department | None:
+    """Сопоставить название отдела по ключевым корням или частичному вхождению."""
+    raw_lower = name.lower()
+    for roots in _CANONICAL_KEYWORDS:
+        if any(r in raw_lower for r in roots):
+            for dept in candidates:
+                d_lower = dept.name.lower()
+                if any(r in d_lower for r in roots):
+                    return dept
+    for dept in candidates:
+        d_lower = dept.name.lower()
+        if d_lower in raw_lower or raw_lower in d_lower:
+            return dept
+    return None
+
+
 async def _resolve_department(
     session: AsyncSession,
     department_name: str | None,
 ) -> Department | None:
-    """Найти отдел по названию (для разделов меню бота)."""
-    if not department_name:
+    """Найти отдел по названию или синонимам (полным/сокращённым)."""
+    if not department_name or not department_name.strip():
         return None
-    return await session.scalar(
-        select(Department).where(Department.name == department_name)
+    raw = department_name.strip()
+
+    dept = await session.scalar(
+        select(Department).where(Department.name.ilike(raw))
     )
+    if dept is not None:
+        return dept
+
+    all_depts = list((await session.scalars(select(Department))).all())
+    return _match_department_by_keywords(raw, all_depts) if all_depts else None
+
+
+async def sync_unassigned_ticket_departments() -> int:
+    """Привязать заявки с пустым department_id к соответствующим отделам по теме/описанию."""
+    updated_count = 0
+    async with async_session_maker() as session:
+        unassigned = list((await session.scalars(
+            select(Ticket).where(Ticket.department_id.is_(None))
+        )).all())
+        for ticket in unassigned:
+            target_dept = None
+            if ticket.topic:
+                target_dept = await _resolve_department(session, ticket.topic)
+            if target_dept is None and ticket.description:
+                target_dept = await _resolve_department(session, ticket.description)
+            if target_dept is not None:
+                ticket.department_id = target_dept.id
+                updated_count += 1
+        if updated_count > 0:
+            await session.commit()
+    return updated_count
 
 
 async def create_ticket(
@@ -629,9 +681,11 @@ async def find_knowledge_entry(
     """
     stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
     if department_name:
-        stmt = stmt.join(
-            Department, KnowledgeBase.department_id == Department.id
-        ).where(Department.name == department_name)
+        resolved_dept = await _resolve_department(session, department_name)
+        if resolved_dept is not None:
+            stmt = stmt.where(KnowledgeBase.department_id == resolved_dept.id)
+        else:
+            return None
     entries = list(await session.scalars(stmt))
     return next(
         (entry for entry in entries if keyword_matches(entry.keywords or "", description)),

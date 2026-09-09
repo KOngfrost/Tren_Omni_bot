@@ -64,6 +64,12 @@ async def _start_scheduler() -> None:
     start_report_scheduler(vk_bot.api)
     logger.info("Планировщик отчётов запущен")
 
+    try:
+        from core.ticket_service import sync_unassigned_ticket_departments
+        await sync_unassigned_ticket_departments()
+    except Exception as exc:
+        logger.warning("Не удалось выполнить автопривязку отделов: %s", exc)
+
     # Outbox: доставка VK-уведомлений, записанных в ту же транзакцию,
     # что и изменения заявок (см. core/outbox.py).
     from core.outbox import outbox_worker_loop

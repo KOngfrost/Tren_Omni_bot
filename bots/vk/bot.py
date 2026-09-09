@@ -220,23 +220,24 @@ def build_anonymous_choice_keyboard() -> str:
     })
 
 
-def _main_reply_text() -> str:
-    return (
-        "Привет! Я бот-помощник Объединённого студсовета общежитий.\n\n"
-        "Доступные команды:\n"
-        "• /start — показать это приветственное сообщение и меню\n"
-        "• Жилбыт / Культмасс / Информ / Корпоративный — подать заявку в соответствующий отдел\n"
-        "• Задать вопрос — задать общий вопрос без привязки к отделу\n"
-        "• FAQ — часто задаваемые вопросы\n"
-        "• База знаний — полезные материалы и инструкции\n"
-        "• Мероприятия — ближайшие события и запись на них\n"
-        "• Мои заявки — просмотр ваших заявок и их статусов\n"
-        "• Подробнее #N — подробная информация о заявке\n"
-        "• Ответ #N текст — добавить ответ к своей заявке\n"
-        "• Отмена — отменить текущее действие (создание заявки)\n"
-        "• Анонимное обращение — подать обращение без указания имени\n\n"
-        "Выбери раздел в меню ниже:"
-    )
+def _main_reply_text(departments: list[str] | None = None) -> str:
+    lines = [
+        "Привет! Я бот-помощник Объединённого студсовета общежитий.\n",
+        "Выберите нужный раздел в меню ниже:\n",
+        "📋 Отделы для подачи заявок:",
+        "• Жил-быт (Жилищно-бытовой)",
+        "• Культмасс (Культурно-массовый)",
+        "• Информ (Информационный)",
+        "• Корпоративный (Корп)\n",
+        "📌 Дополнительные разделы:",
+        "• Задать вопрос — общий вопрос без привязки к отделу",
+        "• FAQ — ответы на часто задаваемые вопросы",
+        "• Мероприятия — актуальные события и запись на них",
+        "• База знаний — полезные статьи и инструкции",
+        "• Мои заявки — список ваших обращений и их статусы\n",
+        "💡 При создании обращения можно выбрать: получить ответ в VK или отправить анонимно.",
+    ]
+    return "\n".join(lines)
 
 
 async def _get_department_names() -> list[str]:
@@ -260,8 +261,9 @@ async def start_handler(message: Message):
     touch_heartbeat()
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     await BotCore.log_action(user, "start", "Пользователь нажал /start")
-    keyboard = await _main_keyboard_for(message.from_id)
-    await message.answer(_main_reply_text(), keyboard=keyboard)
+    departments = await _get_department_names()
+    keyboard = build_main_keyboard(await BotCore.is_admin(user), departments)
+    await message.answer(_main_reply_text(departments), keyboard=keyboard)
 
 
 @vk_bot.on.private_message(text=COMMANDS_CANCEL)
@@ -413,8 +415,8 @@ async def _start_ticket_flow(
 
 @vk_bot.on.private_message(text=COMMANDS_HOUSING)
 async def housing_section(message: Message):
-    """Раздел «Жилбыт»: бытовые условия и проблемы в общежитии."""
-    await _start_ticket_flow(message, "Жилбыт", "Жилбыт")
+    """Раздел «Жил-быт»: бытовые условия и проблемы в общежитии."""
+    await _start_ticket_flow(message, "Жил-быт", "Жил-быт")
 
 
 @vk_bot.on.private_message(text=COMMANDS_CULTURE)
@@ -609,10 +611,13 @@ async def admin_panel(message: Message):
 
 @vk_bot.on.private_message(text=COMMANDS_REGULAR_MENU)
 async def regular_menu_handler(message: Message):
+    touch_heartbeat()
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    departments = await _get_department_names()
+    keyboard = build_main_keyboard(await BotCore.is_admin(user), departments)
     await message.answer(
-        _main_reply_text(),
-        keyboard=build_main_keyboard(await BotCore.is_admin(user)),
+        _main_reply_text(departments),
+        keyboard=keyboard,
     )
 
 

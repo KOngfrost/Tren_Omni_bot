@@ -56,6 +56,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         worker_task = asyncio.create_task(outbox_worker_loop())
         logger.info("Outbox-воркер веб-панели запущен")
+    try:
+        from core.ticket_service import sync_unassigned_ticket_departments
+        await sync_unassigned_ticket_departments()
+    except Exception as exc:
+        logger.warning("Не удалось выполнить автопривязку отделов: %s", exc)
     yield
     if worker_task is not None:
         worker_task.cancel()

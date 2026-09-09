@@ -204,16 +204,6 @@
         if (message && !window.confirm(message)) event.preventDefault();
     });
 
-    window.filterTable = function () {
-        var filter = document.querySelector('[data-filter-table]');
-        if (!filter) return;
-        var deptFilter = filter.value;
-        document.querySelectorAll('[data-dept]').forEach(function (row) {
-            var dept = row.dataset.dept || '';
-            row.style.display = (!deptFilter || dept === deptFilter) ? '' : 'none';
-        });
-    };
-
     window.toggleAnswer = function () {
         var checkbox = document.getElementById('is_final');
         var answerGroup = document.getElementById('answer-group');
@@ -242,7 +232,6 @@
     };
 
     document.addEventListener('change', function (event) {
-        if (event.target.matches('[data-filter-table]')) window.filterTable();
         if (event.target.matches('[data-toggle-answer]')) window.toggleAnswer();
     });
 
@@ -279,6 +268,7 @@
             } catch (_) {}
         }
     }
+    window.toggleSidebar = toggleSidebar;
 
     // Восстанавливаем состояние меню на десктопе при загрузке
     try {
@@ -288,16 +278,18 @@
         }
     } catch (_) {}
 
-    document.addEventListener('click', function (event) {
+    function handleMenuClick(event) {
         var toggle = event.target.closest('.mobile-nav-toggle, #menu-toggle-btn');
         var closeBtn = event.target.closest('#sidebar-close-btn, .sidebar-close-btn');
         var backdrop = event.target.closest('.mobile-menu-backdrop, #mobile-backdrop');
 
         if (toggle) {
+            event.preventDefault();
             toggleSidebar();
             return;
         }
         if (closeBtn || backdrop) {
+            event.preventDefault();
             toggleSidebar(false);
             return;
         }
@@ -306,7 +298,9 @@
         if (window.innerWidth <= 900 && event.target.closest('.sidebar-nav .nav-link')) {
             toggleSidebar(false);
         }
-    });
+    }
+
+    document.addEventListener('click', handleMenuClick);
 
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {

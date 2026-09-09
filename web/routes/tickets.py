@@ -12,11 +12,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Ticket, TicketStatus
+from core.models import Ticket, TicketStatus, User
 from core.ticket_service import (
     StatusTransitionError,
     assign_ticket_department,
@@ -65,15 +65,24 @@ async def tickets_page(
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
 
-            count_stmt = select(func.count(Ticket.id))
+            count_stmt = select(func.count(Ticket.id)).outerjoin(User, Ticket.user_id == User.id)
             filters: list = []
             if not is_super:
                 filters.append(Ticket.department_id == dept_id)
             elif department_id is not None:
                 filters.append(Ticket.department_id == department_id)
             if q.strip():
-                pattern: str = f"%{q.strip()}%"
-                filters.append(or_(Ticket.topic.ilike(pattern), Ticket.description.ilike(pattern)))
+                clean_q = q.strip()
+                clean_num = clean_q.lstrip("#").strip()
+                search_conds = [
+                    Ticket.topic.ilike(f"%{clean_q}%"),
+                    Ticket.description.ilike(f"%{clean_q}%"),
+                    User.full_name.ilike(f"%{clean_q}%"),
+                    cast(User.vk_id, String).ilike(f"%{clean_q}%"),
+                ]
+                if clean_num.isdigit():
+                    search_conds.append(Ticket.id == int(clean_num))
+                filters.append(or_(*search_conds))
             if status:
                 try:
                     filters.append(Ticket.status == TicketStatus(status))
@@ -84,6 +93,7 @@ async def tickets_page(
 
             stmt = (
                 select(Ticket)
+                .outerjoin(User, Ticket.user_id == User.id)
                 .options(selectinload(Ticket.user), selectinload(Ticket.department))
                 .order_by(Ticket.created_at.desc())
                 .offset(offset)

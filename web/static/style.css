@@ -1352,6 +1352,17 @@ textarea::placeholder {
 
     .top-nav-bar {
         display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 85;
+        margin-left: -14px;
+        margin-right: -14px;
+        margin-top: -14px;
+        margin-bottom: 16px;
+        border-radius: 0 0 var(--r-md) var(--r-md);
+        border-top: none;
+        border-left: none;
+        border-right: none;
     }
 
     .main-content {
