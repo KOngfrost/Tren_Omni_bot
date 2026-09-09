@@ -44,12 +44,26 @@ class BotCore:
         if BotCore.is_admin_vk_id(user.vk_id):
             return True
         async with async_session_maker() as session:
+            # Проверяем таблицу admins (для старых админов)
             admin = await session.scalar(
                 select(Admin)
                 .join(User, Admin.user_id == User.id)
                 .where(User.vk_id == user.vk_id)
             )
-            return admin is not None
+            if admin is not None:
+                return True
+            
+            # Проверяем таблицу web_users (для новых админов через веб-панель)
+            from core.models import WebUser, WebRole
+            web_user = await session.scalar(
+                select(WebUser)
+                .join(User, WebUser.user_id == User.id)
+                .where(User.vk_id == user.vk_id)
+            )
+            if web_user is not None and web_user.is_active:
+                return web_user.role in (WebRole.SUPERADMIN, WebRole.DEPARTMENT_ADMIN, WebRole.VIEWER)
+            
+            return False
 
     @staticmethod
     async def get_users() -> list[User]:

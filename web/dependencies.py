@@ -196,12 +196,25 @@ async def get_admin_scope_for_vk_id(session: AsyncSession, vk_id: int) -> tuple[
     - админ отдела: (False, department_id) — видят только свой отдел;
     - обычный пользователь: (False, None) — нет доступа.
 
-    БЕЗОПАСНОСТЬ: department_id проверяется через БД (таблица admins).
+    БЕЗОПАСНОСТЬ: department_id проверяется через БД (таблица admins и web_users).
     """
+    # Сначала проверяем таблицу admins (для старых админов)
     admin = await session.scalar(
         select(Admin).join(User, Admin.user_id == User.id).where(User.vk_id == vk_id)
     )
-    if admin is None:
-        return False, None
-    is_super = admin.role == UserRole.SUPERADMIN
-    return is_super, admin.department_id if not is_super else None
+    if admin is not None:
+        is_super = admin.role == UserRole.SUPERADMIN
+        return is_super, admin.department_id if not is_super else None
+    
+    # Затем проверяем таблицу web_users (для новых админов через веб-панель)
+    from core.models import WebUser, WebRole
+    web_user = await session.scalar(
+        select(WebUser).join(User, WebUser.user_id == User.id).where(User.vk_id == vk_id)
+    )
+    if web_user is not None and web_user.is_active:
+        if web_user.role == WebRole.SUPERADMIN:
+            return True, None
+        if web_user.role == WebRole.DEPARTMENT_ADMIN and web_user.department_id:
+            return False, web_user.department_id
+    
+    return False, None

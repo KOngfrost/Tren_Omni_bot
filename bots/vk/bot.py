@@ -24,6 +24,8 @@ from core.commands import (
     COMMANDS_ANONYMOUS,
     COMMANDS_ANONYMOUS_STAY,
     COMMAND_REVEAL_IDENTITY,
+    COMMANDS_CANCEL,
+    COMMAND_CANCEL,
     COMMANDS_CORPORATE,
     COMMANDS_CULTURE,
     COMMANDS_HOUSING,
@@ -62,7 +64,7 @@ from core.ticket_service import (
     status_label,
 )
 from web.dependencies import get_admin_scope_for_vk_id
-from bots.vk.keyboards import build_admin_keyboard, build_main_keyboard, build_tickets_keyboard
+from bots.vk.keyboards import build_admin_cancel_keyboard, build_admin_keyboard, build_cancel_keyboard, build_main_keyboard, build_tickets_keyboard
 
 vk_bot = Bot(token=settings.VK_BOT_TOKEN)
 
@@ -114,14 +116,14 @@ async def faq_handler(message: Message):
             .order_by(FAQNode.order_index, FAQNode.id)
         ))
     if not nodes:
-        await message.answer("В FAQ пока нет опубликованных вопросов.", keyboard=build_main_keyboard())
+        await message.answer("В FAQ пока нет опубликованных вопросов.", keyboard=await _main_keyboard_for(message.from_id))
         return
     lines = [
         "Частые вопросы:",
         *[f"\n#{node.id} {node.button_text or node.question}" for node in nodes],
         "\nВведите: FAQ #номер",
     ]
-    await message.answer("".join(lines), keyboard=build_main_keyboard())
+    await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
 
 @vk_bot.on.private_message(text=COMMANDS_KNOWLEDGE)
@@ -129,13 +131,13 @@ async def knowledge_base_handler(message: Message):
     async with async_session_maker() as session:
         entries = list(await session.scalars(select(KnowledgeBase).order_by(KnowledgeBase.id).limit(20)))
     if not entries:
-        await message.answer("В базе знаний пока нет опубликованных материалов.", keyboard=build_main_keyboard())
+        await message.answer("В базе знаний пока нет опубликованных материалов.", keyboard=await _main_keyboard_for(message.from_id))
         return
     lines = [
         "Материалы базы знаний:",
         *[f"\n{entry.keywords}: {entry.answer}" for entry in entries],
     ]
-    await message.answer("".join(lines), keyboard=build_main_keyboard())
+    await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
 
 @vk_bot.on.private_message(RegexRule(r"(?i)^FAQ #(\d+)$"))
@@ -150,17 +152,17 @@ async def faq_answer_handler(message: Message):
             select(FAQNode).where(FAQNode.parent_id == node_id).order_by(FAQNode.order_index, FAQNode.id)
         ))
     if node is None:
-        await message.answer("Вопрос не найден.", keyboard=build_main_keyboard())
+        await message.answer("Вопрос не найден.", keyboard=await _main_keyboard_for(message.from_id))
         return
     if node.is_final and node.final_answer:
-        await message.answer(node.final_answer, keyboard=build_main_keyboard())
+        await message.answer(node.final_answer, keyboard=await _main_keyboard_for(message.from_id))
         return
     lines = [node.question or "Вопрос"]
     lines.extend(
         f"\n#{child.id} {child.button_text or child.question or 'Вопрос'}"
         for child in children
     )
-    await message.answer("".join(lines), keyboard=build_main_keyboard())
+    await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
 
 @vk_bot.on.private_message(text=COMMANDS_EVENTS)
@@ -170,13 +172,13 @@ async def events_handler(message: Message):
             select(Event).where(Event.event_date >= func.now()).order_by(Event.event_date.asc()).limit(20)
         ))
     if not events:
-        await message.answer("Ближайших мероприятий нет.", keyboard=build_main_keyboard())
+        await message.answer("Ближайших мероприятий нет.", keyboard=await _main_keyboard_for(message.from_id))
         return
     lines = ["Ближайшие мероприятия:"]
     for event in events:
         date = event.event_date.strftime("%d.%m.%Y %H:%M") if event.event_date else "дата уточняется"
         lines.append(f"\n#{event.id} {event.title} ({date})\nЗапись: Записаться #{event.id}")
-    await message.answer("".join(lines), keyboard=build_main_keyboard())
+    await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
 
 @vk_bot.on.private_message(RegexRule(COMMAND_REGISTER_EVENT_PATTERN))
@@ -189,13 +191,13 @@ async def register_event_handler(message: Message):
     async with async_session_maker() as session:
         event = await session.get(Event, event_id)
         if event is None:
-            await message.answer("Мероприятие не найдено.", keyboard=build_main_keyboard())
+            await message.answer("Мероприятие не найдено.", keyboard=await _main_keyboard_for(message.from_id))
             return
         # Проверяем, что мероприятие ещё не прошло
         if event.event_date < func.now():
             await message.answer(
                 "Нельзя записаться на прошедшее мероприятие.",
-                keyboard=build_main_keyboard(),
+                keyboard=await _main_keyboard_for(message.from_id),
             )
             return
         session.add(Registration(user_id=user.id, event_id=event_id))
@@ -203,9 +205,9 @@ async def register_event_handler(message: Message):
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            await message.answer("Вы уже зарегистрированы на это мероприятие.", keyboard=build_main_keyboard())
+            await message.answer("Вы уже зарегистрированы на это мероприятие.", keyboard=await _main_keyboard_for(message.from_id))
             return
-    await message.answer(f"Вы зарегистрированы на «{event.title}».", keyboard=build_main_keyboard())
+    await message.answer(f"Вы зарегистрированы на «{event.title}».", keyboard=await _main_keyboard_for(message.from_id))
 
 
 def build_anonymous_choice_keyboard() -> str:
@@ -220,14 +222,37 @@ def build_anonymous_choice_keyboard() -> str:
 
 def _main_reply_text() -> str:
     return (
-        "Привет! Я бот-помощник студенческого совета.\n"
+        "Привет! Я бот-помощник студенческого совета.\n\n"
+        "📋 Доступные команды:\n"
+        "• /start — показать это приветственное сообщение и меню\n"
+        "• Жилбыт / Культмасс / Информ / Корпоративный — подать заявку в соответствующий отдел\n"
+        "• Задать вопрос — задать общий вопрос без привязки к отделу\n"
+        "• FAQ — часто задаваемые вопросы\n"
+        "• База знаний — полезные материалы и инструкции\n"
+        "• Мероприятия — ближайшие события и запись на них\n"
+        "• Мои заявки — просмотр ваших заявок и их статусов\n"
+        "• Подробнее #N — подробная информация о заявке\n"
+        "• Ответ #N текст — добавить ответ к своей заявке\n"
+        "• Отмена — отменить текущее действие (создание заявки)\n"
+        "• Анонимное обращение — подать обращение без указания имени\n\n"
         "Выбери раздел в меню ниже:"
     )
 
 
+async def _get_department_names() -> list[str]:
+    """Получить список названий отделов из БД."""
+    from core.models import Department
+    async with async_session_maker() as session:
+        departments = list(await session.scalars(
+            select(Department).order_by(Department.name)
+        ))
+        return [dept.name for dept in departments]
+
+
 async def _main_keyboard_for(vk_id: int) -> str:
     user = await BotCore.get_or_create_user(vk_id=vk_id)
-    return build_main_keyboard(await BotCore.is_admin(user))
+    departments = await _get_department_names()
+    return build_main_keyboard(await BotCore.is_admin(user), departments)
 
 
 @vk_bot.on.private_message(text=COMMANDS_START)
@@ -235,8 +260,26 @@ async def start_handler(message: Message):
     touch_heartbeat()
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     await BotCore.log_action(user, "start", "Пользователь нажал /start")
-    keyboard = build_main_keyboard(await BotCore.is_admin(user))
+    keyboard = await _main_keyboard_for(message.from_id)
     await message.answer(_main_reply_text(), keyboard=keyboard)
+
+
+@vk_bot.on.private_message(text=COMMANDS_CANCEL)
+async def cancel_handler(message: Message):
+    """Отменить текущее действие (создание заявки/вопроса)."""
+    touch_heartbeat()
+    user_state = await vk_bot.state_dispenser.get(message.from_id)
+    if user_state is not None:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Действие отменено. Вы вернулись в главное меню.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+    else:
+        await message.answer(
+            "Нечего отменять. Вы уже в главном меню.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
 
 
 @vk_bot.on.private_message(text=COMMANDS_MY_TICKETS)
@@ -250,13 +293,20 @@ async def my_tickets_handler(message: Message):
         await message.answer(
             "У вас пока нет заявок.\n\n"
             "Чтобы создать заявку, выберите раздел в меню.",
-            keyboard=build_main_keyboard(),
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
+    # Преобразуем глобальные ID в локальные номера для пользователя
+    user_ticket_map = {}
+    local_ids = []
+    for idx, ticket in enumerate(tickets, 1):
+        user_ticket_map[ticket.id] = idx
+        local_ids.append(idx)
+
     await message.answer(
-        format_ticket_list(tickets),
-        keyboard=build_tickets_keyboard([t.id for t in tickets if t.id is not None]),
+        format_ticket_list(tickets, user_ticket_map),
+        keyboard=build_tickets_keyboard(local_ids),
     )
 
 
@@ -268,30 +318,33 @@ async def ticket_details_handler(message: Message):
     if not match:
         await message.answer(
             "Укажите номер заявки, например: «Подробнее #12».",
-            keyboard=build_main_keyboard(),
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
-    ticket_id = int(match.group(1))
-    async with async_session_maker() as session:
-        ticket = await session.scalar(
-            select(Ticket)
-            .join(User, Ticket.user_id == User.id)
-            .options(selectinload(Ticket.department), selectinload(Ticket.user))
-            .where(Ticket.id == ticket_id, User.vk_id == message.from_id)
-        )
-
+    # Получаем локальный номер и преобразуем в глобальный ID
+    local_id = int(match.group(1))
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    tickets = await get_user_tickets(user)
+    
+    # Находим заявку по локальному номеру
+    ticket = None
+    for idx, t in enumerate(tickets, 1):
+        if idx == local_id:
+            ticket = t
+            break
+    
     if ticket is None or ticket.id is None:
         await message.answer(
-            f"Заявка #{ticket_id} не найдена среди ваших заявок.",
-            keyboard=build_main_keyboard(),
+            f"Заявка #{local_id} не найдена среди ваших заявок.",
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
     history = await get_ticket_messages(ticket.id)
     await message.answer(
         format_ticket_details(ticket, history),
-        keyboard=build_tickets_keyboard([ticket.id]),
+        keyboard=build_tickets_keyboard([local_id]),
     )
 
 
@@ -301,18 +354,37 @@ async def student_ticket_reply_handler(message: Message):
     match = re.match(STUDENT_REPLY_PATTERN, message.text or "")
     if match is None:
         return
-    ticket_id = int(match.group(1))
+    # Получаем локальный номер и преобразуем в глобальный ID
+    local_id = int(match.group(1))
     reply_text = match.group(2).strip()
-    ticket = await add_student_reply(ticket_id, message.from_id, reply_text)
-    if ticket is None:
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    tickets = await get_user_tickets(user)
+    
+    # Находим заявку по локальному номеру
+    ticket = None
+    for idx, t in enumerate(tickets, 1):
+        if idx == local_id:
+            ticket = t
+            break
+    
+    if ticket is None or ticket.id is None:
+        await message.answer(
+            f"Заявка #{local_id} не найдена среди ваших заявок.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+        return
+    
+    # Используем глобальный ID для добавления ответа
+    result = await add_student_reply(ticket.id, message.from_id, reply_text)
+    if result is None:
         await message.answer(
             "Заявка не найдена или ответ в неё недоступен.",
-            keyboard=build_main_keyboard(),
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
     await message.answer(
-        f"Ответ добавлен в заявку #{ticket_id}. Администратор увидит его в переписке.",
-        keyboard=build_tickets_keyboard([ticket_id]),
+        f"Ответ добавлен в заявку #{local_id}. Администратор увидит его в переписке.",
+        keyboard=build_tickets_keyboard([local_id]),
     )
 
 
@@ -334,8 +406,9 @@ async def _start_ticket_flow(
         f"{header}\n\n"
         "Опишите вашу проблему одним сообщением: что случилось, когда и где.\n"
         "Чем подробнее описание, тем быстрее ответственный отдел сможет помочь.\n\n"
-        "После текста вы сможете выбрать, оставить ли свой VK ID для ответа.",
-        keyboard=build_main_keyboard(),
+        "После текста вы сможете выбрать, оставить ли свой VK ID для ответа.\n\n"
+        "Нажмите «Отмена», чтобы отменить создание заявки.",
+        keyboard=build_cancel_keyboard(),
     )
 
 
@@ -384,7 +457,7 @@ async def anonymous_section_start(message: Message):
         "Вы можете сообщить о проблеме без указания своего имени.\n"
         "Ваше имя и VK ID не будут привязаны к обращению.\n\n"
         "Опишите проблему в одном сообщении:",
-        keyboard=build_main_keyboard(),
+        keyboard=await _main_keyboard_for(message.from_id),
     )
 
 
@@ -443,7 +516,7 @@ async def ticket_description_handler(message: Message):
         await message.answer(
             f"Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
             "Если ответ не подходит, напишите «Создать заявку», чтобы продолжить.",
-            keyboard=build_main_keyboard(),
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
@@ -684,7 +757,7 @@ async def admin_status_handler(message: Message):
 async def report_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=build_main_keyboard())
+        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
         return
 
     try:
@@ -720,10 +793,14 @@ async def report_handler(message: Message):
 async def report_by_date_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=build_main_keyboard())
+        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
         return
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE)
-    await message.answer("Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)")
+    await message.answer(
+        "Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)\n\n"
+        "Нажмите «Отмена», чтобы отменить.",
+        keyboard=build_admin_cancel_keyboard(),
+    )
 
 
 @vk_bot.on.private_message(RegexRule(r"^\d{2}\.\d{2}\.\d{4}$"), state=ReportStates.WAITING_DATE)
@@ -767,14 +844,16 @@ async def report_by_date_input(message: Message):
 async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=build_main_keyboard())
+        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
         return
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE_FROM)
     await message.answer(
         "Введите диапазон дат в формате:\n"
         "31.08.2026 - 15.09.2026\n"
         "или\n"
-        "с 31.08.2026 по 15.09.2026"
+        "с 31.08.2026 по 15.09.2026\n\n"
+        "Нажмите «Отмена», чтобы отменить.",
+        keyboard=build_admin_cancel_keyboard(),
     )
 
 

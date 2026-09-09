@@ -355,8 +355,12 @@ async def assign_ticket_department(
         return ticket
 
 
-def format_ticket_list(tickets: list[Ticket]) -> str:
-    """Список заявок для VK-сообщения: номер, отдел, тема, дата, статус, ответ."""
+def format_ticket_list(tickets: list[Ticket], user_ticket_map: dict[int, int] | None = None) -> str:
+    """Список заявок для VK-сообщения: номер, отдел, тема, дата, статус, ответ.
+    
+    user_ticket_map: словарь {global_id: local_number} для персональной нумерации.
+    Если None — используется глобальный ID заявки.
+    """
     if not tickets:
         return "У вас пока нет заявок."
 
@@ -364,7 +368,9 @@ def format_ticket_list(tickets: list[Ticket]) -> str:
     for ticket in tickets:
         created = ticket.created_at.strftime("%d.%m.%Y") if ticket.created_at else "—"
         dept = ticket.department.name if ticket.department else "—"
-        lines.append(f"#{ticket.id} · {dept} · {ticket.topic or 'Без темы'}")
+        # Используем локальный номер если есть, иначе глобальный ID
+        display_number = user_ticket_map.get(ticket.id, ticket.id) if user_ticket_map else ticket.id
+        lines.append(f"#{display_number} · {dept} · {ticket.topic or 'Без темы'}")
         lines.append(f"   Статус: {status_label(ticket.status)} · создана {created}")
         if ticket.description:
             preview = " ".join(ticket.description.split())
