@@ -17,13 +17,16 @@
     <div class="container">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <a href="/" class="brand">
-                    <span class="monogram">OB</span>
-                    <span>
-                        <span class="brand-name">OSS Bot</span>
-                        <span class="brand-sub">Панель управления</span>
-                    </span>
-                </a>
+                <div class="sidebar-top-bar">
+                    <a href="/" class="brand">
+                        <span class="monogram">OB</span>
+                        <span>
+                            <span class="brand-name">OSS Bot</span>
+                            <span class="brand-sub">Панель управления</span>
+                        </span>
+                    </a>
+                    <button class="sidebar-close-btn" id="sidebar-close-btn" type="button" aria-label="Закрыть меню" title="Закрыть меню">✕</button>
+                </div>
                 <div class="user-info">
                     <span>{{ user.username }}</span>
                     <small>
@@ -37,7 +40,6 @@
                     </form>
                 </div>
             </div>
-            <button class="mobile-nav-toggle" type="button" aria-controls="sidebar-nav" aria-expanded="false">Меню</button>
             <nav class="sidebar-nav" id="sidebar-nav" aria-label="Основная навигация">
                 <span class="nav-label">Рабочая область</span>
                 <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="ico">⌂</span>Обзор</a>
@@ -47,22 +49,35 @@
                 <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico">◷</span>События</a>
                 <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico">≡</span>Журнал</a>
                 {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin'] %}
+                {% if request.state.user_departments or user.role in ['SUPERADMIN', 'superadmin'] %}
                 <span class="nav-label nav-label-spaced">Отделы</span>
+                <div id="sidebar-depts">
                 {% for dept in request.state.user_departments %}
                 <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/"><span class="ico">◈</span>{{ dept.name }}</a>
-                {% else %}
-                <a class="nav-link muted" href="/departments/"><span class="ico">◈</span>Отделы не созданы</a>
                 {% endfor %}
+                </div>
                 {% if user.role in ['SUPERADMIN', 'superadmin'] %}
                 <a class="nav-link {% if active == 'departments' %}active{% endif %}" href="/departments/"><span class="ico">⊕</span>Управление отделами</a>
+                {% endif %}
                 {% endif %}
                 <span class="nav-label nav-label-spaced">Доступ</span>
                 <a class="nav-link {% if active == 'admins' %}active{% endif %}" href="/admin/admins/"><span class="ico">♙</span>Администраторы</a>
                 {% endif %}
             </nav>
         </aside>
+        <div class="mobile-menu-backdrop" id="mobile-backdrop" aria-hidden="true"></div>
         <main class="main-content">
-            <button class="mobile-menu-backdrop" type="button" aria-label="Закрыть меню"></button>
+            <header class="top-nav-bar">
+                <button class="mobile-nav-toggle nav-toggle-btn" id="menu-toggle-btn" type="button" aria-controls="sidebar-nav" aria-expanded="false" aria-label="Открыть меню">
+                    <span class="nav-icon">☰</span>
+                    <span class="nav-text">Меню</span>
+                </button>
+                <a href="/" class="mobile-brand">
+                    <span class="monogram monogram-sm">OB</span>
+                    <span class="brand-name">OSS Bot</span>
+                </a>
+                <span class="mobile-user-badge">{{ user.username }}</span>
+            </header>
     {% endif %}
     {% block content %}{% endblock %}
     {% if user is defined and user %}

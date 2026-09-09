@@ -55,12 +55,7 @@
         }
 
         if (!departments || departments.length === 0) {
-            // Отделов нет — показать ссылку на управление
-            var emptyLink = document.createElement('a');
-            emptyLink.className = 'nav-link muted';
-            emptyLink.href = '/departments/';
-            emptyLink.innerHTML = '<span class="ico">◈</span>Отделы не созданы';
-            deptContainer.appendChild(emptyLink);
+            deptContainer.innerHTML = '';
         } else {
             // Отрисовать каждый отдел
             departments.forEach(function (dept) {
@@ -251,20 +246,71 @@
         if (event.target.matches('[data-toggle-answer]')) window.toggleAnswer();
     });
 
-    document.addEventListener('click', function (event) {
-        var toggle = event.target.closest('.mobile-nav-toggle');
-        var backdrop = event.target.closest('.mobile-menu-backdrop');
-        if (toggle) {
-            var sidebar = document.getElementById('sidebar');
-            var expanded = toggle.getAttribute('aria-expanded') === 'true';
-            if (sidebar) sidebar.classList.toggle('is-open', !expanded);
-            toggle.setAttribute('aria-expanded', String(!expanded));
+    // ==========================================
+    // Управление боковым меню (Mobile & Desktop)
+    // ==========================================
+
+    function toggleSidebar(forceState) {
+        var sidebar = document.getElementById('sidebar');
+        var container = document.querySelector('.container');
+        var backdrop = document.getElementById('mobile-backdrop') || document.querySelector('.mobile-menu-backdrop');
+        var toggleBtns = document.querySelectorAll('.mobile-nav-toggle, #menu-toggle-btn');
+        if (!sidebar) return;
+
+        var isMobile = window.innerWidth <= 900;
+
+        if (isMobile) {
+            var open = (forceState !== undefined) ? forceState : !sidebar.classList.contains('is-open');
+            sidebar.classList.toggle('is-open', open);
+            if (backdrop) backdrop.classList.toggle('is-active', open);
+            document.body.classList.toggle('no-scroll', open);
+            toggleBtns.forEach(function (btn) {
+                btn.setAttribute('aria-expanded', String(open));
+            });
+        } else {
+            // На десктопе сворачиваем / разворачиваем меню
+            var isCollapsed = (forceState !== undefined) ? !forceState : !container.classList.contains('sidebar-collapsed');
+            if (container) container.classList.toggle('sidebar-collapsed', isCollapsed);
+            toggleBtns.forEach(function (btn) {
+                btn.setAttribute('aria-expanded', String(!isCollapsed));
+            });
+            try {
+                localStorage.setItem('oss_sidebar_collapsed', isCollapsed ? '1' : '0');
+            } catch (_) {}
         }
-        if (backdrop) {
-            var sb = document.getElementById('sidebar');
-            var btn = document.querySelector('.mobile-nav-toggle');
-            if (sb) sb.classList.remove('is-open');
-            if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // Восстанавливаем состояние меню на десктопе при загрузке
+    try {
+        if (window.innerWidth > 900 && localStorage.getItem('oss_sidebar_collapsed') === '1') {
+            var cont = document.querySelector('.container');
+            if (cont) cont.classList.add('sidebar-collapsed');
+        }
+    } catch (_) {}
+
+    document.addEventListener('click', function (event) {
+        var toggle = event.target.closest('.mobile-nav-toggle, #menu-toggle-btn');
+        var closeBtn = event.target.closest('#sidebar-close-btn, .sidebar-close-btn');
+        var backdrop = event.target.closest('.mobile-menu-backdrop, #mobile-backdrop');
+
+        if (toggle) {
+            toggleSidebar();
+            return;
+        }
+        if (closeBtn || backdrop) {
+            toggleSidebar(false);
+            return;
+        }
+
+        // На мобильных при клике на пункт меню закрываем шторку
+        if (window.innerWidth <= 900 && event.target.closest('.sidebar-nav .nav-link')) {
+            toggleSidebar(false);
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            toggleSidebar(false);
         }
     });
 

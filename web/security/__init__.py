@@ -16,13 +16,13 @@ from web.security.middleware import (
 from web.security.passwords import hash_password, verify_password
 
 __all__ = [
-    "CSRFMiddleware",
     "CONTENT_SECURITY_POLICY",
     "CONTENT_SECURITY_POLICY_BASE",
-    "RequestSizeValidator",
     "SECURITY_HEADERS",
-    "SecurityHeadersMiddleware",
+    "CSRFMiddleware",
     "RateLimiter",
+    "RequestSizeValidator",
+    "SecurityHeadersMiddleware",
     "check_rate_limit",
     "escape_for_csv",
     "get_csrf_token",
@@ -30,6 +30,6 @@ __all__ = [
     "rotate_csrf_token",
     "sanitize_csv_field",
     "sanitize_html",
-    "verify_password",
     "validate_csrf",
+    "verify_password",
 ]
