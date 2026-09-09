@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="oss-web-panel",
     description="Веб-админка OSS Bot: управление обращениями студентов",
-    version="2.0.0",
+    version=settings.PROJECT_VERSION,
     lifespan=lifespan,
 )
 

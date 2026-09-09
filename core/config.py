@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from core import PROJECT_VERSION as _project_version
+
+settings = None  # type: ignore[name-defined]  # объявлен внизу этого файла
+
 # Файл dev-фоллбэка секрета сессий (добавлен в .gitignore)
 _DEV_SECRET_FILE = Path(__file__).resolve().parent.parent / ".session_secret"
 
@@ -234,4 +238,5 @@ class Settings:
             )
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[assignment]
+settings.PROJECT_VERSION = _project_version
