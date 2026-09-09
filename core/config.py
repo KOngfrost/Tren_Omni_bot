@@ -8,9 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from core import PROJECT_VERSION as _project_version
-
-settings = None  # type: ignore[name-defined]  # объявлен внизу этого файла
+from core import PROJECT_VERSION as _project_version  # noqa: E402
 
 # Файл dev-фоллбэка секрета сессий (добавлен в .gitignore)
 _DEV_SECRET_FILE = Path(__file__).resolve().parent.parent / ".session_secret"
@@ -37,6 +35,8 @@ def _load_or_create_dev_secret() -> str:
 
 
 class Settings:
+    PROJECT_VERSION: str = _project_version
+
     # === Окружение ===
     # Значения: development | production (плюс test/testing для конфигов).
     # В production: запрещены дефолтные креды БД, пустой SESSION_SECRET_KEY и т.п.
@@ -238,5 +238,4 @@ class Settings:
             )
 
 
-settings = Settings()  # type: ignore[assignment]
-settings.PROJECT_VERSION = _project_version
+settings: Settings = Settings()

@@ -167,7 +167,7 @@ async def main():
     parser.add_argument("--password", help="Новый пароль (если не указан — спросит)")
     parser.add_argument("--username", help="Имя пользователя для сброса")
     parser.add_argument("--all", action="store_true", help="Явно сбросить пароли всех пользователей")
-    parser.add_argument("--role", default="SUPERADMIN", choices=["SUPERADMIN", "DEPARTMENT_ADMIN", "VIEWER"],
+    parser.add_argument("--role", default="SUPERADMIN", choices=["SUPERADMIN", "DEPARTMENT_ADMIN"],
                        help="Роль для пользователя (по умолчанию SUPERADMIN)")
     args = parser.parse_args()
     if not args.username and not args.all:

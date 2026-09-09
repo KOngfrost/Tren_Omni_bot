@@ -32,47 +32,6 @@
     
     {% set superadmins = admins|selectattr('role.value', 'equalto', 'superadmin')|list %}
     {% set dept_admins = admins|selectattr('role.value', 'equalto', 'admin')|list %}
-    {% set viewers = admins|rejectattr('role.value', 'equalto', 'superadmin')|rejectattr('role.value', 'equalto', 'admin')|list %}
-
-    {% if viewers %}
-    <div class="page-header" style="margin-top: 2rem;">
-        <div>
-            <h2>Наблюдатели (VIEWER)</h2>
-            <div class="page-desc">Веб-пользователи с правами только на чтение; они не привязаны к администраторам VK</div>
-        </div>
-    </div>
-    <div class="admins-grid">
-        {% for admin in viewers %}
-        <div class="admin-card admin-card-viewer">
-            <div class="admin-card-top">
-                <div class="admin-card-top-info">
-                    {% set web_user = admin.web_user %}
-                    {% if web_user %}
-                    <div class="admin-name">{{ web_user.username }}</div>
-                    <div class="admin-vk">Роль: Наблюдатель</div>
-                    {% if web_user.department %}
-                    <span class="admin-dept">{{ web_user.department.name }}</span>
-                    {% else %}
-                    <span class="admin-dept">Без отдела</span>
-                    {% endif %}
-                    {% else %}
-                    <div class="admin-name">Без веб-аккаунта</div>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="admin-card-footer">
-                {% if user.role in ['SUPERADMIN', 'superadmin'] %}
-                <form method="post" action="/admin/admins/{{ admin.id }}/delete"
-                      data-confirm="Удалить этого наблюдателя?">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>
-                {% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
 
     <div class="page-header" style="margin-top: 1rem;">
         <div>

@@ -149,7 +149,7 @@ async def add_admin(request: Request, user=Depends(require_auth)):
                 vk_id=vk_id,
                 full_name=full_name,
                 department_id_raw=department_id_raw,
-                is_super=user_get_department_id(user),
+                admin_department_id=user_get_department_id(user),
                 user_is_super=is_superadmin(user),
                 role=role,
                 username=username,
@@ -182,7 +182,7 @@ def _validate_add_admin_form(form) -> str | None:
         return "VK ID должен быть числом"
 
     role: str = form.get("role", "admin")
-    if role not in ("admin", "superadmin", "viewer"):
+    if role not in ("admin", "superadmin"):
         return "Неизвестная роль администратора"
 
     password: str = str(form.get("password", ""))
@@ -199,7 +199,7 @@ def user_get_department_id(user: dict) -> int | None:
 
 def _check_role_permissions(user: dict, role: str) -> str | None:
     """Проверяет права пользователя на назначение роли."""
-    if role in ("superadmin", "viewer") and not is_superadmin(user):
+    if role == "superadmin" and not is_superadmin(user):
         return "Только суперадмин может назначать эту роль"
     return None
 
@@ -209,84 +209,56 @@ async def _create_admin_records(
     vk_id: int,
     full_name: str,
     department_id_raw: str | None,
-    is_super: int | None,
+    admin_department_id: int | None,
     user_is_super: bool,
     role: str,
     username: str,
     password_hash: str,
 ) -> None:
     """Создаёт записи Admin и WebUser в БД."""
-    # Определяем department_id
+    # Определяем отдел в зависимости от прав вызывающего пользователя
     if not user_is_super:
-        selected_department_id = is_super
+        selected_department_id = admin_department_id
         if selected_department_id is None:
             raise ValueError("У вашего аккаунта не указан отдел")
     else:
         selected_department_id = int(department_id_raw) if department_id_raw else None
 
-    # Получаем или создаём пользователя VK (VIEWER — только веб-панель)
-    db_user: User | None = None
-    if role != "viewer":
-        db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
-        if not db_user:
-            db_user = User(vk_id=vk_id, full_name=full_name or None)
-            session.add(db_user)
-            await session.commit()
-            await session.refresh(db_user)
-        elif full_name:
-            db_user.full_name = full_name
-            await session.commit()
+    # Создаём или получаем связанный профиль пользователя VK
+    db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
+    if not db_user:
+        db_user = User(vk_id=vk_id, full_name=full_name or None)
+        session.add(db_user)
+        await session.commit()
+        await session.refresh(db_user)
+    elif full_name:
+        db_user.full_name = full_name
+        await session.commit()
 
-        # Проверяем, нет ли уже такого админа
-        existing: Admin | None = await session.scalar(
-            select(Admin).where(Admin.user_id == db_user.id)
-        )
-        if existing:
-            raise ValueError("Этот пользователь уже является админом")
+    # Проверяем уникальность администратора
+    existing: Admin | None = await session.scalar(
+        select(Admin).where(Admin.user_id == db_user.id)
+    )
+    if existing:
+        raise ValueError("Этот пользователь уже является админом")
 
-    web_role = {
-        "superadmin": WebRole.SUPERADMIN,
-        "viewer": WebRole.VIEWER,
-    }.get(role, WebRole.DEPARTMENT_ADMIN)
+    web_role = WebRole.SUPERADMIN if role == "superadmin" else WebRole.DEPARTMENT_ADMIN
 
-    if role == "admin":
-        if db_user is None:
-            raise ValueError("Не удалось создать пользователя VK")
-        admin = Admin(
-            user_id=db_user.id,
-            department_id=selected_department_id,
-            role=UserRole(role),
-        )
-        session.add(admin)
-        await session.flush()  # Получаем admin.id
+    admin = Admin(
+        user_id=db_user.id,
+        department_id=selected_department_id,
+        role=UserRole(role),
+    )
+    session.add(admin)
+    await session.flush()
 
-        # Связываем WebUser с Admin через admin_id
-        session.add(WebUser(
-            username=username,
-            password_hash=password_hash,
-            role=web_role,
-            admin_id=admin.id,
-            department_id=selected_department_id,
-        ))
-    else:
-        # superadmin/viewer — тоже создаём запись Admin (без привязки к отделу)
-        if db_user is None:
-            raise ValueError("Не удалось создать пользователя")
-        admin = Admin(
-            user_id=db_user.id,
-            department_id=selected_department_id,
-            role=UserRole(role) if role == "superadmin" else UserRole.ADMIN,
-        )
-        session.add(admin)
-        await session.flush()
-
-        session.add(WebUser(
-            username=username,
-            password_hash=password_hash,
-            role=web_role,
-            admin_id=admin.id,
-            department_id=selected_department_id,
-        ))
+    session.add(WebUser(
+        username=username,
+        password_hash=password_hash,
+        role=web_role,
+        admin_id=admin.id,
+        department_id=selected_department_id,
+    ))
 
     await session.commit()
 

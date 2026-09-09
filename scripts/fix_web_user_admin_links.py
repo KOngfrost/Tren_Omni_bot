@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """Скрипт для связывания несвязанных WebUser с Admin.
 
-Проблема: WebUser, созданные сервисными скриптами или с ролью VIEWER,
-могут не иметь привязки к Admin (admin_id = NULL). Это приводит к тому,
-что такие пользователи «висят в воздухе» и выпадают из интерфейсов управления.
-
-Скрипт делает следующее:
+Скрипт выполняет следующие действия:
 1. Находит всех WebUser с admin_id = NULL
 2. Для DEPARTMENT_ADMIN ищет соответствующую запись в Admin по department_id
-3. Для VIEWER и SUPERADMIN — связывает с первым найденным SUPERADMIN
+3. Для SUPERADMIN — связывает с первым найденным SUPERADMIN
 4. Обновляет admin_id в web_users
 5. Показывает статистику до и после
 
@@ -27,20 +23,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select
 
 from core.database import async_session_maker
-from core.models import Admin, Department, User, UserRole, WebRole, WebUser
+from core.models import Admin, UserRole, WebRole, WebUser
 
 
 async def diagnose() -> dict:
     """Диагностика: показать статистику несвязанных WebUser."""
     async with async_session_maker() as session:
         # Всего WebUser
-        all_users = await session.scalars(select(WebUser))
+        all_users = (await session.scalars(select(WebUser))).all()
         all_users_list = list(all_users)
 
         # Несвязанные (admin_id IS NULL)
-        orphaned = await session.scalars(
+        orphaned = (await session.scalars(
             select(WebUser).where(WebUser.admin_id.is_(None))
-        ).all()
+        )).all()
 
         # По ролям
         by_role = {}
@@ -51,11 +47,11 @@ async def diagnose() -> dict:
             by_role[role.value] = count
 
         # С несвязанными Admin (admin_id IS NULL, но user_id не NULL)
-        orphaned_admins = await session.scalars(
+        orphaned_admins = (await session.scalars(
             select(Admin).where(
                 Admin.web_user.has(WebUser.admin_id.is_(None))
             )
-        ).all()
+        )).all()
 
         return {
             "total_web_users": len(all_users_list),
@@ -77,15 +73,15 @@ async def diagnose() -> dict:
 async def fix_links(apply: bool = False) -> dict:
     """Связать несвязанных WebUser с Admin."""
     async with async_session_maker() as session:
-        # Найдем всех суперадминов для связывания VIEWER/SUPERADMIN
-        superadmins = await session.scalars(
+        # Суперадминистраторы для связывания SUPERADMIN
+        superadmins = (await session.scalars(
             select(Admin).where(Admin.role == UserRole.SUPERADMIN)
-        ).all()
+        )).all()
 
-        # Найдем всех department admins по отделам
-        dept_admins = await session.scalars(
+        # Администраторы отделов
+        dept_admins = (await session.scalars(
             select(Admin).where(Admin.department_id.isnot(None))
-        ).all()
+        )).all()
 
         # Группируем department admins по department_id
         dept_admin_by_dept = {}
@@ -93,10 +89,10 @@ async def fix_links(apply: bool = False) -> dict:
             if admin.department_id not in dept_admin_by_dept:
                 dept_admin_by_dept[admin.department_id] = admin
 
-        # Найдем всех несвязанных WebUser
-        orphaned = await session.scalars(
+        # Несвязанные WebUser
+        orphaned = (await session.scalars(
             select(WebUser).where(WebUser.admin_id.is_(None))
-        ).all()
+        )).all()
 
         fixed = []
         skipped = []
@@ -116,8 +112,8 @@ async def fix_links(apply: bool = False) -> dict:
                     })
                     continue
 
-            elif web_user.role in (WebRole.VIEWER, WebRole.SUPERADMIN):
-                # Для VIEWER и SUPERADMIN связываем с первым SUPERADMIN
+            elif web_user.role == WebRole.SUPERADMIN:
+                # Для SUPERADMIN связываем с первым SUPERADMIN
                 if superadmins:
                     new_admin_id = superadmins[0].id
                 else:

@@ -301,14 +301,18 @@ async def change_ticket_status(
                 ),
             )
         )
+        scheduled = False
         if not ticket.is_anonymous and ticket.user and ticket.user.vk_id:
             add_outbox_message(
                 session,
                 ticket.user.vk_id,
                 f"Статус вашей заявки #{ticket.id} изменён: {status_label(ticket.status)}",
             )
+            scheduled = True
+
+    if scheduled:
         fire_outbox_delivery()
-        return ticket
+    return ticket
 
 
 async def assign_ticket_department(
@@ -357,7 +361,7 @@ async def assign_ticket_department(
 
 def format_ticket_list(tickets: list[Ticket], user_ticket_map: dict[int, int] | None = None) -> str:
     """Список заявок для VK-сообщения: номер, отдел, тема, дата, статус, ответ.
-    
+
     user_ticket_map: словарь {global_id: local_number} для персональной нумерации.
     Если None — используется глобальный ID заявки.
     """
@@ -369,7 +373,9 @@ def format_ticket_list(tickets: list[Ticket], user_ticket_map: dict[int, int] | 
         created = ticket.created_at.strftime("%d.%m.%Y") if ticket.created_at else "—"
         dept = ticket.department.name if ticket.department else "—"
         # Используем локальный номер если есть, иначе глобальный ID
-        display_number = user_ticket_map.get(ticket.id, ticket.id) if user_ticket_map else ticket.id
+        display_number = ticket.id
+        if ticket.id is not None and user_ticket_map:
+            display_number = user_ticket_map.get(ticket.id, ticket.id)
         lines.append(f"#{display_number} · {dept} · {ticket.topic or 'Без темы'}")
         lines.append(f"   Статус: {status_label(ticket.status)} · создана {created}")
         if ticket.description:
@@ -562,6 +568,7 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
             )
         )
 
+        scheduled = False
         # Уведомляем администраторов отдела через outbox
         if ticket.department and ticket.department_id:
             admins = await session.scalars(
@@ -581,10 +588,12 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
                             f"{message}"
                         ),
                     )
+                    scheduled = True
             # WebUser уведомления через VK не отправляются (нет vk_id)
 
+    if scheduled:
         fire_outbox_delivery()
-        return ticket
+    return ticket
 
 
 # === База знаний: единая логика поиска для бота и веб-панели ===

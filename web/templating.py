@@ -14,13 +14,14 @@ templates.env.filters["status_label"] = status_label
 templates.env.filters["status_badge"] = status_badge_class
 
 from starlette.requests import Request  # noqa: E402
+from starlette.responses import Response  # noqa: E402
 
 
 def render_admin_template(
     request: Request,
     template_name: str,
     context: dict,
-) -> "TemplateResponse":
+) -> Response:
     """Рендерить шаблон админки с автоматическим department_name из request.state.
 
     Все роуты админки должны использовать эту функцию (или копировать логику),

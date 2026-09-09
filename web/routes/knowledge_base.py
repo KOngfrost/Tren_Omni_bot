@@ -81,8 +81,7 @@ async def add_knowledge_base(request: Request, user=Depends(require_writer)):
     """Добавление записи в базу знаний.
 
     Безопасность:
-    - CSRF: защищён middleware CSRFMiddleware
-    - VIEWER не может изменять данные (require_writer)
+    - Проверка прав на запись (require_writer)
     - Санитизация входных данных от XSS
     """
     form = await request.form()

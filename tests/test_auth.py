@@ -79,8 +79,8 @@ class TestRoles:
         assert is_superadmin(user) is False
         assert can_write(user) is True
 
-    def test_viewer_read_only(self):
-        user = {"role": "VIEWER"}
+    def test_unknown_role_read_only(self):
+        user = {"role": "GUEST"}
         assert can_write(user) is False
         assert is_superadmin(user) is False
 

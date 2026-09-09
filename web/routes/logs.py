@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Admin, Log, Ticket
+from core.models import Admin, Log
 from web.dependencies import get_admin_scope, require_auth
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
@@ -54,17 +54,9 @@ async def logs_page(
                 .limit(LOGS_PER_PAGE)
             )
             if not is_super:
-                logs_stmt = (
-                    logs_stmt.where(Log.ticket_id.isnot(None))
-                    .join(Ticket, Log.ticket_id == Ticket.id)
-                    .where(Ticket.department_id == dept_id)
-                )
-                count_stmt = (
-                    select(func.count(Log.id))
-                    .where(Log.ticket_id.isnot(None))
-                    .join(Ticket, Log.ticket_id == Ticket.id)
-                    .where(Ticket.department_id == dept_id)
-                )
+                allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
+                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
+                count_stmt = select(func.count(Log.id)).where(Log.user_id.in_(allowed_user_ids))
             else:
                 count_stmt = select(func.count(Log.id))
             logs_result = await session.execute(logs_stmt)
@@ -112,18 +104,7 @@ async def export_logs(user=Depends(require_auth)):
                 .limit(10000)  # Лимит для экспорта
             )
             if not is_super:
-                logs_stmt = logs_stmt.where(
-                    (Log.user_id.in_(allowed_user_ids))
-                    | (Log.ticket_id.isnot(None) & Log.ticket_id.in_(
-                        select(Ticket.id).where(Ticket.department_id == dept_id)
-                    ))
-                    | (Log.action.in_((
-                        "kb_create", "kb_update", "kb_delete",
-                        "faq_create", "faq_update", "faq_delete",
-                        "event_create", "event_update", "event_delete",
-                        "department_rename", "department_delete",
-                    )))
-                )
+                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
             logs_result = await session.execute(logs_stmt)
             logs: list[Log] = list(logs_result.scalars().all())
     except Exception:

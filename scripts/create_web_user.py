@@ -8,7 +8,6 @@
 Примеры:
     python scripts/create_web_user.py --username admin --password "S3cret!" --role SUPERADMIN
     python scripts/create_web_user.py --username zhilbyt --password "..." --role DEPARTMENT_ADMIN --department "Жилбыт"
-    python scripts/create_web_user.py --username viewer --password "..." --role VIEWER
     python scripts/create_web_user.py --username admin --disable   # отключить пользователя
 """
 
@@ -81,9 +80,9 @@ def main() -> None:
     parser.add_argument("--password", help="Пароль (если не указан — спросит скрыто)")
     parser.add_argument(
         "--role",
-        default="VIEWER",
+        default="DEPARTMENT_ADMIN",
         choices=[r.value for r in WebRole],
-        help="Роль (по умолчанию VIEWER)",
+        help="Роль (по умолчанию DEPARTMENT_ADMIN)",
     )
     parser.add_argument("--department", help="Название отдела (для DEPARTMENT_ADMIN)")
     parser.add_argument("--disable", action="store_true", help="Отключить пользователя")

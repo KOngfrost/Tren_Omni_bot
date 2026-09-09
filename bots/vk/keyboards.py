@@ -3,13 +3,9 @@ import json
 
 def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = None) -> str:
     """Построить основную клавиатуру с динамическими отделами из БД."""
-    buttons: list[tuple[str, str]] = []
-    
     # Добавляем только те отделы, которые существуют в БД
-    if departments:
-        for dept in departments:
-            buttons.append((dept, "primary"))
-    
+    buttons: list[tuple[str, str]] = [(dept, "primary") for dept in departments] if departments else []
+
     buttons.extend([
         ("Задать вопрос", "secondary"),
         ("FAQ", "secondary"),

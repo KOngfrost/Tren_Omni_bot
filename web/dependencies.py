@@ -1,13 +1,12 @@
 """Общие зависимости авторизации и разграничения прав для веб-панели.
 
 Модель доступа:
-- SUPERADMIN: видит все отделы, может всё (включая передачу заявок).
-- DEPARTMENT_ADMIN: видит и изменяет заявки/контент только своего отдела.
-- VIEWER: видит всё, но не может изменять данные.
+- SUPERADMIN: полный доступ ко всем отделам и настройкам.
+- DEPARTMENT_ADMIN: просмотр и управление заявками и контентом своего отдела.
 
 Безопасность:
-- department_id для DEPARTMENT_ADMIN проверяется через БД (web_users),
-  а не из сессии, чтобы предотвратить горизонтальную эскалацию прав.
+- department_id для DEPARTMENT_ADMIN проверяется через базу данных (web_users),
+  что исключает горизонтальную эскалацию прав.
 """
 
 import logging
@@ -28,7 +27,7 @@ def get_current_user(request: Request) -> dict | None:
 
 
 async def require_auth(request: Request) -> dict:
-    """Проверить сессию и перечитать актуальные права из БД."""
+    """Проверить сессию и актуальные права пользователя в базе данных."""
     user = request.session.get("user")
     is_api = (
         request.url.path.startswith("/api/")
@@ -46,28 +45,27 @@ async def require_auth(request: Request) -> dict:
             try:
                 web_user = await session.get(WebUser, web_user_id)
             except Exception:
-                # БД недоступна — доверяем данным сессии, чтобы не выкидывать
-                # уже аутентифицированного пользователя при сбоях базы.
-                logger.exception("require_auth: БД недоступна, пропускаем проверку прав")
+                logger.exception("require_auth: проверка прав через базу данных временно недоступна")
                 return user
             if web_user is None or not web_user.is_active:
                 request.session.clear()
                 if is_api:
                     raise HTTPException(status_code=401, detail="Сессия истекла")
                 raise HTTPException(
-                    status_code=302, detail="Session expired",
+                    status_code=302,
+                    detail="Session expired",
                     headers={"Location": "/auth/login"},
                 )
             canonical = {
                 "username": web_user.username,
-                "role": web_user.role.value if web_user.role else WebRole.VIEWER.value,
+                "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
                 "web_user_id": web_user.id,
                 "department_id": web_user.department_id,
             }
             request.session["user"] = canonical
             return canonical
 
-        # Bootstrap-сессии (суперадмин из .env, пока web_users не заведены)
+        # Резервный вход администратора конфигурации
         if role_of(user) == WebRole.SUPERADMIN and user.get("bootstrap"):
             return user
 
@@ -94,28 +92,28 @@ def role_of(user: dict) -> WebRole | None:
 
 
 def is_superadmin(user: dict) -> bool:
-    """Суперадмин видит и может всё."""
+    """Проверка прав суперадминистратора."""
     return role_of(user) == WebRole.SUPERADMIN
 
 
 def can_write(user: dict) -> bool:
-    """Может ли пользователь изменять данные (не VIEWER)."""
+    """Проверка наличия прав на изменение данных."""
     return role_of(user) in (WebRole.SUPERADMIN, WebRole.DEPARTMENT_ADMIN)
 
 
 async def require_writer(request: Request) -> dict:
-    """Проверка авторизации + права на изменение (403 для VIEWER)."""
+    """Проверка прав на модификацию данных."""
     user = await require_auth(request)
     if not can_write(user):
         raise HTTPException(
             status_code=403,
-            detail="Просмотр без права изменения: обратитесь к суперадминистратору",
+            detail="Недостаточно прав для выполнения операции",
         )
     return user
 
 
 async def require_superadmin(request: Request) -> dict:
-    """Только для суперадминов."""
+    """Проверка доступа только для суперадминистратора."""
     user = await require_auth(request)
     if not is_superadmin(user):
         raise HTTPException(
@@ -125,21 +123,9 @@ async def require_superadmin(request: Request) -> dict:
 
 
 async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int | None]:
-    """Определить область видимости пользователя.
-
-    Возвращает (is_super, dept_id):
-    - суперадмин: (True, None) — видит все отделы;
-    - VIEWER: (True, None) — видит все отделы, но не получает write-доступ;
-    - админ отдела: (False, department_id) — видят только свой отдел.
-
-    БЕЗОПАСНОСТЬ: department_id для DEPARTMENT_ADMIN проверяется через БД
-    (таблица web_users), а не из сессии. Это предотвращает горизонтальную
-    эскалацию прав при компрометации сессионного cookie.
-    """
+    """Определить область видимости пользователя: (is_super, dept_id)."""
     role = role_of(user)
     if role == WebRole.SUPERADMIN:
-        return True, None
-    if role == WebRole.VIEWER:
         return True, None
     if role == WebRole.DEPARTMENT_ADMIN:
         web_user_id = user.get("web_user_id")
@@ -151,28 +137,17 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
                 return False, None
             except Exception:
                 logger.warning(
-                    "Не удалось проверить department_id через БД, "
-                    "возвращаю None (ограниченный доступ)"
+                    "Не удалось проверить department_id через базу данных"
                 )
                 return False, None
-        logger.warning(
-            "DEPARTMENT_ADMIN без подтверждённой идентичности (user_id=%s)",
-            user.get("user_id", "unknown"),
-        )
         return False, None
     return False, None
 
 
 async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
-    """Загрузить список отделов, видимых пользователю.
-
-    Возвращает список Department:
-    - суперадмин: все отделы
-    - админ отдела: только свой отдел
-    - VIEWER: все отделы
-    """
+    """Загрузить список отделов, доступных пользователю."""
     role = role_of(user)
-    if role == WebRole.SUPERADMIN or role == WebRole.VIEWER:
+    if role == WebRole.SUPERADMIN:
         return list((await session.execute(
             select(Department).order_by(Department.name)
         )).scalars().all())
@@ -189,32 +164,26 @@ async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
 
 
 async def get_admin_scope_for_vk_id(session: AsyncSession, vk_id: int) -> tuple[bool, int | None]:
-    """Определить область видимости пользователя по VK ID (для VK-бота).
-
-    Возвращает (is_super, dept_id):
-    - суперадмин: (True, None) — видят все отделы;
-    - админ отдела: (False, department_id) — видят только свой отдел;
-    - обычный пользователь: (False, None) — нет доступа.
-
-    БЕЗОПАСНОСТЬ: department_id проверяется через БД (таблица admins и web_users).
-    """
-    # Сначала проверяем таблицу admins (для старых админов)
+    """Определить область видимости пользователя по VK ID (для бота)."""
+    # Проверка таблицы назначенных администраторов
     admin = await session.scalar(
         select(Admin).join(User, Admin.user_id == User.id).where(User.vk_id == vk_id)
     )
     if admin is not None:
         is_super = admin.role == UserRole.SUPERADMIN
         return is_super, admin.department_id if not is_super else None
-    
-    # Затем проверяем таблицу web_users (для новых админов через веб-панель)
-    from core.models import WebUser, WebRole
+
+    # Проверка связанного пользователя веб-панели
     web_user = await session.scalar(
-        select(WebUser).join(User, WebUser.user_id == User.id).where(User.vk_id == vk_id)
+        select(WebUser)
+        .join(Admin, WebUser.admin_id == Admin.id)
+        .join(User, Admin.user_id == User.id)
+        .where(User.vk_id == vk_id)
     )
     if web_user is not None and web_user.is_active:
         if web_user.role == WebRole.SUPERADMIN:
             return True, None
         if web_user.role == WebRole.DEPARTMENT_ADMIN and web_user.department_id:
             return False, web_user.department_id
-    
+
     return False, None

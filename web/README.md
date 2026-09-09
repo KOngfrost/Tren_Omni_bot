@@ -13,7 +13,7 @@
 
 ## Контракт доступа
 
-`require_auth`, `require_writer` и `require_superadmin` проверяют базовое право. Для выборок и операций с отделом используется `await get_admin_scope(session, user)`: только `SUPERADMIN` и `VIEWER` получают общий scope, `DEPARTMENT_ADMIN` получает отдел из БД.
+`require_auth`, `require_writer` и `require_superadmin` проверяют базовое право. Для выборок и операций с отделом используется `await get_admin_scope(session, user)`: только `SUPERADMIN` получает общий scope, `DEPARTMENT_ADMIN` получает отдел из БД.
 
 Любой POST обязан пройти CSRF middleware. Изменения заявок пишутся в одной транзакции с записью `VkOutbox`. Доставка выбирает pending-записи через `FOR UPDATE SKIP LOCKED`, поэтому несколько экземпляров воркера не обрабатывают одну запись параллельно.
 

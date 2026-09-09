@@ -133,30 +133,52 @@ class DBRateLimiter:
     async def is_allowed(self, session, ip: str, action: str) -> bool:
         """Проверить, не превышен ли лимит для IP+action."""
         from datetime import UTC, datetime, timedelta
+
         from sqlalchemy import text
 
         cutoff = datetime.now(UTC) - timedelta(seconds=self.window_seconds)
 
         # Посчитать попытки за окно
         try:
-            count_stmt = text(
-                f"SELECT COUNT(*) FROM {self.table_name} "
-                f"WHERE ip = :ip AND attempted_at >= :cutoff"
-            )
-            count_result = await session.execute(
-                count_stmt, {"ip": ip, "cutoff": cutoff}
-            )
-            count = int(count_result.scalar() or 0)
+            if self.table_name == "crud_attempts":
+                count_stmt = text(
+                    f"SELECT COUNT(*) FROM {self.table_name} "
+                    f"WHERE ip = :ip AND action = :action AND attempted_at >= :cutoff"
+                )
+                count_result = await session.execute(
+                    count_stmt, {"ip": ip, "action": action, "cutoff": cutoff}
+                )
+                count = int(count_result.scalar() or 0)
 
-            if count >= self.max_requests:
-                return False
+                if count >= self.max_requests:
+                    return False
 
-            # Записать новую попытку
-            insert_stmt = text(
-                f"INSERT INTO {self.table_name} (ip, attempted_at) "
-                f"VALUES (:ip, NOW())"
-            )
-            await session.execute(insert_stmt, {"ip": ip})
+                # Записать новую попытку
+                insert_stmt = text(
+                    f"INSERT INTO {self.table_name} (ip, action, attempted_at) "
+                    f"VALUES (:ip, :action, NOW())"
+                )
+                await session.execute(insert_stmt, {"ip": ip, "action": action})
+            else:
+                count_stmt = text(
+                    f"SELECT COUNT(*) FROM {self.table_name} "
+                    f"WHERE ip = :ip AND attempted_at >= :cutoff"
+                )
+                count_result = await session.execute(
+                    count_stmt, {"ip": ip, "cutoff": cutoff}
+                )
+                count = int(count_result.scalar() or 0)
+
+                if count >= self.max_requests:
+                    return False
+
+                # Записать новую попытку
+                insert_stmt = text(
+                    f"INSERT INTO {self.table_name} (ip, attempted_at) "
+                    f"VALUES (:ip, NOW())"
+                )
+                await session.execute(insert_stmt, {"ip": ip})
+
             await session.commit()
             return True
 

@@ -27,7 +27,7 @@ from core.config import settings
 from core.models import Log, LoginAttempt, WebRole, WebUser
 from core.vk_client import send_vk_message
 from web.security.csrf import get_csrf_token
-from web.security.middleware import DBRateLimiter, RateLimiter
+from web.security.middleware import DBRateLimiter
 from web.security.passwords import verify_password
 from web.templating import templates
 
@@ -175,7 +175,7 @@ async def _authenticate(
             await session.commit()
             return {
                 "username": web_user.username,
-                "role": web_user.role.value if web_user.role else "VIEWER",
+                "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
                 "web_user_id": web_user.id,
                 "department_id": web_user.department_id,
             }

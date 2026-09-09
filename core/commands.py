@@ -16,13 +16,16 @@ COMMANDS_MY_TICKETS = ("Мои заявки", "мои заявки")
 COMMANDS_FAQ = ("FAQ", "faq", "Частые вопросы", "частые вопросы")
 COMMANDS_KNOWLEDGE = ("База знаний", "база знаний")
 COMMAND_CREATE_TICKET = "Создать заявку"
-# Формат команд для ответа студента
-STUDENT_REPLY_PATTERN = r"(?i)^Ответ #(\d+)\s+(.+)$"
+COMMANDS_CREATE_TICKET = ("Создать заявку", "создать заявку")
+
+# Шаблоны команд студента и участника событий
+STUDENT_REPLY_PATTERN = r"(?i)^Ответ\s*#?(\d+)[:\s]\s*(.+)$"
 COMMANDS_EVENTS = ("Мероприятия", "мероприятия", "События", "события")
-COMMAND_REGISTER_EVENT_PATTERN = r"(?i)^Записаться #(\d+)$"
+COMMAND_REGISTER_EVENT_PATTERN = r"(?i)^Записаться\s*#?(\d+)$"
 
 # Команда «Подробнее» (с номером заявки)
 COMMAND_TICKET_DETAILS = "Подробнее"
+COMMAND_TICKET_DETAILS_PATTERN = r"(?i)^Подробнее(?:\s*#?(\d+))?$"
 
 # Админ-панель
 COMMANDS_ADMIN = ("Админ", "админ")
@@ -34,13 +37,24 @@ COMMANDS_REGULAR_MENU = ("Обычное меню", "обычное меню")
 COMMANDS_ADMIN_TICKETS = ("Заявки администратора", "заявки администратора")
 
 # Генерация отчёта
-COMMANDS_REPORT = ("Сформировать отчет", "Сформировать отчёт")
+COMMANDS_REPORT = (
+    "Сформировать отчет", "Сформировать отчёт",
+    "сформировать отчет", "сформировать отчёт",
+)
 
-# Отчёт по дате
-COMMAND_REPORT_BY_DATE = "Отчет по дате"
+# Отчёт по дате (поддерживаются варианты написания с е/ё и разным регистром)
+COMMANDS_REPORT_BY_DATE = (
+    "Отчет по дате", "Отчёт по дате",
+    "отчет по дате", "отчёт по дате",
+)
+COMMAND_REPORT_BY_DATE = COMMANDS_REPORT_BY_DATE
 
-# Отчёт за период
-COMMAND_REPORT_BY_PERIOD = "Отчет за период"
+# Отчёт за период (поддерживаются варианты написания с е/ё и разным регистром)
+COMMANDS_REPORT_BY_PERIOD = (
+    "Отчет за период", "Отчёт за период",
+    "отчет за период", "отчёт за период",
+)
+COMMAND_REPORT_BY_PERIOD = COMMANDS_REPORT_BY_PERIOD
 
 # Разделы меню бота
 COMMANDS_HOUSING = ("Жилбыт", "жилбыт")
@@ -59,12 +73,11 @@ COMMAND_STAY_ANONYMOUS = "Остаться анонимным"
 COMMAND_REVEAL_IDENTITY = "Остаться не анонимным"
 COMMANDS_ANONYMOUS_STAY = (COMMAND_STAY_ANONYMOUS, COMMAND_REVEAL_IDENTITY)
 
-# Формат команд для ответа администратора
-ADMIN_REPLY_PATTERN = r"(?i)^Ответ #(\d+):\s*(.+)$"
-
-# Формат команд для смены статуса
-ADMIN_STATUS_PATTERN = r"(?i)^Статус #(\d+):\s*(.+)$"
+# Шаблоны команд администратора
+ADMIN_REPLY_PATTERN = r"(?i)^Ответ\s*#?(\d+)[:\s]\s*(.+)$"
+ADMIN_STATUS_PATTERN = r"(?i)^Статус\s*#?(\d+)[:\s]\s*(.+)$"
 
 # Команда отмены (отменить создание заявки/вопроса)
 COMMAND_CANCEL = "Отмена"
 COMMANDS_CANCEL = ("Отмена", "отмена", "Отменить", "отменить")
+

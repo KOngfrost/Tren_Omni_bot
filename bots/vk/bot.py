@@ -25,7 +25,6 @@ from core.commands import (
     COMMANDS_ANONYMOUS_STAY,
     COMMAND_REVEAL_IDENTITY,
     COMMANDS_CANCEL,
-    COMMAND_CANCEL,
     COMMANDS_CORPORATE,
     COMMANDS_CULTURE,
     COMMANDS_HOUSING,
@@ -35,6 +34,7 @@ from core.commands import (
     COMMANDS_EVENTS,
     COMMAND_REGISTER_EVENT_PATTERN,
     COMMANDS_MY_TICKETS,
+    COMMAND_TICKET_DETAILS_PATTERN,
     STUDENT_REPLY_PATTERN,
     COMMANDS_QUESTION,
     COMMANDS_REGULAR_MENU,
@@ -47,7 +47,7 @@ from core.config import settings
 from core.bot_core import BotCore
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
-from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus, User
+from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus
 from core.reporting import build_daily_report, get_report_for_date, get_report_for_period, parse_report_date, send_report_to_vk
 from core.ticket_service import (
     STATUS_LABELS,
@@ -222,8 +222,8 @@ def build_anonymous_choice_keyboard() -> str:
 
 def _main_reply_text() -> str:
     return (
-        "Привет! Я бот-помощник студенческого совета.\n\n"
-        "      Доступные команды:\n"
+        "Привет! Я бот-помощник Объединённого студсовета общежитий.\n\n"
+        "Доступные команды:\n"
         "• /start — показать это приветственное сообщение и меню\n"
         "• Жилбыт / Культмасс / Информ / Корпоративный — подать заявку в соответствующий отдел\n"
         "• Задать вопрос — задать общий вопрос без привязки к отделу\n"
@@ -246,7 +246,7 @@ async def _get_department_names() -> list[str]:
         departments = list(await session.scalars(
             select(Department).order_by(Department.name)
         ))
-        return [dept.name for dept in departments]
+        return [dept.name for dept in departments if dept.name]
 
 
 async def _main_keyboard_for(vk_id: int) -> str:
@@ -298,11 +298,12 @@ async def my_tickets_handler(message: Message):
         return
 
     # Преобразуем глобальные ID в локальные номера для пользователя
-    user_ticket_map = {}
+    user_ticket_map: dict[int, int] = {}
     local_ids = []
     for idx, ticket in enumerate(tickets, 1):
-        user_ticket_map[ticket.id] = idx
-        local_ids.append(idx)
+        if ticket.id is not None:
+            user_ticket_map[ticket.id] = idx
+            local_ids.append(idx)
 
     await message.answer(
         format_ticket_list(tickets, user_ticket_map),
@@ -310,30 +311,29 @@ async def my_tickets_handler(message: Message):
     )
 
 
-@vk_bot.on.private_message(RegexRule(r"(?i)^Подробнее(?:\s*#(\d+))?$"))
+@vk_bot.on.private_message(RegexRule(COMMAND_TICKET_DETAILS_PATTERN))
 async def ticket_details_handler(message: Message):
     """История заявки: «Подробнее #N» — номер, отдел, тема, статус, вся переписка."""
     touch_heartbeat()
-    match = re.search(r"#(\d+)", message.text or "")
+    match = re.search(r"(\d+)", message.text or "")
     if not match:
         await message.answer(
-            "Укажите номер заявки, например: «Подробнее #12».",
+            "Укажите номер заявки, например: «Подробнее #12» или «Подробнее 12».",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
     # Получаем локальный номер и преобразуем в глобальный ID
     local_id = int(match.group(1))
-    user = await BotCore.get_or_create_user(vk_id=message.from_id)
-    tickets = await get_user_tickets(user)
-    
+    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+
     # Находим заявку по локальному номеру
     ticket = None
     for idx, t in enumerate(tickets, 1):
         if idx == local_id:
             ticket = t
             break
-    
+
     if ticket is None or ticket.id is None:
         await message.answer(
             f"Заявка #{local_id} не найдена среди ваших заявок.",
@@ -357,23 +357,22 @@ async def student_ticket_reply_handler(message: Message):
     # Получаем локальный номер и преобразуем в глобальный ID
     local_id = int(match.group(1))
     reply_text = match.group(2).strip()
-    user = await BotCore.get_or_create_user(vk_id=message.from_id)
-    tickets = await get_user_tickets(user)
-    
+    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+
     # Находим заявку по локальному номеру
     ticket = None
     for idx, t in enumerate(tickets, 1):
         if idx == local_id:
             ticket = t
             break
-    
+
     if ticket is None or ticket.id is None:
         await message.answer(
             f"Заявка #{local_id} не найдена среди ваших заявок.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
-    
+
     # Используем глобальный ID для добавления ответа
     result = await add_student_reply(ticket.id, message.from_id, reply_text)
     if result is None:

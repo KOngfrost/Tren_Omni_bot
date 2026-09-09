@@ -15,8 +15,6 @@
 
 import re
 
-import pytest
-
 
 def _login(web_client, username="testadmin", password="test_password_123"):
     """Bootstrap-логин в панель (или вход заведённым веб-пользователем)."""

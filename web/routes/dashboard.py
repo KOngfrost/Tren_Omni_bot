@@ -31,7 +31,7 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
 
     try:
         async with async_session_maker() as session:
-            # Область видимости: суперадмин/VIEWER — все отделы,
+            # Область видимости: суперадмин — все отделы,
             # админ отдела — только свой отдел
             is_super, dept_id = await get_admin_scope(session, user)
 

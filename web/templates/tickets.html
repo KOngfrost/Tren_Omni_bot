@@ -188,28 +188,26 @@ function openTicket(id) {
                 body += '<div class="detail-block"><strong>Ответ:</strong><div class="detail-box detail-box-response">' + escapeHtml(ticket.response_text) + '</div></div>';
             }
 
-            // Форма ответа (VIEWER не может изменять)
-            if (window.CURRENT_ROLE !== 'VIEWER') {
-                body += '<form method="post" action="/tickets/' + ticket.id + '/reply" class="detail-form">';
-                body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-                body += '<label><strong>Ответ студенту:</strong></label>';
-                body += '<textarea name="message" rows="3" required class="input-full"></textarea>';
-                body += '<label class="checkbox-label"><input type="checkbox" name="complete"> Завершить заявку (уведомить и закрыть)</label>';
-                body += '<button type="submit" class="btn btn-primary btn-small">Отправить ответ</button>';
-                body += '</form>';
+            // Форма ответа и смены статуса
+            body += '<form method="post" action="/tickets/' + ticket.id + '/reply" class="detail-form">';
+            body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+            body += '<label><strong>Ответ студенту:</strong></label>';
+            body += '<textarea name="message" rows="3" required class="input-full"></textarea>';
+            body += '<label class="checkbox-label"><input type="checkbox" name="complete"> Завершить заявку (уведомить и закрыть)</label>';
+            body += '<button type="submit" class="btn btn-primary btn-small">Отправить ответ</button>';
+            body += '</form>';
 
-                // Смена статуса
-                body += '<form method="post" action="/tickets/' + ticket.id + '/status" class="detail-form">';
-                body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-                body += '<label><strong>Статус:</strong> </label>';
-                body += '<select name="status">';
-                window.STATUS_CHOICES.forEach(function (s) {
-                    body += '<option value="' + s[0] + '">' + s[1] + '</option>';
-                });
-                body += '</select> ';
-                body += '<button type="submit" class="btn btn-secondary btn-small">Сменить статус</button>';
-                body += '</form>';
-            }
+            // Смена статуса
+            body += '<form method="post" action="/tickets/' + ticket.id + '/status" class="detail-form">';
+            body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+            body += '<label><strong>Статус:</strong> </label>';
+            body += '<select name="status">';
+            window.STATUS_CHOICES.forEach(function (s) {
+                body += '<option value="' + s[0] + '">' + s[1] + '</option>';
+            });
+            body += '</select> ';
+            body += '<button type="submit" class="btn btn-secondary btn-small">Сменить статус</button>';
+            body += '</form>';
 
             // Передача другому отделу (только суперадмин)
             if (window.CURRENT_ROLE === 'SUPERADMIN') {

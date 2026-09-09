@@ -28,7 +28,6 @@
                     <span>{{ user.username }}</span>
                     <small>
                         {% if user.role in ['SUPERADMIN', 'superadmin'] %}Суперадмин
-                        {% elif user.role == 'VIEWER' %}Наблюдатель
                         {% else %}Админ отдела{% endif %}
                     </small>
                     {% if department_name %}<small>{{ department_name }}</small>{% endif %}
@@ -47,7 +46,7 @@
                 <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/"><span class="ico">?</span>FAQ</a>
                 <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico">◷</span>События</a>
                 <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico">≡</span>Журнал</a>
-                {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin', 'VIEWER'] %}
+                {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin'] %}
                 <span class="nav-label nav-label-spaced">Отделы</span>
                 {% for dept in request.state.user_departments %}
                 <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/"><span class="ico">◈</span>{{ dept.name }}</a>

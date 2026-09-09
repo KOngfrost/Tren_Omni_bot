@@ -1,6 +1,5 @@
 import enum
 
-import bleach
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -14,7 +13,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    event,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, declarative_base, relationship
@@ -22,65 +20,27 @@ from sqlalchemy.sql import func
 
 Base = declarative_base()
 
-# Разрешённые теги для bleach: пустой список = удалить все теги.
-# Это обеспечивает максимальную безопасность — пользовательский ввод
-# хранится как чистый текст без HTML-разметки.
-_SANITIZE_ALLOWED_TAGS: list[str] = []
-_SANITIZE_ALLOWED_ATTRIBUTES: dict[str, list[str]] = {}
 
 
-# ==========================================
-# Автоматическая XSS-санитизация на уровне моделей
-# ==========================================
-# Event listeners, которые автоматически санитизируют пользовательский ввод
-# перед записью в БД. Это проактивная защита, дополняющая экранирование
-# в Jinja2-шаблонах.
-
-
-def sanitize_xss(value: str) -> str:
-    """Автоматическая санитизация XSS-паттернов в строке.
-
-    Использует bleach для удаления всех HTML-тегов и атрибутов.
-    В отличие от regex-подхода, bleach корректно обрабатывает вложенные
-    теги, сущности и edge-кейсы.
-    """
-    if not value or not isinstance(value, str):
-        return value
-
-    try:
-        return bleach.clean(
-            value,
-            tags=_SANITIZE_ALLOWED_TAGS,
-            attributes=_SANITIZE_ALLOWED_ATTRIBUTES,
-            strip=True,
-        )
-    except Exception:
-        # Fallback: strip tags вручную
-        import re
-        return re.sub(r'<[^>]+>', '', value)
-
-
-
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     ADMIN = "admin"
     SUPERADMIN = "superadmin"
 
 
-class WebRole(str, enum.Enum):
-    """Роли пользователей веб-админки."""
+class WebRole(enum.StrEnum):
+    """Роли пользователей веб-панели управления."""
     SUPERADMIN = "SUPERADMIN"
     DEPARTMENT_ADMIN = "DEPARTMENT_ADMIN"
-    VIEWER = "VIEWER"
 
 
-class MessageAuthorType(str, enum.Enum):
+class MessageAuthorType(enum.StrEnum):
     """Автор сообщения в истории заявки."""
     USER = "user"        # студент (VK)
     ADMIN = "admin"      # администратор (веб-панель)
     SYSTEM = "system"    # системные события (смена статуса и т.п.)
 
 
-class TicketStatus(str, enum.Enum):
+class TicketStatus(enum.StrEnum):
     NEW = "Новое"
     IN_PROGRESS = "В обработке"
     TRANSFERRED_ADMIN = "Передано в администрацию СГ"
@@ -204,7 +164,7 @@ class WebUser(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # формат: pbkdf2_sha256$iterations$salt$hash
-    role = Column(SAEnum(WebRole), default=WebRole.VIEWER, nullable=False)
+    role = Column(SAEnum(WebRole), default=WebRole.DEPARTMENT_ADMIN, nullable=False)
     admin_id = Column(Integer, ForeignKey("admins.id", ondelete="CASCADE"), nullable=True)
     department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -397,74 +357,3 @@ class VkOutbox(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     sent_at = Column(DateTime(timezone=True), nullable=True)
 
-
-# ==========================================
-# Автоматическая XSS-санитизация на уровне моделей
-# ==========================================
-# Event listeners для автоматической санитизации пользовательского ввода
-# перед записью в БД. В отличие от некорректной реализации на TypeDecorator Text,
-# эти listeners прикреплены к конкретным моделям и корректно вызываются.
-
-def _sanitize_model_text_fields(mapper, connection, target):
-    """Санитизирует текстовые поля модели перед INSERT/UPDATE.
-
-    Для UPDATE берём историю изменений SQLAlchemy (attributes.get_history),
-    чтобы модифицированные значения действительно попали в результирующий
-    SQL-запрос UPDATE. Модификация target через setattr в before_update не
-    влияет на скомпилированный Changeset.
-    """
-    from sqlalchemy import inspect as sa_inspect
-
-    for col_name in (
-        "description",
-        "topic",
-        "message",
-        "response_text",
-        "details",
-        "answer",
-        "question",
-        "final_answer",
-        "keywords",
-        "title",
-        "button_text",
-        "name",
-    ):
-        # Поле есть в модели?
-        mapped_col = getattr(target.__class__, col_name, None)
-        if isinstance(mapped_col, str):
-            # Не колонка SQLAlchemy (например __tablename__) — пропускаем
-            continue
-        if mapped_col is None:
-            continue
-
-        # Старое и новое значение из history
-        history = sa_inspect(target).attrs[col_name].history
-        incoming = list(history.unchanged or ()) + list(history.added or ())
-        if not incoming:
-            continue
-
-        new_val = incoming[-1]
-        if new_val is None:
-            continue
-
-        sanitized = sanitize_xss(new_val)
-        if sanitized != new_val:
-            target.__dict__[col_name] = sanitized
-
-
-# Прикрепляем listeners к моделям, содержащим текстовые поля с пользовательским вводом.
-# Все модели уже определены к этому моменту.
-event.listen(Ticket, "before_insert", _sanitize_model_text_fields)
-event.listen(Ticket, "before_update", _sanitize_model_text_fields)
-event.listen(TicketMessage, "before_insert", _sanitize_model_text_fields)
-event.listen(TicketMessage, "before_update", _sanitize_model_text_fields)
-event.listen(Log, "before_insert", _sanitize_model_text_fields)
-event.listen(Log, "before_update", _sanitize_model_text_fields)
-event.listen(KnowledgeBase, "before_insert", _sanitize_model_text_fields)
-event.listen(KnowledgeBase, "before_update", _sanitize_model_text_fields)
-event.listen(FAQNode, "before_insert", _sanitize_model_text_fields)
-event.listen(FAQNode, "before_update", _sanitize_model_text_fields)
-event.listen(Event, "before_insert", _sanitize_model_text_fields)
-event.listen(Event, "before_update", _sanitize_model_text_fields)
-event.listen(Registration, "before_insert", _sanitize_model_text_fields)
-event.listen(Registration, "before_update", _sanitize_model_text_fields)

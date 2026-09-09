@@ -135,17 +135,6 @@ async def rename_department(request: Request, dept_id: int, user=Depends(require
     if not name:
         request.session["flash_error"] = "Название отдела не может быть пустым"
         return RedirectResponse(url="/departments/", status_code=303)
-
-    try:
-        payload = DepartmentNamePayload.model_validate(dict(form))
-    except ValidationError:
-        # Поле name отсутствует или не строка — трактуем как пустое имя
-        payload = DepartmentNamePayload()
-    name = sanitize_html(payload.name).strip()
-
-    if not name:
-        request.session["flash_error"] = "Название отдела не может быть пустым"
-        return RedirectResponse(url="/departments/", status_code=303)
     if len(name) > MAX_DEPARTMENT_NAME_LEN:
         request.session["flash_error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
         return RedirectResponse(url="/departments/", status_code=303)
