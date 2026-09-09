@@ -242,7 +242,7 @@
             input.type = 'password';
             btn.setAttribute('aria-label', 'Показать пароль');
             var eye2 = btn.querySelector('.icon-eye-open');
-            if (eye2) eye2.textContent = '👁';
+            if (eye2) eye2.textContent = '🙉';
         }
     };
 

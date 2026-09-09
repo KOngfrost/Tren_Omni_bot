@@ -37,7 +37,7 @@ student_bot/
 │   └── vk/                    # VK-бот на vkbottle
 │       ├── __init__.py        # Пакет VK-бота
 │       ├── keyboards.py       # Клавиатуры для VK-сообщений
-│       └── bot.py           # Инициализация VK-бота (vkbottle, long-poll)
+│       └── bot.py             # Инициализация VK-бота (vkbottle, long-poll)
 │
 ├── web/                       # Веб-панель администратора
 │   ├── __init__.py            # Пакет веб-приложения
