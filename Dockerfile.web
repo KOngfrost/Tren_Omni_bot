@@ -1,5 +1,5 @@
 # Простая сборка для веб-админки
-FROM python:3.11.12-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 # Устанавливаем зависимости системы
 RUN apt-get update && apt-get install -y \
@@ -14,8 +14,7 @@ WORKDIR /app
 
 # Копируем requirements и устанавливаем зависимости
 COPY requirements.txt ./
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
 COPY . .

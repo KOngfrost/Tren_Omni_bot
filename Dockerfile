@@ -1,4 +1,4 @@
-FROM python:3.11.12-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -10,8 +10,7 @@ WORKDIR /app
 RUN useradd --create-home --shell /bin/bash appuser
 
 COPY requirements.txt ./
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 RUN chown -R appuser:appuser /app
