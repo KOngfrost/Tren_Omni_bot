@@ -18,7 +18,12 @@ apt update && apt upgrade -y
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-systemctl enable --now docker
+sudo systemctl enable --now docker
+
+# Выдача прав текущему пользователю для работы с Docker без sudo
+sudo usermod -aG docker $USER
+newgrp docker
+
 docker compose version   # ожидается v2.24.0 или новее
 ```
 
