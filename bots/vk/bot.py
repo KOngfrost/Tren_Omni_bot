@@ -87,10 +87,12 @@ _error_handler = ErrorHandler(redirect_arguments=True)
 @_error_handler.register_undefined_error_handler
 async def _handle_bot_error(error: Exception, message: Message | None = None):
     logger.exception("Необработанная ошибка в боте", exc_info=error)
-    # Пользователю — безопасное сообщение без деталей
+    # Пользователю — безопасное сообщение с просьбой сфотографировать и отправить техадмину
     if message is not None:
         try:
-            await message.answer("Произошла внутренняя ошибка. Пожалуйста, попробуйте позже.")
+            await message.answer(
+                "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору."
+            )
         except Exception:
             logger.exception("Не удалось отправить сообщение об ошибке пользователю")
     return None
@@ -631,7 +633,7 @@ async def ticket_identity_choice_handler(message: Message):
     except Exception:
         logger.exception("Ошибка при создании обращения")
         await message.answer(
-            "Не удалось отправить обращение. Попробуйте ещё раз позже.",
+            "Не удалось отправить обращение. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         await vk_bot.state_dispenser.delete(message.from_id)
@@ -833,8 +835,7 @@ async def report_handler(message: Message):
         logger.exception("Ошибка при формировании отчёта")
         await BotCore.log_action(user, "report_failed", "Ошибка при формировании отчёта")
         await message.answer(
-            "Не удалось сформировать отчёт. Попробуйте ещё раз позже или обратитесь "
-            "к администратору.",
+            "Не удалось сформировать отчёт. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             keyboard=build_admin_keyboard(),
         )
         return
@@ -897,7 +898,7 @@ async def report_by_date_input(message: Message):
             user, "report_failed", f"Ошибка при формировании отчёта за {parsed}"
         )
         await message.answer(
-            "Не удалось отправить отчёт. Попробуйте позже; детали записаны в журнал.",
+            "Не удалось отправить отчёт. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             keyboard=build_admin_keyboard(),
         )
         await vk_bot.state_dispenser.delete(message.from_id)
@@ -991,7 +992,7 @@ async def report_by_period_input(message: Message):
             f"Ошибка при формировании отчёта за период {date_from} - {date_to}",
         )
         await message.answer(
-            "Не удалось отправить отчёт. Попробуйте позже; детали записаны в журнал.",
+            "Не удалось отправить отчёт. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             keyboard=build_admin_keyboard(),
         )
         await vk_bot.state_dispenser.delete(message.from_id)

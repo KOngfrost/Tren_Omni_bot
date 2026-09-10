@@ -7,8 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/app.js" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v=0.7.8">
+    <script src="/static/app.js?v=0.7.8" defer></script>
 </head>
 <body>
     <div class="error-page">
@@ -17,9 +17,10 @@
             <div class="error-code">{{ error_code }}</div>
             <div class="error-title">{{ error_title }}</div>
             <div class="error-message">{{ error_message }}</div>
-            {% if error_id %}
-            <div class="error-support-code">Код обращения для техподдержки: <code>{{ error_id }}</code></div>
-            {% endif %}
+            <div class="error-support-code">
+                📸 <strong>Пожалуйста, сфотографируйте экран и отправьте техническому администратору.</strong>
+                {% if error_id %}<br><span style="opacity: 0.8; font-size: 13px;">Код ошибки: <code>{{ error_id }}</code></span>{% endif %}
+            </div>
             <div class="error-actions">
                 {% if show_refresh %}
                 <button class="btn btn-primary" type="button" data-error-action="reload">↻ Обновить страницу</button>

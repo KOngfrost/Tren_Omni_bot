@@ -332,7 +332,7 @@ def _get_error_page_context(
         ),
         500: (
             "Внутренняя ошибка сервера",
-            "Что-то пошло не так на нашей стороне. Попробуйте обновить страницу.",
+            "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             "⚠️",
             True,
             True,
@@ -344,7 +344,7 @@ def _get_error_page_context(
     else:
         title, msg, icon, refresh, back, home = (
             f"Ошибка {status}",
-            "Произошла непредвидённая ошибка. Попробуйте обновить страницу или вернуться назад.",
+            "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             "⚠️",
             True,
             True,
@@ -450,7 +450,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Production: обобщённое сообщение + request_id для корреляции с логами
     if is_api:
         return JSONResponse(
-            content={"detail": "Внутренняя ошибка сервера", "request_id": request_id},
+            content={
+                "detail": "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
+                "request_id": request_id,
+            },
             status_code=500,
             headers={"X-Request-ID": request_id},
         )
