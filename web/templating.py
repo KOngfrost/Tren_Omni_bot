@@ -22,17 +22,10 @@ def render_admin_template(
     template_name: str,
     context: dict,
 ) -> Response:
-    """Рендерить шаблон админки с автоматическим department_name из request.state.
-
-    Все роуты админки должны использовать эту функцию (или копировать логику),
-    иначе block department_name в base.html всегда останется пустым.
-    """
-    from web.templating import templates as _templates
-
+    """Рендерить шаблон админки с автоматическим department_name из request.state."""
     merged = {
         "request": request,
         "department_name": getattr(request.state, "department_name", None),
         **context,
     }
-    return _templates.TemplateResponse(template_name, merged)
-
+    return templates.TemplateResponse(template_name, merged)

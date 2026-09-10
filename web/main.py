@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Outbox-воркер веб-панели запущен")
     try:
         from core.ticket_service import sync_unassigned_ticket_departments
+
         await sync_unassigned_ticket_departments()
     except Exception as exc:
         logger.warning("Не удалось выполнить автопривязку отделов: %s", exc)
@@ -103,7 +104,7 @@ _session_secret = settings.session_secret_key
 if not _session_secret:
     raise RuntimeError(
         "SESSION_SECRET_KEY не задан. Установите его в .env и перезапустите панель. "
-        "Генерация: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        'Генерация: python -c "import secrets; print(secrets.token_urlsafe(64))"'
     )
 
 # Жёсткие проверки для production (дефолтные креды БД, слабый секрет и т.п.)
@@ -166,7 +167,9 @@ def _get_cached_department(user_id: int) -> tuple[str | None, list, int | None] 
     return cached_name, cached_depts, cached_dept_id
 
 
-def _set_department_cache(user_id: int, name: str | None, depts: list, dept_id: int | None) -> None:
+def _set_department_cache(
+    user_id: int, name: str | None, depts: list, dept_id: int | None
+) -> None:
     """Сохранить department_name в кэш с ограничением по размеру."""
     # Удаляем самые старые записи, если кэш переполнен
     if user_id not in _department_cache and len(_department_cache) >= _DEPARTMENT_CACHE_MAX_SIZE:
@@ -183,10 +186,9 @@ async def add_department_name(request: Request, call_next):
     session = request.scope.get("session", {})
     request.state.session_id = session.get("session_id")
     # Пропускаем статические файлы, healthcheck, auth и API-запросы
-    if (
-        any(request.url.path.startswith(prefix) for prefix in _SKIP_MIDDLEWARE_PREFIXES)
-        or "application/json" in request.headers.get("accept", "")
-    ):
+    if any(
+        request.url.path.startswith(prefix) for prefix in _SKIP_MIDDLEWARE_PREFIXES
+    ) or "application/json" in request.headers.get("accept", ""):
         return await call_next(request)
 
     try:
@@ -237,6 +239,7 @@ async def add_department_name(request: Request, call_next):
 
 # === Глобальный обработчик ошибок — без раскрытия деталей ===
 
+
 def _is_browser_request(request: Request) -> bool:
     """Проверить, является ли запрос браузерным (не API)."""
     accept = request.headers.get("accept", "")
@@ -254,14 +257,70 @@ def _get_error_page_context(
     шаблона, иначе TemplateResponse бросает ValueError.
     """
     messages = {
-        400: ("Неверный запрос", "Пожалуйста, проверьте введённые данные и попробуйте снова.", "🔍", True, True, False),
-        403: ("Доступ запрещён", "У вас нет прав для доступа к этой странице. Обратитесь к суперадминистратору.", "🚫", True, True, False),
-        404: ("Страница не найдена", "Запрошенная страница не существует или была перемещена.", "📄", True, True, True),
-        405: ("Метод не разрешён", "Запрашиваемый метод HTTP не поддерживается для этой страницы.", "🚫", True, True, False),
-        413: ("Файл слишком большой", "Размер запроса превышает допустимый лимит. Попробуйте загрузить файл поменьше.", "📦", True, True, False),
-        422: ("Некорректные данные", "Проверьте правильность заполнения формы и попробуйте снова.", "📝", True, True, False),
-        429: ("Слишком много запросов", "Вы сделали слишком много запросов. Подождите минуту и попробуйте снова.", "⏳", True, True, False),
-        500: ("Внутренняя ошибка сервера", "Что-то пошло не так на нашей стороне. Попробуйте обновить страницу.", "⚠️", True, True, True),
+        400: (
+            "Неверный запрос",
+            "Пожалуйста, проверьте введённые данные и попробуйте снова.",
+            "🔍",
+            True,
+            True,
+            False,
+        ),
+        403: (
+            "Доступ запрещён",
+            "У вас нет прав для доступа к этой странице. Обратитесь к суперадминистратору.",
+            "🚫",
+            True,
+            True,
+            False,
+        ),
+        404: (
+            "Страница не найдена",
+            "Запрошенная страница не существует или была перемещена.",
+            "📄",
+            True,
+            True,
+            True,
+        ),
+        405: (
+            "Метод не разрешён",
+            "Запрашиваемый метод HTTP не поддерживается для этой страницы.",
+            "🚫",
+            True,
+            True,
+            False,
+        ),
+        413: (
+            "Файл слишком большой",
+            "Размер запроса превышает допустимый лимит. Попробуйте загрузить файл поменьше.",
+            "📦",
+            True,
+            True,
+            False,
+        ),
+        422: (
+            "Некорректные данные",
+            "Проверьте правильность заполнения формы и попробуйте снова.",
+            "📝",
+            True,
+            True,
+            False,
+        ),
+        429: (
+            "Слишком много запросов",
+            "Вы сделали слишком много запросов. Подождите минуту и попробуйте снова.",
+            "⏳",
+            True,
+            True,
+            False,
+        ),
+        500: (
+            "Внутренняя ошибка сервера",
+            "Что-то пошло не так на нашей стороне. Попробуйте обновить страницу.",
+            "⚠️",
+            True,
+            True,
+            True,
+        ),
     }
     if status in messages:
         title, msg, icon, refresh, back, home = messages[status]
@@ -291,9 +350,7 @@ def _get_error_page_context(
 
 @app.exception_handler(StarletteHTTPException)
 @app.exception_handler(HTTPException)
-async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException | HTTPException
-):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException | HTTPException):
     """Сохранить корректный HTTP-статус для отказов auth и CSRF.
 
     Регистрируется и для StarletteHTTPException (ловит 404 на неизвестных

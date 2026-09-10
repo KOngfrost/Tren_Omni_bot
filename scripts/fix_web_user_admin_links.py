@@ -34,24 +34,20 @@ async def diagnose() -> dict:
         all_users_list = list(all_users)
 
         # Несвязанные (admin_id IS NULL)
-        orphaned = (await session.scalars(
-            select(WebUser).where(WebUser.admin_id.is_(None))
-        )).all()
+        orphaned = (await session.scalars(select(WebUser).where(WebUser.admin_id.is_(None)))).all()
 
         # По ролям
         by_role = {}
         for role in WebRole:
-            count = sum(
-                1 for u in orphaned if u.role == role
-            )
+            count = sum(1 for u in orphaned if u.role == role)
             by_role[role.value] = count
 
         # С несвязанными Admin (admin_id IS NULL, но user_id не NULL)
-        orphaned_admins = (await session.scalars(
-            select(Admin).where(
-                Admin.web_user.has(WebUser.admin_id.is_(None))
+        orphaned_admins = (
+            await session.scalars(
+                select(Admin).where(Admin.web_user.has(WebUser.admin_id.is_(None)))
             )
-        )).all()
+        ).all()
 
         return {
             "total_web_users": len(all_users_list),
@@ -74,14 +70,14 @@ async def fix_links(apply: bool = False) -> dict:
     """Связать несвязанных WebUser с Admin."""
     async with async_session_maker() as session:
         # Суперадминистраторы для связывания SUPERADMIN
-        superadmins = (await session.scalars(
-            select(Admin).where(Admin.role == UserRole.SUPERADMIN)
-        )).all()
+        superadmins = (
+            await session.scalars(select(Admin).where(Admin.role == UserRole.SUPERADMIN))
+        ).all()
 
         # Администраторы отделов
-        dept_admins = (await session.scalars(
-            select(Admin).where(Admin.department_id.isnot(None))
-        )).all()
+        dept_admins = (
+            await session.scalars(select(Admin).where(Admin.department_id.isnot(None)))
+        ).all()
 
         # Группируем department admins по department_id
         dept_admin_by_dept = {}
@@ -90,9 +86,7 @@ async def fix_links(apply: bool = False) -> dict:
                 dept_admin_by_dept[admin.department_id] = admin
 
         # Несвязанные WebUser
-        orphaned = (await session.scalars(
-            select(WebUser).where(WebUser.admin_id.is_(None))
-        )).all()
+        orphaned = (await session.scalars(select(WebUser).where(WebUser.admin_id.is_(None)))).all()
 
         fixed = []
         skipped = []
@@ -106,10 +100,12 @@ async def fix_links(apply: bool = False) -> dict:
                 if admin:
                     new_admin_id = admin.id
                 else:
-                    skipped.append({
-                        "username": web_user.username,
-                        "reason": f"Нет Admin в отделе {web_user.department_id}",
-                    })
+                    skipped.append(
+                        {
+                            "username": web_user.username,
+                            "reason": f"Нет Admin в отделе {web_user.department_id}",
+                        }
+                    )
                     continue
 
             elif web_user.role == WebRole.SUPERADMIN:
@@ -117,20 +113,24 @@ async def fix_links(apply: bool = False) -> dict:
                 if superadmins:
                     new_admin_id = superadmins[0].id
                 else:
-                    skipped.append({
-                        "username": web_user.username,
-                        "reason": "Нет SUPERADMIN для связывания",
-                    })
+                    skipped.append(
+                        {
+                            "username": web_user.username,
+                            "reason": "Нет SUPERADMIN для связывания",
+                        }
+                    )
                     continue
 
             if new_admin_id:
                 web_user.admin_id = new_admin_id
-                fixed.append({
-                    "username": web_user.username,
-                    "old_admin_id": None,
-                    "new_admin_id": new_admin_id,
-                    "role": web_user.role.value,
-                })
+                fixed.append(
+                    {
+                        "username": web_user.username,
+                        "old_admin_id": None,
+                        "new_admin_id": new_admin_id,
+                        "role": web_user.role.value,
+                    }
+                )
 
         if apply:
             await session.commit()
@@ -144,9 +144,7 @@ async def fix_links(apply: bool = False) -> dict:
 
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description="Диагностика и связывание WebUser с Admin"
-    )
+    parser = argparse.ArgumentParser(description="Диагностика и связывание WebUser с Admin")
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -165,13 +163,13 @@ async def main():
     print(f"Несвязанных Admin: {diag['orphaned_admins']}")
 
     print("\nПо ролям (несвязанные):")
-    for role, count in diag['by_role'].items():
+    for role, count in diag["by_role"].items():
         print(f"  {role}: {count}")
 
-    if diag['orphaned_details']:
+    if diag["orphaned_details"]:
         print("\nДетали несвязанных WebUser:")
-        for detail in diag['orphaned_details']:
-            dept = detail['department_name'] or f"ID={detail['department_id']}"
+        for detail in diag["orphaned_details"]:
+            dept = detail["department_name"] or f"ID={detail['department_id']}"
             print(f"  - {detail['username']} ({detail['role']}, отдел: {dept})")
 
     if not args.apply:
@@ -187,12 +185,12 @@ async def main():
     result = await fix_links(apply=True)
 
     print(f"\nИсправлено: {result['total_fixed']}")
-    for fix in result['fixed']:
+    for fix in result["fixed"]:
         print(f"  ✅ {fix['username']} ({fix['role']}) -> admin_id={fix['new_admin_id']}")
 
-    if result['skipped']:
+    if result["skipped"]:
         print(f"\nПропущено: {result['total_skipped']}")
-        for skip in result['skipped']:
+        for skip in result["skipped"]:
             print(f"  ⚠️  {skip['username']}: {skip['reason']}")
 
     print("\n" + "=" * 60)

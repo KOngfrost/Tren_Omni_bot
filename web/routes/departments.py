@@ -32,6 +32,7 @@ router = APIRouter()
 
 async def _department_usage(session, dept_id: int) -> dict:
     """Сколько сущностей связано с отделом (для безопасного удаления)."""
+
     def _count(model):
         return select(func.count(model.id)).where(model.department_id == dept_id)
 
@@ -54,9 +55,11 @@ async def departments_page(request: Request, user=Depends(require_superadmin)):
 
     try:
         async with async_session_maker() as session:
-            departments = list((await session.execute(
-                select(Department).order_by(Department.name)
-            )).scalars().all())
+            departments = list(
+                (await session.execute(select(Department).order_by(Department.name)))
+                .scalars()
+                .all()
+            )
             for dept in departments:
                 if dept.id is not None:
                     usage[dept.id] = await _department_usage(session, dept.id)
@@ -97,7 +100,9 @@ async def create_department(request: Request, user=Depends(require_superadmin)):
         request.session["flash_error"] = "Название отдела не может быть пустым"
         return RedirectResponse(url="/departments/", status_code=303)
     if len(name) > MAX_DEPARTMENT_NAME_LEN:
-        request.session["flash_error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        request.session["flash_error"] = (
+            f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        )
         return RedirectResponse(url="/departments/", status_code=303)
 
     try:
@@ -136,7 +141,9 @@ async def rename_department(request: Request, dept_id: int, user=Depends(require
         request.session["flash_error"] = "Название отдела не может быть пустым"
         return RedirectResponse(url="/departments/", status_code=303)
     if len(name) > MAX_DEPARTMENT_NAME_LEN:
-        request.session["flash_error"] = f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        request.session["flash_error"] = (
+            f"Название отдела длиннее {MAX_DEPARTMENT_NAME_LEN} символов"
+        )
         return RedirectResponse(url="/departments/", status_code=303)
 
     try:

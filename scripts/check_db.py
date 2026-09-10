@@ -17,7 +17,7 @@ async def main() -> None:
         conn = await asyncpg.connect(
             user=os.environ["POSTGRES_USER"],
             password=os.environ["POSTGRES_PASSWORD"],
-            database=os.environ["POSTGRES_DB"],
+            database=os.getenv("POSTGRES_MAINTENANCE_DB", "postgres"),
             host=os.getenv("DB_HOST", "localhost"),
             port=int(os.getenv("DB_PORT", "5432")),
         )

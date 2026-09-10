@@ -6,10 +6,14 @@
 """
 
 import os
+import tempfile
 import time
 from datetime import UTC, datetime
 
-HEARTBEAT_FILE = os.getenv("HEARTBEAT_FILE", "/tmp/oss_bot_heartbeat")
+HEARTBEAT_FILE = os.getenv(
+    "HEARTBEAT_FILE",
+    os.path.join(tempfile.gettempdir(), "oss_bot_heartbeat"),
+)
 MAX_AGE_SECONDS = int(os.getenv("HEARTBEAT_MAX_AGE", "600"))  # 10 минут
 
 

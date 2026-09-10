@@ -69,34 +69,38 @@ async def _get_department_usage(session, dept_id):
         "tickets": (
             await session.scalar(
                 select(func.count(Ticket.id)).where(Ticket.department_id == dept_id)
-            ) or 0
+            )
+            or 0
         ),
         "knowledge": (
             await session.scalar(
-                select(func.count(KnowledgeBase.id)).where(
-                    KnowledgeBase.department_id == dept_id
-                )
-            ) or 0
+                select(func.count(KnowledgeBase.id)).where(KnowledgeBase.department_id == dept_id)
+            )
+            or 0
         ),
         "faq": (
             await session.scalar(
                 select(func.count(FAQNode.id)).where(FAQNode.department_id == dept_id)
-            ) or 0
+            )
+            or 0
         ),
         "events": (
             await session.scalar(
                 select(func.count(Event.id)).where(Event.department_id == dept_id)
-            ) or 0
+            )
+            or 0
         ),
         "web_users": (
             await session.scalar(
                 select(func.count(WebUser.id)).where(WebUser.department_id == dept_id)
-            ) or 0
+            )
+            or 0
         ),
         "subscriptions": (
             await session.scalar(
                 select(func.count(Subscription.id)).where(Subscription.department_id == dept_id)
-            ) or 0
+            )
+            or 0
         ),
     }
 
@@ -191,17 +195,10 @@ async def api_get_departments(user=Depends(require_auth)):
             department_stmt = select(Department).order_by(Department.name)
             if not is_super:
                 department_stmt = department_stmt.where(Department.id == dept_id)
-            departments = list(
-                (await session.execute(department_stmt))
-                .scalars()
-                .all()
-            )
+            departments = list((await session.execute(department_stmt)).scalars().all())
             dept_ids = [d.id for d in departments]
             usage_map = await _get_all_departments_usage(session, dept_ids)
-            result = [
-                _serialize_department(dept, usage_map.get(dept.id))
-                for dept in departments
-            ]
+            result = [_serialize_department(dept, usage_map.get(dept.id)) for dept in departments]
             return api_success(result)
     except Exception as e:
         logger.error("API: не удалось загрузить отделы: %s", e)
@@ -279,9 +276,7 @@ async def api_create_department(request: Request, user=Depends(require_superadmi
 
 
 @router.post("/departments/{dept_id}/rename")
-async def api_rename_department(
-    dept_id: int, request: Request, user=Depends(require_superadmin)
-):
+async def api_rename_department(dept_id: int, request: Request, user=Depends(require_superadmin)):
     """Переименовать отдел. Принимает JSON: {"name": "Новое название"}"""
     await require_crud_rate_limit(request)
 
@@ -328,9 +323,7 @@ async def api_rename_department(
 
 
 @router.post("/departments/{dept_id}/delete")
-async def api_delete_department(
-    dept_id: int, request: Request, user=Depends(require_superadmin)
-):
+async def api_delete_department(dept_id: int, request: Request, user=Depends(require_superadmin)):
     """Удалить пустой отдел. Отдел с данными удалить нельзя."""
     await require_crud_rate_limit(request)
 

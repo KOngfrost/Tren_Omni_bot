@@ -1,4 +1,3 @@
-
 """Сервис заявок: единая бизнес-логика для VK-бота и веб-панели.
 
 Используется:
@@ -276,7 +275,8 @@ async def change_ticket_status(
         ticket = await session.scalar(
             select(Ticket)
             .options(selectinload(Ticket.user), selectinload(Ticket.department))
-            .where(Ticket.id == ticket_id).with_for_update()
+            .where(Ticket.id == ticket_id)
+            .with_for_update()
         )
         if ticket is None:
             return None
@@ -359,7 +359,9 @@ async def assign_ticket_department(
         return ticket
 
 
-def format_ticket_list(tickets: list[Ticket], user_ticket_map: dict[int, int] | None = None) -> str:
+def format_ticket_list(
+    tickets: list[Ticket], user_ticket_map: dict[int, int] | None = None
+) -> str:
     """Список заявок для VK-сообщения: номер, отдел, тема, дата, статус, ответ.
 
     user_ticket_map: словарь {global_id: local_number} для персональной нумерации.
@@ -467,9 +469,7 @@ async def _resolve_department(
         return None
     raw = department_name.strip()
 
-    dept = await session.scalar(
-        select(Department).where(Department.name.ilike(raw))
-    )
+    dept = await session.scalar(select(Department).where(Department.name.ilike(raw)))
     if dept is not None:
         return dept
 
@@ -477,22 +477,63 @@ async def _resolve_department(
     return _match_department_by_keywords(raw, all_depts) if all_depts else None
 
 
+def _match_department_in_memory(
+    raw: str,
+    all_depts: list[Department],
+    kb_entries: list[KnowledgeBase] | None = None,
+) -> Department | None:
+    stripped = raw.strip().casefold()
+    for dept in all_depts:
+        if dept.name.casefold() == stripped:
+            return dept
+    matched = _match_department_by_keywords(raw, all_depts)
+    if matched is not None:
+        return matched
+    if kb_entries:
+        dept_by_id = {d.id: d for d in all_depts}
+        for kb in kb_entries:
+            if kb.keywords and keyword_matches(kb.keywords, raw):
+                dept = dept_by_id.get(kb.department_id)
+                if dept is not None:
+                    return dept
+    return None
+
+
 async def sync_unassigned_ticket_departments() -> int:
     """Привязать заявки с пустым department_id к соответствующим отделам по теме/описанию."""
     updated_count = 0
     async with async_session_maker() as session:
-        unassigned = list((await session.scalars(
-            select(Ticket).where(Ticket.department_id.is_(None))
-        )).all())
+        all_depts = list((await session.scalars(select(Department))).all())
+        if not all_depts:
+            return 0
+
+        kb_entries = list(
+            (
+                await session.scalars(
+                    select(KnowledgeBase).where(
+                        KnowledgeBase.department_id.is_not(None),
+                        KnowledgeBase.keywords.is_not(None),
+                    )
+                )
+            ).all()
+        )
+
+        unassigned = list(
+            (await session.scalars(select(Ticket).where(Ticket.department_id.is_(None)))).all()
+        )
+
         for ticket in unassigned:
             target_dept = None
             if ticket.topic:
-                target_dept = await _resolve_department(session, ticket.topic)
+                target_dept = _match_department_in_memory(ticket.topic, all_depts, kb_entries)
             if target_dept is None and ticket.description:
-                target_dept = await _resolve_department(session, ticket.description)
+                target_dept = _match_department_in_memory(
+                    ticket.description, all_depts, kb_entries
+                )
             if target_dept is not None:
                 ticket.department_id = target_dept.id
                 updated_count += 1
+
         if updated_count > 0:
             await session.commit()
     return updated_count
@@ -634,11 +675,7 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
                     add_outbox_message(
                         session,
                         admin.user.vk_id,
-                        (
-                            f"⚠️ {subject}\n\n"
-                            f"Студент ответил на заявку #{ticket.id}:\n\n"
-                            f"{message}"
-                        ),
+                        (f"⚠️ {subject}\n\nСтудент ответил на заявку #{ticket.id}:\n\n{message}"),
                     )
                     scheduled = True
             # WebUser уведомления через VK не отправляются (нет vk_id)
@@ -659,9 +696,7 @@ def keyword_matches(keywords: str, text: str) -> bool:
     """
     normalized = text.casefold()
     return any(
-        word.strip().casefold() in normalized
-        for word in keywords.split(",")
-        if word.strip()
+        word.strip().casefold() in normalized for word in keywords.split(",") if word.strip()
     )
 
 
@@ -679,7 +714,12 @@ async def find_knowledge_entry(
     Если задан department_name — поиск ограничен записями отдела
     (записи без отдела в этом случае не рассматриваются).
     """
-    stmt = select(KnowledgeBase).order_by(KnowledgeBase.id)
+    stmt = (
+        select(KnowledgeBase)
+        .options(selectinload(KnowledgeBase.department))
+        .where(KnowledgeBase.keywords.is_not(None))
+        .order_by(KnowledgeBase.id)
+    )
     if department_name:
         resolved_dept = await _resolve_department(session, department_name)
         if resolved_dept is not None:

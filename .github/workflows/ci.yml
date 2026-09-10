@@ -16,6 +16,7 @@ jobs:
           python-version: "3.11"
       - run: pip install ruff==0.6.9
       - run: ruff check .
+      - run: ruff format --check .
 
   mypy:
     name: Type check (mypy)

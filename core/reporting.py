@@ -28,9 +28,6 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
-
-
-
 def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
     """Лист 1: Сводка по отделам и процент выполнения."""
     sheet = workbook.active
@@ -69,13 +66,42 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         rows.append(
             [
                 department.name,
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.NEW),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.IN_PROGRESS),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.TRANSFERRED_ADMIN),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.COMPLETED),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.COMPLETED_AUTO),
-                _count(lambda t, d=department: t.department_id == d.id and t.status == TicketStatus.ANONYMOUS),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.NEW
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.IN_PROGRESS
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.TRANSFERRED_ADMIN
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id
+                        and t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.COMPLETED
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.COMPLETED_AUTO
+                    )
+                ),
+                _count(
+                    lambda t, d=department: (
+                        t.department_id == d.id and t.status == TicketStatus.ANONYMOUS
+                    )
+                ),
                 total,
                 percent,
             ]
@@ -164,7 +190,9 @@ def _build_anonymous_sheet(workbook: Workbook, data: dict) -> None:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
-    anonymous = [t for t in data["tickets"] if t.is_anonymous or t.status == TicketStatus.ANONYMOUS]
+    anonymous = [
+        t for t in data["tickets"] if t.is_anonymous or t.status == TicketStatus.ANONYMOUS
+    ]
     for ticket in anonymous:
         sheet.append(
             [
@@ -258,6 +286,7 @@ async def get_superadmin_vk_ids() -> list[int]:
         )
         return [vk_id for vk_id in result if vk_id is not None]
 
+
 def _seconds_until_report() -> float:
     """Секунды до ближайшего запуска отчёта (в часовом поясе APP_TIMEZONE)."""
     try:
@@ -300,9 +329,7 @@ async def get_report_for_date(report_day: date) -> dict:
             .where(Ticket.created_at >= day_start, Ticket.created_at < day_end)
             .order_by(Ticket.created_at)
         )
-        departments = await session.scalars(
-            select(Department).order_by(Department.name)
-        )
+        departments = await session.scalars(select(Department).order_by(Department.name))
     return {"tickets": list(tickets), "departments": list(departments)}
 
 
@@ -322,9 +349,7 @@ async def get_report_for_period(date_from: date, date_to: date) -> dict:
             .where(Ticket.created_at >= period_start, Ticket.created_at <= period_end)
             .order_by(Ticket.created_at)
         )
-        departments = await session.scalars(
-            select(Department).order_by(Department.name)
-        )
+        departments = await session.scalars(select(Department).order_by(Department.name))
     return {"tickets": list(tickets), "departments": list(departments)}
 
 

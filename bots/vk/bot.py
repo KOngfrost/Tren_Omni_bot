@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import json
 import logging
@@ -39,16 +39,21 @@ from core.commands import (
     COMMANDS_QUESTION,
     COMMANDS_REGULAR_MENU,
     COMMANDS_REPORT,
-    COMMAND_REPORT_BY_DATE,
-    COMMAND_REPORT_BY_PERIOD,
+    COMMANDS_REPORT_BY_DATE,
+    COMMANDS_REPORT_BY_PERIOD,
     COMMANDS_START,
 )
 from core.config import settings
-from core.bot_core import BotCore
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus
-from core.reporting import build_daily_report, get_report_for_date, get_report_for_period, parse_report_date, send_report_to_vk
+from core.reporting import (
+    build_daily_report,
+    get_report_for_date,
+    get_report_for_period,
+    parse_report_date,
+    send_report_to_vk,
+)
 from core.ticket_service import (
     STATUS_LABELS,
     StatusTransitionError,
@@ -63,8 +68,13 @@ from core.ticket_service import (
     reply_to_ticket,
     status_label,
 )
-from web.dependencies import get_admin_scope_for_vk_id
-from bots.vk.keyboards import build_admin_cancel_keyboard, build_admin_keyboard, build_cancel_keyboard, build_main_keyboard, build_tickets_keyboard
+from core.bot_core import BotCore, get_admin_scope_for_vk_id
+from bots.vk.keyboards import (
+    build_admin_keyboard,
+    build_cancel_keyboard,
+    build_main_keyboard,
+    build_tickets_keyboard,
+)
 
 vk_bot = Bot(token=settings.VK_BOT_TOKEN)
 
@@ -80,9 +90,7 @@ async def _handle_bot_error(error: Exception, message: Message | None = None):
     # Пользователю — безопасное сообщение без деталей
     if message is not None:
         try:
-            await message.answer(
-                "Произошла внутренняя ошибка. Пожалуйста, попробуйте позже."
-            )
+            await message.answer("Произошла внутренняя ошибка. Пожалуйста, попробуйте позже.")
         except Exception:
             logger.exception("Не удалось отправить сообщение об ошибке пользователю")
     return None
@@ -98,7 +106,6 @@ logger = logging.getLogger(__name__)
 class ReportStates(BaseStateGroup):
     WAITING_DATE = "waiting_date"
     WAITING_DATE_FROM = "waiting_date_from"
-    WAITING_DATE_TO = "waiting_date_to"
 
 
 # FSM StateGroup для создания обращений (разделы меню, «Задать вопрос», анонимные)
@@ -110,13 +117,18 @@ class TicketStates(BaseStateGroup):
 @vk_bot.on.private_message(text=COMMANDS_FAQ)
 async def faq_handler(message: Message):
     async with async_session_maker() as session:
-        nodes = list(await session.scalars(
-            select(FAQNode)
-            .where(FAQNode.parent_id.is_(None))
-            .order_by(FAQNode.order_index, FAQNode.id)
-        ))
+        nodes = list(
+            await session.scalars(
+                select(FAQNode)
+                .where(FAQNode.parent_id.is_(None))
+                .order_by(FAQNode.order_index, FAQNode.id)
+            )
+        )
     if not nodes:
-        await message.answer("В FAQ пока нет опубликованных вопросов.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "В FAQ пока нет опубликованных вопросов.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
         return
     lines = [
         "Частые вопросы:",
@@ -129,9 +141,14 @@ async def faq_handler(message: Message):
 @vk_bot.on.private_message(text=COMMANDS_KNOWLEDGE)
 async def knowledge_base_handler(message: Message):
     async with async_session_maker() as session:
-        entries = list(await session.scalars(select(KnowledgeBase).order_by(KnowledgeBase.id).limit(20)))
+        entries = list(
+            await session.scalars(select(KnowledgeBase).order_by(KnowledgeBase.id).limit(20))
+        )
     if not entries:
-        await message.answer("В базе знаний пока нет опубликованных материалов.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "В базе знаний пока нет опубликованных материалов.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
         return
     lines = [
         "Материалы базы знаний:",
@@ -148,19 +165,24 @@ async def faq_answer_handler(message: Message):
     node_id = int(match.group(1))
     async with async_session_maker() as session:
         node = await session.get(FAQNode, node_id)
-        children = list(await session.scalars(
-            select(FAQNode).where(FAQNode.parent_id == node_id).order_by(FAQNode.order_index, FAQNode.id)
-        ))
+        children = list(
+            await session.scalars(
+                select(FAQNode)
+                .where(FAQNode.parent_id == node_id)
+                .order_by(FAQNode.order_index, FAQNode.id)
+            )
+        )
     if node is None:
-        await message.answer("Вопрос не найден.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "Вопрос не найден.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
     if node.is_final and node.final_answer:
         await message.answer(node.final_answer, keyboard=await _main_keyboard_for(message.from_id))
         return
     lines = [node.question or "Вопрос"]
     lines.extend(
-        f"\n#{child.id} {child.button_text or child.question or 'Вопрос'}"
-        for child in children
+        f"\n#{child.id} {child.button_text or child.question or 'Вопрос'}" for child in children
     )
     await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
@@ -168,15 +190,24 @@ async def faq_answer_handler(message: Message):
 @vk_bot.on.private_message(text=COMMANDS_EVENTS)
 async def events_handler(message: Message):
     async with async_session_maker() as session:
-        events = list(await session.scalars(
-            select(Event).where(Event.event_date >= func.now()).order_by(Event.event_date.asc()).limit(20)
-        ))
+        events = list(
+            await session.scalars(
+                select(Event)
+                .where(Event.event_date >= func.now())
+                .order_by(Event.event_date.asc())
+                .limit(20)
+            )
+        )
     if not events:
-        await message.answer("Ближайших мероприятий нет.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "Ближайших мероприятий нет.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
     lines = ["Ближайшие мероприятия:"]
     for event in events:
-        date = event.event_date.strftime("%d.%m.%Y %H:%M") if event.event_date else "дата уточняется"
+        date = (
+            event.event_date.strftime("%d.%m.%Y %H:%M") if event.event_date else "дата уточняется"
+        )
         lines.append(f"\n#{event.id} {event.title} ({date})\nЗапись: Записаться #{event.id}")
     await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
@@ -191,10 +222,16 @@ async def register_event_handler(message: Message):
     async with async_session_maker() as session:
         event = await session.get(Event, event_id)
         if event is None:
-            await message.answer("Мероприятие не найдено.", keyboard=await _main_keyboard_for(message.from_id))
+            await message.answer(
+                "Мероприятие не найдено.", keyboard=await _main_keyboard_for(message.from_id)
+            )
             return
         # Проверяем, что мероприятие ещё не прошло
-        if event.event_date < func.now():
+        now = datetime.now(UTC)
+        event_dt = (
+            event.event_date if event.event_date.tzinfo else event.event_date.replace(tzinfo=UTC)
+        )
+        if event_dt < now:
             await message.answer(
                 "Нельзя записаться на прошедшее мероприятие.",
                 keyboard=await _main_keyboard_for(message.from_id),
@@ -205,19 +242,35 @@ async def register_event_handler(message: Message):
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            await message.answer("Вы уже зарегистрированы на это мероприятие.", keyboard=await _main_keyboard_for(message.from_id))
+            await message.answer(
+                "Вы уже зарегистрированы на это мероприятие.",
+                keyboard=await _main_keyboard_for(message.from_id),
+            )
             return
-    await message.answer(f"Вы зарегистрированы на «{event.title}».", keyboard=await _main_keyboard_for(message.from_id))
+    await message.answer(
+        f"Вы зарегистрированы на «{event.title}».",
+        keyboard=await _main_keyboard_for(message.from_id),
+    )
 
 
 def build_anonymous_choice_keyboard() -> str:
-    return json.dumps({
-        "one_time": True,
-        "buttons": [[
-            {"action": {"type": "text", "label": "Остаться анонимным"}, "color": "secondary"},
-            {"action": {"type": "text", "label": "Остаться не анонимным"}, "color": "primary"},
-        ]],
-    })
+    return json.dumps(
+        {
+            "one_time": True,
+            "buttons": [
+                [
+                    {
+                        "action": {"type": "text", "label": "Остаться анонимным"},
+                        "color": "secondary",
+                    },
+                    {
+                        "action": {"type": "text", "label": "Остаться не анонимным"},
+                        "color": "primary",
+                    },
+                ]
+            ],
+        }
+    )
 
 
 def _main_reply_text(departments: list[str] | None = None) -> str:
@@ -243,10 +296,9 @@ def _main_reply_text(departments: list[str] | None = None) -> str:
 async def _get_department_names() -> list[str]:
     """Получить список названий отделов из БД."""
     from core.models import Department
+
     async with async_session_maker() as session:
-        departments = list(await session.scalars(
-            select(Department).order_by(Department.name)
-        ))
+        departments = list(await session.scalars(select(Department).order_by(Department.name)))
         return [dept.name for dept in departments if dept.name]
 
 
@@ -293,8 +345,7 @@ async def my_tickets_handler(message: Message):
 
     if not tickets:
         await message.answer(
-            "У вас пока нет заявок.\n\n"
-            "Чтобы создать заявку, выберите раздел в меню.",
+            "У вас пока нет заявок.\n\nЧтобы создать заявку, выберите раздел в меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -586,9 +637,7 @@ async def ticket_identity_choice_handler(message: Message):
         await vk_bot.state_dispenser.delete(message.from_id)
 
 
-@vk_bot.on.private_message(
-    text=COMMANDS_ADMIN
-)
+@vk_bot.on.private_message(text=COMMANDS_ADMIN)
 async def admin_panel(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
@@ -636,8 +685,10 @@ async def admin_tickets_handler(message: Message):
 
     async with async_session_maker() as session:
         stmt = (
-            select(Ticket).options(selectinload(Ticket.department))
-            .order_by(Ticket.created_at.desc()).limit(20)
+            select(Ticket)
+            .options(selectinload(Ticket.department))
+            .order_by(Ticket.created_at.desc())
+            .limit(20)
         )
         if not is_super and dept_id is not None:
             stmt = stmt.where(Ticket.department_id == dept_id)
@@ -738,9 +789,7 @@ async def admin_status_handler(message: Message):
         return
     try:
         new_status = _parse_status(match.group(2))
-        ticket = await change_ticket_status(
-            int(match.group(1)), new_status, str(message.from_id)
-        )
+        ticket = await change_ticket_status(int(match.group(1)), new_status, str(message.from_id))
     except (ValueError, StatusTransitionError):
         await message.answer(
             "Неизвестный статус или недопустимый переход.\n"
@@ -761,7 +810,9 @@ async def admin_status_handler(message: Message):
 async def report_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
 
     try:
@@ -793,17 +844,19 @@ async def report_handler(message: Message):
     )
 
 
-@vk_bot.on.private_message(text=COMMAND_REPORT_BY_DATE)
+@vk_bot.on.private_message(text=COMMANDS_REPORT_BY_DATE)
 async def report_by_date_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE)
     await message.answer(
         "Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)\n\n"
         "Нажмите «Отмена», чтобы отменить.",
-        keyboard=build_admin_cancel_keyboard(),
+        keyboard=build_cancel_keyboard(),
     )
 
 
@@ -815,7 +868,9 @@ async def report_by_date_input(message: Message):
 
     parsed = parse_report_date(message.text)
     if parsed is None:
-        await message.answer("Неверный формат. Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)")
+        await message.answer(
+            "Неверный формат. Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)"
+        )
         return
 
     try:
@@ -828,7 +883,9 @@ async def report_by_date_input(message: Message):
             report_bytes,
             filename,
         )
-        await BotCore.log_action(user, "report_generated", f"Сформирован отчёт за {parsed} (по дате)")
+        await BotCore.log_action(
+            user, "report_generated", f"Сформирован отчёт за {parsed} (по дате)"
+        )
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
             f"Отчет за {parsed:%d.%m.%Y} сформирован и отправлен.",
@@ -836,7 +893,9 @@ async def report_by_date_input(message: Message):
         )
     except Exception:
         logger.exception("Ошибка при формировании отчёта за %s", parsed)
-        await BotCore.log_action(user, "report_failed", f"Ошибка при формировании отчёта за {parsed}")
+        await BotCore.log_action(
+            user, "report_failed", f"Ошибка при формировании отчёта за {parsed}"
+        )
         await message.answer(
             "Не удалось отправить отчёт. Попробуйте позже; детали записаны в журнал.",
             keyboard=build_admin_keyboard(),
@@ -844,11 +903,13 @@ async def report_by_date_input(message: Message):
         await vk_bot.state_dispenser.delete(message.from_id)
 
 
-@vk_bot.on.private_message(text=COMMAND_REPORT_BY_PERIOD)
+@vk_bot.on.private_message(text=COMMANDS_REPORT_BY_PERIOD)
 async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer("У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id))
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE_FROM)
     await message.answer(
@@ -857,7 +918,7 @@ async def report_by_period_handler(message: Message):
         "или\n"
         "с 31.08.2026 по 15.09.2026\n\n"
         "Нажмите «Отмена», чтобы отменить.",
-        keyboard=build_admin_cancel_keyboard(),
+        keyboard=build_cancel_keyboard(),
     )
 
 
@@ -873,9 +934,7 @@ async def report_by_period_input(message: Message):
     normalized = message.text.strip()
     # Убираем предлог "с" в начале и заменяем "по" между двумя датами на тире,
     # чтобы результат всегда содержал тире и корректно парсился далее.
-    normalized = re.sub(
-        r"^\s*с\s+", "", normalized, flags=re.IGNORECASE
-    )
+    normalized = re.sub(r"^\s*с\s+", "", normalized, flags=re.IGNORECASE)
     normalized = re.sub(
         r"(\d{2}\.\d{2}\.\d{4})\s+по\s+(\d{2}\.\d{2}\.\d{4})",
         r"\1 - \2",
@@ -885,7 +944,9 @@ async def report_by_period_input(message: Message):
     # Разбиваем по тире (разные варианты: -, –, —)
     parts = re.split(r"\s*[-–—]\s*", normalized, maxsplit=1)
     if len(parts) != 2:
-        await message.answer("Неверный формат. Введите две даты через тире (например: 31.08.2026 - 15.09.2026)")
+        await message.answer(
+            "Неверный формат. Введите две даты через тире (например: 31.08.2026 - 15.09.2026)"
+        )
         return
 
     date_from = parse_report_date(parts[0])
@@ -909,7 +970,9 @@ async def report_by_period_input(message: Message):
             report_bytes,
             filename,
         )
-        await BotCore.log_action(user, "report_generated", f"Сформирован отчёт за период {date_from} - {date_to}")
+        await BotCore.log_action(
+            user, "report_generated", f"Сформирован отчёт за период {date_from} - {date_to}"
+        )
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
             f"Отчёт за период с {date_from:%d.%m.%Y} по {date_to:%d.%m.%Y} "

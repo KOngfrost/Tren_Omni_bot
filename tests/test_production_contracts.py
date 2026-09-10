@@ -42,9 +42,7 @@ def _production_settings(**values: str) -> Settings:
     settings.APP_ENV = "production"
     settings.DB_USER = values.get("DB_USER", "production_user")
     settings.DB_PASS = values.get("DB_PASS", "long-production-password")
-    settings.SESSION_SECRET_KEY = values.get(
-        "SESSION_SECRET_KEY", "x" * 64
-    )
+    settings.SESSION_SECRET_KEY = values.get("SESSION_SECRET_KEY", "x" * 64)
     return settings
 
 

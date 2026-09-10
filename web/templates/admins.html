@@ -68,11 +68,22 @@
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
                 {% endif %}
-                {% if user.role in ['SUPERADMIN', 'superadmin'] %}<form method="post" action="/admin/admins/{{ admin.id }}/delete"
-                              data-confirm="Удалить этого суперадмина?">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>{% endif %}
+                <div class="admin-card-actions">
+                    {% if admin.web_user and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
+                    <form method="post" action="/admin/admins/web-users/{{ admin.web_user.id }}/delete"
+                          data-confirm="Отозвать доступ к веб-панели для пользователя {{ admin.web_user.username }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-secondary btn-small" title="Отозвать доступ к веб-панели">Отозвать веб-доступ</button>
+                    </form>
+                    {% endif %}
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                    <form method="post" action="/admin/admins/{{ admin.id }}/delete"
+                          data-confirm="Удалить этого суперадмина?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-small">Удалить</button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
         {% else %}
@@ -117,11 +128,22 @@
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
                 {% endif %}
-                {% if user.role in ['SUPERADMIN', 'superadmin'] %}<form method="post" action="/admin/admins/{{ admin.id }}/delete"
-                              data-confirm="Удалить этого админа?">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger btn-small">Удалить</button>
-                </form>{% endif %}
+                <div class="admin-card-actions">
+                    {% if admin.web_user and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
+                    <form method="post" action="/admin/admins/web-users/{{ admin.web_user.id }}/delete"
+                          data-confirm="Отозвать доступ к веб-панели для пользователя {{ admin.web_user.username }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-secondary btn-small" title="Отозвать доступ к веб-панели">Отозвать веб-доступ</button>
+                    </form>
+                    {% endif %}
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                    <form method="post" action="/admin/admins/{{ admin.id }}/delete"
+                          data-confirm="Удалить этого админа?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-small">Удалить</button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
         {% else %}
@@ -148,7 +170,7 @@
             </div>
             <div class="form-group">
                 <label for="username">Логин веб-панели</label>
-                <input type="text" id="username" name="username" autocomplete="off" placeholder="Пусто: dept_admin_{{ user.get('user_id', 'ID') }}">
+                <input type="text" id="username" name="username" autocomplete="off" placeholder="Пусто: dept_admin_{{ user.get('web_user_id', 'ID') }}">
             </div>
             <div class="form-group">
                 <label for="password">Пароль веб-панели</label>
@@ -163,8 +185,8 @@
                 <label for="department_id">Отдел (опционально)</label>
                 <select id="department_id" name="department_id">
                     {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="">— Без привязки —</option>{% endif %}
-                    {% for dept in departments %}
-                    <option value="{{ dept.id }}">{{ dept.name }}</option>
+                    {% for d in departments %}
+                    <option value="{{ d.id }}" {% if selected_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -179,26 +201,4 @@
         </form>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script nonce="{{ request.state.script_nonce|default('') }}">
-function openModal() {
-    document.getElementById('modal').classList.add('active');
-}
-
-function closeModal() {
-    document.getElementById('modal').classList.remove('active');
-}
-
-// Закрытие по клику вне модалки
-document.getElementById('modal').addEventListener('click', function(e) {
-    if (e.target === this) closeModal();
-});
-
-// Закрытие модалки по Escape
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeModal();
-});
-</script>
 {% endblock %}

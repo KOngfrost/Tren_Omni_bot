@@ -44,43 +44,65 @@ async def _load_dept_context(session, dept_id: int, user: dict):
 
     stats = {
         "total_tickets": await session.scalar(_count()) or 0,
-        "in_progress": await session.scalar(
-            _count(Ticket.status == TicketStatus.IN_PROGRESS)
-        ) or 0,
+        "in_progress": await session.scalar(_count(Ticket.status == TicketStatus.IN_PROGRESS))
+        or 0,
         "completed": await session.scalar(
             _count(Ticket.status.in_([TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO]))
-        ) or 0,
-        "new_tickets": await session.scalar(
-            _count(Ticket.status == TicketStatus.NEW)
-        ) or 0,
+        )
+        or 0,
+        "new_tickets": await session.scalar(_count(Ticket.status == TicketStatus.NEW)) or 0,
     }
 
-    recent_tickets = list((await session.execute(
-        select(Ticket)
-        .options(selectinload(Ticket.user), selectinload(Ticket.department))
-        .where(Ticket.department_id == dept_id)
-        .order_by(Ticket.created_at.desc())
-        .limit(10)
-    )).scalars().all())
+    recent_tickets = list(
+        (
+            await session.execute(
+                select(Ticket)
+                .options(selectinload(Ticket.user), selectinload(Ticket.department))
+                .where(Ticket.department_id == dept_id)
+                .order_by(Ticket.created_at.desc())
+                .limit(10)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    kb_items = list((await session.execute(
-        select(KnowledgeBase)
-        .where(KnowledgeBase.department_id == dept_id)
-        .order_by(KnowledgeBase.id)
-    )).scalars().all())
+    kb_items = list(
+        (
+            await session.execute(
+                select(KnowledgeBase)
+                .where(KnowledgeBase.department_id == dept_id)
+                .order_by(KnowledgeBase.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    faq_items = list((await session.execute(
-        select(FAQNode)
-        .where(FAQNode.department_id == dept_id)
-        .order_by(FAQNode.order_index, FAQNode.id)
-    )).scalars().all())
+    faq_items = list(
+        (
+            await session.execute(
+                select(FAQNode)
+                .where(FAQNode.department_id == dept_id)
+                .order_by(FAQNode.order_index, FAQNode.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
-    events = list((await session.execute(
-        select(Event)
-        .options(selectinload(Event.registrations))
-        .where(Event.department_id == dept_id)
-        .order_by(Event.event_date)
-    )).scalars().all())
+    events = list(
+        (
+            await session.execute(
+                select(Event)
+                .options(selectinload(Event.registrations))
+                .where(Event.department_id == dept_id)
+                .order_by(Event.event_date)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return {
         "dept": dept,

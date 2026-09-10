@@ -103,14 +103,15 @@ async def faq_page(request: Request, user=Depends(require_auth)):
     )
 
 
-
 @router.post("/")
 async def add_faq(request: Request, user=Depends(require_writer)):
     """Добавление элемента FAQ с санитизацией входных данных."""
     form = await request.form()
     question: str = sanitize_html(str(form.get("question", "")))
     is_final: bool = form.get("is_final") == "on"
-    final_answer: str | None = sanitize_html(str(form.get("final_answer", ""))) if is_final else None
+    final_answer: str | None = (
+        sanitize_html(str(form.get("final_answer", ""))) if is_final else None
+    )
 
     if not question.strip():
         request.session["flash_error"] = "Текст вопроса обязателен"
@@ -139,17 +140,20 @@ async def add_faq(request: Request, user=Depends(require_writer)):
                     return RedirectResponse(url="/faq/", status_code=303)
 
             max_order = await session.scalar(
-                select(func.coalesce(func.max(FAQNode.order_index), 0))
-                .where(FAQNode.department_id == department_id)
+                select(func.coalesce(func.max(FAQNode.order_index), 0)).where(
+                    FAQNode.department_id == department_id
+                )
             )
-            session.add(FAQNode(
-                department_id=department_id,
-                parent_id=parent_id,
-                question=question,
-                is_final=is_final,
-                final_answer=final_answer,
-                order_index=(max_order or 0) + 1,
-            ))
+            session.add(
+                FAQNode(
+                    department_id=department_id,
+                    parent_id=parent_id,
+                    question=question,
+                    is_final=is_final,
+                    final_answer=final_answer,
+                    order_index=(max_order or 0) + 1,
+                )
+            )
             await session.commit()
     except Exception:
         logger.exception("Не удалось добавить FAQ")

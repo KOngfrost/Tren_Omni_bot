@@ -39,9 +39,7 @@ def upgrade() -> None:
         sa.Column("success", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_login_attempts_ip_created", "login_attempts", ["ip", "attempted_at"]
-    )
+    op.create_index("ix_login_attempts_ip_created", "login_attempts", ["ip", "attempted_at"])
 
     op.create_table(
         "vk_outbox",

@@ -69,9 +69,10 @@ class Settings:
     _db_user = quote_plus(DB_USER) if DB_USER else ""
     _db_pass = quote_plus(DB_PASS) if DB_PASS else ""
     database_url = (
-        f"postgresql+asyncpg://{_db_user}:{_db_pass}"
-        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    ) if DB_USER and DB_PASS else ""
+        (f"postgresql+asyncpg://{_db_user}:{_db_pass}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+        if DB_USER and DB_PASS
+        else ""
+    )
 
     # VK
     VK_BOT_TOKEN = os.getenv("VK_BOT_TOKEN")
@@ -131,7 +132,11 @@ class Settings:
     #     Кука работает по HTTP (только для разработки).
     _is_prod = APP_ENV not in dev_environments
     _session_https_default = "true" if _is_prod else "false"
-    SESSION_HTTPS_ONLY = os.getenv("SESSION_HTTPS_ONLY", _session_https_default).lower() in ("1", "true", "yes")
+    SESSION_HTTPS_ONLY = os.getenv("SESSION_HTTPS_ONLY", _session_https_default).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Доверенные reverse-proxy (IP через запятую), от которых разрешено
     # принимать настоящий IP клиента из заголовка X-Forwarded-For.
@@ -170,9 +175,7 @@ class Settings:
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
     REPORT_EMAILS = [
-        email.strip()
-        for email in os.getenv("REPORT_EMAILS", "").split(",")
-        if email.strip()
+        email.strip() for email in os.getenv("REPORT_EMAILS", "").split(",") if email.strip()
     ]
 
     # Команды VK-бота вынесены в core/commands.py — единый источник правды,
@@ -187,14 +190,10 @@ class Settings:
         errors = []
 
         if not self.DB_USER:
-            errors.append(
-                "POSTGRES_USER не задан. Укажите имя пользователя PostgreSQL в .env."
-            )
+            errors.append("POSTGRES_USER не задан. Укажите имя пользователя PostgreSQL в .env.")
 
         if not self.DB_PASS:
-            errors.append(
-                "POSTGRES_PASSWORD не задан. Укажите пароль PostgreSQL в .env."
-            )
+            errors.append("POSTGRES_PASSWORD не задан. Укажите пароль PostgreSQL в .env.")
 
         if not self.VK_BOT_TOKEN:
             errors.append(
@@ -209,16 +208,12 @@ class Settings:
             )
 
         if errors:
-            raise RuntimeError(
-                "Неверная конфигурация:\n"
-                + "\n".join(f"  - {e}" for e in errors)
-            )
+            raise RuntimeError("Неверная конфигурация:\n" + "\n".join(f"  - {e}" for e in errors))
 
     def ensure_production_config(self) -> None:
         """Жёсткие проверки конфигурации для production (запуск прерывается)."""
+        self.validate_required()
         if not self.IS_PRODUCTION:
-            # В dev-режиме проверяем обязательные поля
-            self.validate_required()
             return
         if not self.DB_USER or self.DB_USER == "student_bot":
             raise RuntimeError(

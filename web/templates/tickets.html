@@ -28,11 +28,9 @@
                value="{{ query }}">
         <select id="status-filter" name="status">
             <option value="">Все статусы</option>
-            {% for value, label in status_choices %}
+            {% for value, label in filter_status_choices %}
             <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
-            <option value="COMPLETED_AUTO" {% if selected_status == 'COMPLETED_AUTO' %}selected{% endif %}>Выполнено (авто)</option>
-            <option value="ANONYMOUS" {% if selected_status == 'ANONYMOUS' %}selected{% endif %}>Анонимное</option>
         </select>
         <select id="dept-filter" name="department_id">
             <option value="">Все отделы</option>
@@ -138,27 +136,15 @@ window.STATUS_LABELS = {
     'TRANSFERRED_HOUSEKEEPING': 'Передано в хозчасть',
     'COMPLETED': 'Выполнено',
     'COMPLETED_AUTO': 'Выполнено (авто)',
-    'ANONYMOUS': 'Анонимное'
+    'ANONYMOUS': 'Анонимное',
+    'Новое': 'Новое',
+    'В обработке': 'В обработке',
+    'Передано в администрацию СГ': 'Передано в администрацию',
+    'Передано в Хозчасть': 'Передано в хозчасть',
+    'Выполнено': 'Выполнено',
+    'Выполнено (авто)': 'Выполнено (авто)',
+    'Анонимное': 'Анонимное'
 };
-
-function filterTable() {
-    const search = document.getElementById('search').value.toLowerCase();
-    const statusFilter = document.getElementById('status-filter').value;
-    const deptFilter = document.getElementById('dept-filter').value;
-    const rows = document.querySelectorAll('#tickets-table tbody tr');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        const status = row.dataset.status || '';
-        const dept = row.dataset.dept || '';
-        
-        const matchSearch = !search || text.includes(search);
-        const matchStatus = !statusFilter || status === statusFilter;
-        const matchDept = !deptFilter || dept === deptFilter;
-        
-        row.style.display = (matchSearch && matchStatus && matchDept) ? '' : 'none';
-    });
-}
 
 function openTicket(id) {
     fetch(`/tickets/${id}`)
@@ -173,7 +159,9 @@ function openTicket(id) {
             body += '<div class="detail-block"><strong>Описание:</strong><div class="detail-box">' + escapeHtml(ticket.description || '—') + '</div></div>';
             body += '<div class="detail-block"><strong>Пользователь:</strong> ' + (ticket.user ? (ticket.user.full_name || 'Аноним') : 'Аноним') + '</div>';
             body += '<div class="detail-block"><strong>Отдел:</strong> ' + (ticket.department ? ticket.department.name : '—') + '</div>';
-            body += '<div class="detail-block"><strong>Статус:</strong> ' + escapeHtml((window.STATUS_LABELS[ticket.status.value] || ticket.status.value)) + '</div>';
+            var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
+            var displayStatus = window.STATUS_LABELS[rawStatus] || rawStatus || '—';
+            body += '<div class="detail-block"><strong>Статус:</strong> ' + escapeHtml(displayStatus) + '</div>';
             body += '<div class="detail-block"><strong>Дата:</strong> ' + (ticket.created_at ? new Date(ticket.created_at).toLocaleString('ru-RU') : '—') + '</div>';
 
             // История переписки
@@ -239,18 +227,9 @@ function closeTicketModal() {
     document.getElementById('ticket-modal').classList.remove('active');
 }
 
-document.getElementById('ticket-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeTicketModal();
-});
-
 document.querySelectorAll('[data-ticket-id]').forEach(function (button) {
     button.addEventListener('click', function () { openTicket(button.dataset.ticketId); });
 });
 document.querySelector('[data-close-ticket-modal]').addEventListener('click', closeTicketModal);
-
-// Закрытие модалки по Escape
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeTicketModal();
-});
 </script>
 {% endblock %}

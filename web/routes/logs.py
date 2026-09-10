@@ -10,7 +10,7 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -32,14 +32,17 @@ LOGS_PER_PAGE = 100  # Пагинация: 100 записей на страни�
 @router.get("/")
 async def logs_page(
     request: Request,
-    page: int = Query(default=1, ge=1, description="Номер страницы"),
+    page: str | int = 1,
     user=Depends(require_auth),
 ):
     """Страница логов с пагинацией."""
     logs: list[Log] = []
     db_error: bool = False
     total: int = 0
-    current_page: int = max(1, page)
+    try:
+        current_page = max(1, int(page))
+    except (ValueError, TypeError):
+        current_page = 1
     offset: int = (current_page - 1) * LOGS_PER_PAGE
 
     try:
@@ -81,7 +84,7 @@ async def logs_page(
             "total_logs": total,
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
-        }
+        },
     )
 
 
@@ -121,5 +124,7 @@ async def export_logs(user=Depends(require_auth)):
     return Response(
         content=csv_content,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=logs_{datetime.now().strftime('%Y-%m-%d')}.csv"}
+        headers={
+            "Content-Disposition": f"attachment; filename=logs_{datetime.now().strftime('%Y-%m-%d')}.csv"
+        },
     )

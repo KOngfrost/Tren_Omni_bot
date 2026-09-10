@@ -4,5 +4,6 @@ ruff==0.6.9
 mypy==1.11.2
 # Стабы типов для bleach (используется в core/models.py и web/security)
 types-bleach==6.4.0.20260728
-# aiosqlite уже есть в requirements.txt (runtime-зависимость тестов)
+# SQLite драйвер для тестовой базы данных
+aiosqlite==0.21.0
 pre-commit==4.6.2

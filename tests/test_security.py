@@ -39,6 +39,7 @@ from web.security.passwords import hash_password, verify_password
 # CSRF Tests
 # ==========================================
 
+
 class TestCSRF:
     """Тесты CSRF-защиты."""
 
@@ -86,6 +87,7 @@ class TestCSRF:
 # Security Headers Tests
 # ==========================================
 
+
 class TestSecurityHeaders:
     """Тесты заголовков безопасности."""
 
@@ -111,16 +113,19 @@ class TestSecurityHeaders:
     def test_csp_contains_frame_ancestors_none(self):
         """CSP должен содержать frame-ancestors 'none' для защиты от clickjacking."""
         from web.security.middleware import CONTENT_SECURITY_POLICY
+
         assert "frame-ancestors 'none'" in CONTENT_SECURITY_POLICY
 
     def test_csp_contains_form_action_self(self):
         """CSP должен содержать form-action 'self' для защиты от CSRF через формы."""
         from web.security.middleware import CONTENT_SECURITY_POLICY
+
         assert "form-action 'self'" in CONTENT_SECURITY_POLICY
 
     def test_permissions_policy_restricts_sensors(self):
         """CSP должен ограничивать доступ к камере и микрофону."""
         from web.security.middleware import SECURITY_HEADERS
+
         assert "Permissions-Policy" in SECURITY_HEADERS
         assert "camera=()" in SECURITY_HEADERS["Permissions-Policy"]
         assert "microphone=()" in SECURITY_HEADERS["Permissions-Policy"]
@@ -129,6 +134,7 @@ class TestSecurityHeaders:
 # ==========================================
 # CSV Injection Tests
 # ==========================================
+
 
 class TestCSVInjection:
     """Тесты защиты от CSV-инъекций."""
@@ -178,6 +184,7 @@ class TestCSVInjection:
 # XSS Sanitization Tests
 # ==========================================
 
+
 class TestXSSSanitization:
     """Тесты XSS-санитизации."""
 
@@ -196,7 +203,7 @@ class TestXSSSanitization:
 
     def test_sanitize_html_onerror(self):
         """События onerror экранируются."""
-        result = sanitize_html('<img src=x onerror=alert(1)>')
+        result = sanitize_html("<img src=x onerror=alert(1)>")
         assert "onerror" not in result.lower() or "onerror" in "&lt;" + "onerror"
 
     def test_sanitize_html_normal_text(self):
@@ -233,6 +240,7 @@ class TestXSSSanitization:
 # ==========================================
 # Password Hashing Tests
 # ==========================================
+
 
 class TestPasswordHashing:
     """Тесты хеширования паролей."""
@@ -272,6 +280,7 @@ class TestPasswordHashing:
 # Request Size Validator Tests
 # ==========================================
 
+
 class TestRequestSizeValidator:
     """Тесты валидации размера запроса."""
 
@@ -286,6 +295,7 @@ class TestRequestSizeValidator:
     def test_check_content_length_exceeds_limit(self):
         """Запрос превышает лимит — HTTPException."""
         from fastapi import HTTPException
+
         validator = RequestSizeValidator(max_body_size=1024)
         mock_request = MagicMock()
         mock_request.headers = {"content-length": "2048"}
@@ -297,6 +307,7 @@ class TestRequestSizeValidator:
 # ==========================================
 # Integration: Test FastAPI app with TestClient
 # ==========================================
+
 
 class TestAppSecurityIntegration:
     """Интеграционные тесты безопасности FastAPI-приложения."""
@@ -344,26 +355,27 @@ class TestAppSecurityIntegration:
         assert "mode=block" in response.headers.get("x-xss-protection", "")
         assert "frame-ancestors" in response.headers.get("content-security-policy", "")
 
-    @pytest.mark.parametrize("path", [
-        "/auth/login",
-        "/auth/logout",
-        "/admin/admins/",
-        "/admin/admins/1/delete",
-        "/events/",
-        "/events/1/delete",
-        "/faq/",
-        "/faq/1/delete",
-        "/knowledge/",
-        "/knowledge/1/delete",
-        "/tickets/1/reply",
-        "/tickets/1/status",
-        "/tickets/1/assign",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/auth/login",
+            "/auth/logout",
+            "/admin/admins/",
+            "/admin/admins/1/delete",
+            "/events/",
+            "/events/1/delete",
+            "/faq/",
+            "/faq/1/delete",
+            "/knowledge/",
+            "/knowledge/1/delete",
+            "/tickets/1/reply",
+            "/tickets/1/status",
+            "/tickets/1/assign",
+        ],
+    )
     def test_all_post_routes_pass_csrf_and_auth_boundary(self, client, path):
         login_page = client.get("/auth/login")
-        csrf_token = re.search(
-            r'name="csrf_token" value="([^"]+)"', login_page.text
-        ).group(1)
+        csrf_token = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text).group(1)
 
         response = client.post(
             path,
@@ -411,9 +423,7 @@ class TestAppSecurityIntegration:
 
         monkeypatch.setattr(auth, "_authenticate", reject_credentials)
         login_page = client.get("/auth/login")
-        csrf_token = re.search(
-            r'name="csrf_token" value="([^"]+)"', login_page.text
-        ).group(1)
+        csrf_token = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text).group(1)
 
         response = client.post(
             "/auth/login",

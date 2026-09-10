@@ -186,9 +186,26 @@
         }
     });
 
+    var SVG_EYE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    var SVG_EYE_OFF = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+
     document.addEventListener('change', function (event) {
         var switcher = event.target.closest('#dept-switcher');
         if (switcher && switcher.value) window.location.href = switcher.value;
+
+        var tableFilter = event.target.closest('[data-filter-table]');
+        if (tableFilter) {
+            var selectedDept = tableFilter.value;
+            var container = tableFilter.closest('.card') || document;
+            var rows = container.querySelectorAll('[data-dept]');
+            rows.forEach(function (row) {
+                if (!selectedDept || row.dataset.dept === selectedDept) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
     });
 
     document.addEventListener('keydown', function (event) {
@@ -222,12 +239,12 @@
             input.type = 'text';
             btn.setAttribute('aria-label', 'Скрыть пароль');
             var eye = btn.querySelector('.icon-eye-open');
-            if (eye) eye.textContent = '🙈';
+            if (eye) eye.innerHTML = SVG_EYE_OFF;
         } else {
             input.type = 'password';
             btn.setAttribute('aria-label', 'Показать пароль');
             var eye2 = btn.querySelector('.icon-eye-open');
-            if (eye2) eye2.textContent = '🙉';
+            if (eye2) eye2.innerHTML = SVG_EYE;
         }
     };
 
@@ -305,6 +322,16 @@
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
             toggleSidebar(false);
+        }
+    });
+
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 900) {
+            var sb = document.getElementById('sidebar');
+            var bd = document.getElementById('mobile-backdrop') || document.querySelector('.mobile-menu-backdrop');
+            if (sb) sb.classList.remove('is-open');
+            if (bd) bd.classList.remove('is-active');
+            document.body.classList.remove('no-scroll');
         }
     });
 

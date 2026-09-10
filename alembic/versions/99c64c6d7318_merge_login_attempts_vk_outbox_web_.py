@@ -9,11 +9,12 @@ Merge-ревизия устраняет развилку: d5e6f7a8b9c0 (login_at
 c3d4e5f6a7b8. Схему не меняет — только объединяет ветки истории миграций,
 чтобы `alembic upgrade head` снова работал (голова ровно одна).
 """
+
 from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = '99c64c6d7318'
-down_revision: str | Sequence[str] | None = ('d5e6f7a8b9c0', 'e7f8a9b0c1d2')
+revision: str = "99c64c6d7318"
+down_revision: str | Sequence[str] | None = ("d5e6f7a8b9c0", "e7f8a9b0c1d2")
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -26,4 +27,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Обратная операция для merge-ревизии не имеет смысла (точка ветвления)."""
     pass
-

@@ -25,9 +25,7 @@ async def init_superadmin(vk_id: int, full_name: str = "") -> None:
     """Создаёт или повышает одного пользователя до суперадмина."""
     async with async_session_maker() as session:
         # Получаем или создаём пользователя
-        user_result = await session.execute(
-            select(User).where(User.vk_id == vk_id)
-        )
+        user_result = await session.execute(select(User).where(User.vk_id == vk_id))
         user: User | None = user_result.scalar_one_or_none()
 
         if not user:

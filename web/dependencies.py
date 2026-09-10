@@ -15,8 +15,9 @@ from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.bot_core import get_admin_scope_for_vk_id  # noqa: F401
 from core.database import async_session_maker
-from core.models import Admin, Department, User, UserRole, WebRole, WebUser
+from core.models import Department, WebRole, WebUser
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,8 @@ def get_current_user(request: Request) -> dict | None:
 async def require_auth(request: Request) -> dict:
     """Проверить сессию и актуальные права пользователя в базе данных."""
     user = request.session.get("user")
-    is_api = (
-        request.url.path.startswith("/api/")
-        or "application/json" in request.headers.get("accept", "")
+    is_api = request.url.path.startswith("/api/") or "application/json" in request.headers.get(
+        "accept", ""
     )
     if not user:
         if is_api:
@@ -45,7 +45,9 @@ async def require_auth(request: Request) -> dict:
             try:
                 web_user = await session.get(WebUser, web_user_id)
             except Exception:
-                logger.exception("require_auth: проверка прав через базу данных временно недоступна")
+                logger.exception(
+                    "require_auth: проверка прав через базу данных временно недоступна"
+                )
                 return user
             if web_user is None or not web_user.is_active:
                 request.session.clear()
@@ -116,9 +118,7 @@ async def require_superadmin(request: Request) -> dict:
     """Проверка доступа только для суперадминистратора."""
     user = await require_auth(request)
     if not is_superadmin(user):
-        raise HTTPException(
-            status_code=403, detail="Действие доступно только суперадминистратору"
-        )
+        raise HTTPException(status_code=403, detail="Действие доступно только суперадминистратору")
     return user
 
 
@@ -136,9 +136,7 @@ async def get_admin_scope(session: AsyncSession, user: dict) -> tuple[bool, int 
                     return False, web_user.department_id
                 return False, None
             except Exception:
-                logger.warning(
-                    "Не удалось проверить department_id через базу данных"
-                )
+                logger.warning("Не удалось проверить department_id через базу данных")
                 return False, None
         return False, None
     return False, None
@@ -148,9 +146,9 @@ async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
     """Загрузить список отделов, доступных пользователю."""
     role = role_of(user)
     if role == WebRole.SUPERADMIN:
-        return list((await session.execute(
-            select(Department).order_by(Department.name)
-        )).scalars().all())
+        return list(
+            (await session.execute(select(Department).order_by(Department.name))).scalars().all()
+        )
 
     if role == WebRole.DEPARTMENT_ADMIN:
         web_user_id = user.get("web_user_id")
@@ -161,29 +159,3 @@ async def get_departments_for_user(session: AsyncSession, user: dict) -> list:
                 return [dept] if dept else []
 
     return []
-
-
-async def get_admin_scope_for_vk_id(session: AsyncSession, vk_id: int) -> tuple[bool, int | None]:
-    """Определить область видимости пользователя по VK ID (для бота)."""
-    # Проверка таблицы назначенных администраторов
-    admin = await session.scalar(
-        select(Admin).join(User, Admin.user_id == User.id).where(User.vk_id == vk_id)
-    )
-    if admin is not None:
-        is_super = admin.role == UserRole.SUPERADMIN
-        return is_super, admin.department_id if not is_super else None
-
-    # Проверка связанного пользователя веб-панели
-    web_user = await session.scalar(
-        select(WebUser)
-        .join(Admin, WebUser.admin_id == Admin.id)
-        .join(User, Admin.user_id == User.id)
-        .where(User.vk_id == vk_id)
-    )
-    if web_user is not None and web_user.is_active:
-        if web_user.role == WebRole.SUPERADMIN:
-            return True, None
-        if web_user.role == WebRole.DEPARTMENT_ADMIN and web_user.department_id:
-            return False, web_user.department_id
-
-    return False, None

@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import asyncpg
 from sqlalchemy import pool
@@ -36,6 +37,15 @@ if settings.database_url:
         pool_recycle=settings.DB_POOL_RECYCLE,
         pool_pre_ping=settings.DB_POOL_PRE_PING,
     )
+    if "sqlite" in settings.database_url:
+        from sqlalchemy import event
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def _set_sqlite_custom_lower(dbapi_con, con_record):
+            if hasattr(dbapi_con, "create_function"):
+                dbapi_con.create_function(
+                    "lower", 1, lambda s: s.lower() if s is not None else None
+                )
 else:
     # Учётные данные не заданы (например, в CI): движок не создаём,
     # тесты используют свой in-memory SQLite (см. tests/conftest.py).
@@ -56,7 +66,9 @@ DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
 # Зарезервированные имена PostgreSQL, которые нельзя использовать
 POSTGRES_RESERVED_DB_NAMES = {
-    "postgres", "template0", "template1",
+    "postgres",
+    "template0",
+    "template1",
 }
 
 
@@ -114,9 +126,10 @@ def run_migrations(max_retries: int = 5, retry_delay: float = 2.0) -> None:
 
     last_error = None
 
+    alembic_ini_path = str(Path(__file__).resolve().parent.parent / "alembic.ini")
     for attempt in range(1, max_retries + 1):
         try:
-            alembic_cfg = Config("alembic.ini")
+            alembic_cfg = Config(alembic_ini_path)
             command.upgrade(alembic_cfg, "head")
             return
         except Exception as exc:

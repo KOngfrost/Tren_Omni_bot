@@ -32,25 +32,44 @@
         <div class="department-card" data-dept-card="{{ dept.id }}">
             <div class="department-card-top">
                 <span class="department-ico">◈</span>
-                <div>
-                    <div class="department-name">{{ dept.name }}</div>
+                <div class="department-card-info">
+                    <div class="department-name" title="{{ dept.name }}">{{ dept.name }}</div>
                     <div class="department-id">ID: {{ dept.id }}</div>
                 </div>
             </div>
-            <div class="department-usage">
-                <span class="chip">Заявки: {{ u.get('tickets', 0) }}</span>
-                <span class="chip">БЗ: {{ u.get('knowledge', 0) }}</span>
-                <span class="chip">FAQ: {{ u.get('faq', 0) }}</span>
-                <span class="chip">События: {{ u.get('events', 0) }}</span>
-                <span class="chip">Польз.: {{ u.get('web_users', 0) }}</span>
+
+            <div class="department-stats-grid">
+                <div class="dept-stat-box" title="Всего заявок">
+                    <span class="dept-stat-val">{{ u.get('tickets', 0) }}</span>
+                    <span class="dept-stat-key">Заявки</span>
+                </div>
+                <div class="dept-stat-box" title="Статей в базе знаний">
+                    <span class="dept-stat-val">{{ u.get('knowledge', 0) }}</span>
+                    <span class="dept-stat-key">БЗ</span>
+                </div>
+                <div class="dept-stat-box" title="Вопросов в FAQ">
+                    <span class="dept-stat-val">{{ u.get('faq', 0) }}</span>
+                    <span class="dept-stat-key">FAQ</span>
+                </div>
+                <div class="dept-stat-box" title="Событий отдела">
+                    <span class="dept-stat-val">{{ u.get('events', 0) }}</span>
+                    <span class="dept-stat-key">События</span>
+                </div>
+                <div class="dept-stat-box" title="Администраторов и пользователей">
+                    <span class="dept-stat-val">{{ u.get('web_users', 0) }}</span>
+                    <span class="dept-stat-key">Админы</span>
+                </div>
             </div>
+
             <div class="department-actions">
-                <a href="/dept/{{ dept.id }}/" class="btn btn-secondary btn-small">Открыть фрейм</a>
-                <button class="btn btn-secondary btn-small" data-open-modal="rename-modal-{{ dept.id }}">Переименовать</button>
-                <button class="btn btn-danger btn-small"
-                        data-ajax-delete
-                        data-dept-id="{{ dept.id }}"
-                        data-dept-name="{{ dept.name }}">Удалить</button>
+                <a href="/dept/{{ dept.id }}/" class="btn btn-primary btn-small dept-btn-main">Открыть фрейм →</a>
+                <div class="dept-sub-actions">
+                    <button class="btn btn-secondary btn-small dept-btn-sub" data-open-modal="rename-modal-{{ dept.id }}">Переименовать</button>
+                    <button class="btn btn-danger btn-small dept-btn-sub"
+                            data-ajax-delete
+                            data-dept-id="{{ dept.id }}"
+                            data-dept-name="{{ dept.name }}">Удалить</button>
+                </div>
             </div>
         </div>
 

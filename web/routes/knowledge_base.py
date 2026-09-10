@@ -103,11 +103,13 @@ async def add_knowledge_base(request: Request, user=Depends(require_writer)):
                 request.session["flash_error"] = "Не выбран отдел"
                 return RedirectResponse(url="/knowledge/", status_code=303)
 
-            session.add(KnowledgeBase(
-                department_id=department_id,
-                keywords=keywords,
-                answer=answer,
-            ))
+            session.add(
+                KnowledgeBase(
+                    department_id=department_id,
+                    keywords=keywords,
+                    answer=answer,
+                )
+            )
             await session.commit()
     except Exception:
         logger.exception("Не удалось добавить запись в базу знаний")
@@ -143,4 +145,3 @@ async def delete_knowledge_base(request: Request, kb_id: int, user=Depends(requi
 
     request.session["flash_success"] = "Запись удалена"
     return RedirectResponse(url="/knowledge/", status_code=303)
-

@@ -163,9 +163,7 @@ async def _authenticate(
     пользователей отключается.
     """
     try:
-        web_user = await session.scalar(
-            select(WebUser).where(WebUser.username == username)
-        )
+        web_user = await session.scalar(select(WebUser).where(WebUser.username == username))
         if web_user is not None:
             if not web_user.is_active:
                 return None
@@ -184,7 +182,7 @@ async def _authenticate(
         logger.exception("Не удалось проверить web_users")
 
     # Bootstrap-вход из .env
-    if _credentials_configured()and username == settings.WEB_ADMIN_USERNAME:
+    if _credentials_configured() and username == settings.WEB_ADMIN_USERNAME:
         password_ok = secrets.compare_digest(
             password.encode("utf-8"), settings.WEB_ADMIN_PASSWORD.encode("utf-8")
         )
@@ -235,11 +233,13 @@ async def _authenticate(
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Страница входа."""
+    flash_error = request.session.pop("flash_error", None)
     return templates.TemplateResponse(
         "login.html",
         {
             "request": request,
-            "error": None,
+            "error": flash_error,
+            "flash_error": flash_error,
             "csrf_token": get_csrf_token(request),
         },
     )
@@ -255,7 +255,9 @@ async def login(request: Request):
 
     async with core_db.async_session_maker() as session:
         if await _is_rate_limited(session, client_ip):
-            details = f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
+            details = (
+                f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
+            )
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
             request.session["flash_error"] = "Слишком много попыток входа. Подождите 15 минут."
@@ -316,6 +318,7 @@ async def logout(request: Request):
 # ==========================================
 # Rate limiting для CRUD-операций
 # ==========================================
+
 
 async def require_crud_rate_limit(request: Request):
     """Зависимость FastAPI для rate limiting CRUD-операций.

@@ -108,12 +108,14 @@ async def add_event(request: Request, user=Depends(require_writer)):
                 request.session["flash_error"] = "Не выбран отдел"
                 return RedirectResponse(url="/events/", status_code=303)
 
-            session.add(Event(
-                department_id=department_id,
-                title=title,
-                description=description or None,
-                event_date=event_date,
-            ))
+            session.add(
+                Event(
+                    department_id=department_id,
+                    title=title,
+                    description=description or None,
+                    event_date=event_date,
+                )
+            )
             await session.commit()
     except Exception:
         logger.exception("Не удалось создать событие")
@@ -149,4 +151,3 @@ async def delete_event(request: Request, event_id: int, user=Depends(require_wri
 
     request.session["flash_success"] = "Событие удалено"
     return RedirectResponse(url="/events/", status_code=303)
-

@@ -100,7 +100,6 @@ async def admins_page(request: Request, user=Depends(require_auth)):
     )
 
 
-
 @router.post("/")
 async def add_admin(request: Request, user=Depends(require_auth)):
     """Добавление нового администратора."""
@@ -116,7 +115,9 @@ async def add_admin(request: Request, user=Depends(require_auth)):
     vk_id: int = _parse_vk_id(form)
     full_name: str = sanitize_html(str(form.get("full_name", "")))
     raw_department_id = form.get("department_id")
-    department_id_raw: str | None = str(raw_department_id) if raw_department_id is not None else None
+    department_id_raw: str | None = (
+        str(raw_department_id) if raw_department_id is not None else None
+    )
     role: str = str(form.get("role", "admin"))
     username: str = sanitize_html(str(form.get("username", "")))
     password: str = str(form.get("password", ""))
@@ -185,8 +186,8 @@ def _validate_add_admin_form(form) -> str | None:
     if role not in ("admin", "superadmin"):
         return "Неизвестная роль администратора"
 
-    password: str = str(form.get("password", ""))
-    if len(password) < 8:
+    password: str = str(form.get("password", "")).strip()
+    if password and len(password) < 8:
         return "Пароль должен быть не короче 8 символов"
 
     return None
@@ -236,9 +237,7 @@ async def _create_admin_records(
         await session.commit()
 
     # Проверяем уникальность администратора
-    existing: Admin | None = await session.scalar(
-        select(Admin).where(Admin.user_id == db_user.id)
-    )
+    existing: Admin | None = await session.scalar(select(Admin).where(Admin.user_id == db_user.id))
     if existing:
         raise ValueError("Этот пользователь уже является админом")
 
@@ -252,13 +251,15 @@ async def _create_admin_records(
     session.add(admin)
     await session.flush()
 
-    session.add(WebUser(
-        username=username,
-        password_hash=password_hash,
-        role=web_role,
-        admin_id=admin.id,
-        department_id=selected_department_id,
-    ))
+    session.add(
+        WebUser(
+            username=username,
+            password_hash=password_hash,
+            role=web_role,
+            admin_id=admin.id,
+            department_id=selected_department_id,
+        )
+    )
 
     await session.commit()
 
@@ -299,9 +300,7 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
                     return RedirectResponse(url="/admin/admins/", status_code=302)
 
             # Находим и удаляем связанного WebUser по прямой ссылке admin_id
-            web_user = await session.scalar(
-                select(WebUser).where(WebUser.admin_id == admin.id)
-            )
+            web_user = await session.scalar(select(WebUser).where(WebUser.admin_id == admin.id))
             if web_user and user.get("web_user_id") != web_user.id:
                 await session.delete(web_user)
 
@@ -309,7 +308,7 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
             deletion_log = Log(
                 user_id=admin.user_id,
                 action="admin_deleted",
-                details=f"Удалён администратор id={admin_id}, роль={admin.role.value if admin.role else 'unknown'}, отдел={admin.department_id}"
+                details=f"Удалён администратор id={admin_id}, роль={admin.role.value if admin.role else 'unknown'}, отдел={admin.department_id}",
             )
             session.add(deletion_log)
 

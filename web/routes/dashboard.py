@@ -39,13 +39,9 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
 
             # Все статусы одним запросом: SELECT status, COUNT(*) GROUP BY status
             rows = await session.execute(
-                select(Ticket.status, func.count(Ticket.id))
-                .where(*scope)
-                .group_by(Ticket.status)
+                select(Ticket.status, func.count(Ticket.id)).where(*scope).group_by(Ticket.status)
             )
-            ticket_counts = {
-                status: count for status, count in rows.all() if status is not None
-            }
+            ticket_counts = {status: count for status, count in rows.all() if status is not None}
 
             # Последние заявки
             recent_stmt = (

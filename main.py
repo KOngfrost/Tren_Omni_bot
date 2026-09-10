@@ -2,7 +2,6 @@ import asyncio
 import logging
 import socket
 import sys
-import time
 
 import aiohttp
 from vkbottle.exception_factory.base_exceptions import VKAPIError
@@ -27,11 +26,16 @@ _scheduler_loop: asyncio.AbstractEventLoop | None = None
 _background_tasks: set[asyncio.Task] = set()
 
 
-def _spawn_background_task(coro) -> None:
-    """Создать фоновую задачу и удерживать ссылку на неё до завершения."""
-    task = asyncio.create_task(coro)
+def _track_background_task(task: asyncio.Task) -> asyncio.Task:
+    """Удерживать сильную ссылку на фоновую задачу до завершения."""
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+    return task
+
+
+def _spawn_background_task(coro) -> asyncio.Task:
+    """Создать фоновую задачу и удерживать ссылку на неё до завершения."""
+    return _track_background_task(asyncio.create_task(coro))
 
 
 def initialize_database() -> None:
@@ -61,11 +65,12 @@ async def _start_scheduler() -> None:
     _scheduler_started = True
     _scheduler_loop = current_loop
 
-    start_report_scheduler(vk_bot.api)
+    _track_background_task(start_report_scheduler(vk_bot.api))
     logger.info("Планировщик отчётов запущен")
 
     try:
         from core.ticket_service import sync_unassigned_ticket_departments
+
         await sync_unassigned_ticket_departments()
     except Exception as exc:
         logger.warning("Не удалось выполнить автопривязку отделов: %s", exc)
@@ -85,13 +90,13 @@ async def _start_scheduler() -> None:
     _spawn_background_task(_heartbeat_loop())
 
 
-def run_vk_polling() -> None:
+async def run_vk_polling() -> None:
     retry_delay = 5
 
     while True:
         try:
-            vk_bot.on_startup = [_start_scheduler()]
-            vk_bot.run()
+            await _start_scheduler()
+            await vk_bot.run_polling()
             logger.warning("VK polling stopped; retrying in %s seconds", retry_delay)
         except (aiohttp.ClientError, OSError, socket.gaierror, TimeoutError) as error:
             logger.error(
@@ -100,7 +105,7 @@ def run_vk_polling() -> None:
                 retry_delay,
             )
 
-        time.sleep(retry_delay)
+        await asyncio.sleep(retry_delay)
         retry_delay = min(retry_delay * 2, 300)
 
 
@@ -108,20 +113,21 @@ def run() -> None:
     try:
         settings.ensure_production_config()
         initialize_database()
-        run_vk_polling()
+        asyncio.run(run_vk_polling())
     except RuntimeError as error:
+        logger.error("Ошибка конфигурации: %s", error)
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)
         sys.exit(1)
     except VKAPIError as error:
         if "longpoll" in str(error).lower():
-            print(
+            msg = (
                 "VK Long Poll отключен. Включите его в настройках сообщества: "
-                "Управление сообществом > Работа с API > Long Poll API."
-            )
-            print(
+                "Управление сообществом > Работа с API > Long Poll API. "
                 "В разделе Long Poll API включите API и события сообщений, "
                 "затем проверьте права токена сообщества."
             )
+            logger.error(msg)
+            print(msg, file=sys.stderr)
             return
         raise
 

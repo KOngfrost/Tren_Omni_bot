@@ -41,16 +41,36 @@ async def db_session_maker(monkeypatch):
     используйте отдельные процессы (pytest-xdist) либо рефакторинг
     сервисов на явную передачу session-factory.
     """
+    from sqlalchemy import event
+
     engine = create_async_engine("sqlite+aiosqlite://")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_custom_lower(dbapi_con, con_record):
+        if hasattr(dbapi_con, "create_function"):
+            dbapi_con.create_function("lower", 1, lambda s: s.lower() if s is not None else None)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    import bots.vk.bot as vk_bot_module
+    import core.bot_core as bot_core_module
+    import web.routes.tickets as tickets_module
 
-    for module in (database_module, ticket_service_module, reporting_module, outbox_module):
+    for module in (
+        database_module,
+        ticket_service_module,
+        reporting_module,
+        outbox_module,
+        bot_core_module,
+        vk_bot_module,
+        tickets_module,
+    ):
         monkeypatch.setattr(module, "async_session_maker", maker, raising=True)
 
     yield maker
+
 
 @pytest.fixture
 def web_client(monkeypatch):
@@ -91,9 +111,17 @@ def web_client(monkeypatch):
 
     modules_to_patch = [database_module, ticket_service_module, reporting_module, outbox_module]
     for mod_name in (
-        "web.routes.tickets", "web.routes.dashboard", "web.routes.faq",
-        "web.routes.events", "web.routes.knowledge_base", "web.routes.departments",
-        "web.routes.api", "web.routes.logs", "web.routes.admin_panel",
+        "core.bot_core",
+        "web.routes.tickets",
+        "web.routes.dashboard",
+        "web.routes.faq",
+        "web.routes.events",
+        "web.routes.knowledge_base",
+        "web.routes.departments",
+        "web.routes.api",
+        "web.routes.logs",
+        "web.routes.admin_panel",
+        "web.routes.dept_frame",
     ):
         mod = __import__(mod_name, fromlist=["async_session_maker"])
         if hasattr(mod, "async_session_maker"):
@@ -111,5 +139,3 @@ def web_client(monkeypatch):
         yield client
 
     asyncio.run(engine.dispose())
-
-

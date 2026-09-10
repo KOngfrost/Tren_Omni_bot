@@ -54,7 +54,7 @@ class TestAdminLoginRestored:
         """Login page is accessible and contains CSRF token."""
         response = client.get("/auth/login")
         assert response.status_code == 200
-        assert 'csrf_token' in response.text
+        assert "csrf_token" in response.text
 
     def test_bootstrap_login_success(self, client, db_session_maker, monkeypatch):
         """Successful login with bootstrap credentials."""
@@ -92,7 +92,11 @@ class TestAdminLoginRestored:
         csrf_token = re.search(r'csrf_token" value="([^"]+)"', login_page.text).group(1)
         response = client.post(
             "/auth/login",
-            data={"username": "superadmin", "password": "SuperSecret123!", "csrf_token": csrf_token},
+            data={
+                "username": "superadmin",
+                "password": "SuperSecret123!",
+                "csrf_token": csrf_token,
+            },
             follow_redirects=False,
         )
         assert response.status_code == 303
@@ -204,6 +208,7 @@ class TestMiddlewareOrder:
         from starlette.middleware.sessions import SessionMiddleware
 
         from web.main import app
+
         middleware_classes = [m.cls if hasattr(m, "cls") else type(m) for m in app.user_middleware]
 
         session_idx = None

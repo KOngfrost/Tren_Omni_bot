@@ -34,9 +34,7 @@ async def create_or_update(
     disable: bool,
 ) -> None:
     async with async_session_maker() as session:
-        web_user = await session.scalar(
-            select(WebUser).where(WebUser.username == username)
-        )
+        web_user = await session.scalar(select(WebUser).where(WebUser.username == username))
 
         department_id = None
         if department_name:
@@ -71,7 +69,9 @@ async def create_or_update(
             action = "обновлён"
 
         await session.commit()
-        print(f"✅ Пользователь {username} {action}: роль {role.value}, активен: {web_user.is_active}")
+        print(
+            f"✅ Пользователь {username} {action}: роль {role.value}, активен: {web_user.is_active}"
+        )
 
 
 def main() -> None:

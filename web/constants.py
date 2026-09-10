@@ -15,6 +15,40 @@ STATUS_CHOICES = [
     (TicketStatus.COMPLETED.value, "Выполнено"),
 ]
 
+# Полный список статусов для фильтрации в реестре заявок
+TICKET_FILTER_CHOICES = [
+    (TicketStatus.NEW.value, "Новые"),
+    (TicketStatus.IN_PROGRESS.value, "В обработке"),
+    (TicketStatus.TRANSFERRED_ADMIN.value, "В администрации СГ"),
+    (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "В хозчасти"),
+    (TicketStatus.COMPLETED.value, "Выполнено"),
+    (TicketStatus.COMPLETED_AUTO.value, "Выполнено (авто)"),
+    (TicketStatus.ANONYMOUS.value, "Анонимные"),
+]
+
+
+def resolve_ticket_status(val: str | None) -> TicketStatus | None:
+    """Универсальное разрешение статуса заявки из любых входных данных."""
+    if not val or not str(val).strip():
+        return None
+    cleaned = str(val).strip()
+    # 1. По точному значению (на русском: "В обработке", "Новое", "Выполнено" и т.п.)
+    try:
+        return TicketStatus(cleaned)
+    except ValueError:
+        pass
+    # 2. По имени enum (на англ: "IN_PROGRESS", "NEW", "COMPLETED_AUTO", "ANONYMOUS")
+    try:
+        return TicketStatus[cleaned.upper()]
+    except KeyError:
+        pass
+    # 3. Регистронезависимо по имени или значению
+    for member in TicketStatus:
+        if member.name.lower() == cleaned.lower() or member.value.lower() == cleaned.lower():
+            return member
+    return None
+
+
 # CSS-класс бейджа для каждого статуса заявки (фильтр status_badge).
 STATUS_BADGE_CLASS = {
     TicketStatus.NEW: "badge-new",

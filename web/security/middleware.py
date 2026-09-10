@@ -85,6 +85,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 # === Rate Limiting ===
 
+
 class RateLimiter:
     """Простой rate limiter на основе sliding window (in-memory).
 
@@ -102,9 +103,7 @@ class RateLimiter:
         window_start = now - self.window_seconds
 
         # Очищаем старые записи
-        self.requests[key] = [
-            t for t in self.requests[key] if t > window_start
-        ]
+        self.requests[key] = [t for t in self.requests[key] if t > window_start]
 
         if len(self.requests[key]) >= self.max_requests:
             return False
@@ -164,9 +163,7 @@ class DBRateLimiter:
                     f"SELECT COUNT(*) FROM {self.table_name} "
                     f"WHERE ip = :ip AND attempted_at >= :cutoff"
                 )
-                count_result = await session.execute(
-                    count_stmt, {"ip": ip, "cutoff": cutoff}
-                )
+                count_result = await session.execute(count_stmt, {"ip": ip, "cutoff": cutoff})
                 count = int(count_result.scalar() or 0)
 
                 if count >= self.max_requests:
@@ -174,8 +171,7 @@ class DBRateLimiter:
 
                 # Записать новую попытку
                 insert_stmt = text(
-                    f"INSERT INTO {self.table_name} (ip, attempted_at) "
-                    f"VALUES (:ip, NOW())"
+                    f"INSERT INTO {self.table_name} (ip, attempted_at) VALUES (:ip, NOW())"
                 )
                 await session.execute(insert_stmt, {"ip": ip})
 
@@ -185,7 +181,10 @@ class DBRateLimiter:
         except Exception:
             # При ошибке БД — мягко деградируем: не блокируем, но и не считаем
             # Это лучше, чем 500 для пользователя
-            logger.warning("DBRateLimiter: ошибка при проверке лимита (таблица %s может отсутствовать)", self.table_name)
+            logger.warning(
+                "DBRateLimiter: ошибка при проверке лимита (таблица %s может отсутствовать)",
+                self.table_name,
+            )
             return True
 
 
@@ -254,14 +253,14 @@ def _html_escape(value: str) -> str:
 # === CSV Injection защита ===
 
 _CSV_INJECTION_PATTERNS = [
-    r'^[=+\-@]',          # Начинается с =, +, -, @
-    r'\b(CMD\|)',         # CMD|
-    r'\b(SHELL\|)',       # SHELL|
-    r'\b(IMPORT\|)',      # IMPORT|
-    r'\b(PICKLIST\|)',    # PICKLIST|
-    r'\b(DATATABLE\|)',   # DATATABLE|
-    r'!A\d',              # Ссылки на ячейки
-    r'`.*`',              # Backtick-инъекции
+    r"^[=+\-@]",  # Начинается с =, +, -, @
+    r"\b(CMD\|)",  # CMD|
+    r"\b(SHELL\|)",  # SHELL|
+    r"\b(IMPORT\|)",  # IMPORT|
+    r"\b(PICKLIST\|)",  # PICKLIST|
+    r"\b(DATATABLE\|)",  # DATATABLE|
+    r"!A\d",  # Ссылки на ячейки
+    r"`.*`",  # Backtick-инъекции
 ]
 
 
@@ -274,6 +273,7 @@ def sanitize_csv_field(value: str) -> str:
         return ""
 
     import re
+
     value = str(value)
 
     # Проверяем паттерны инъекций
@@ -298,7 +298,7 @@ def escape_for_csv(value: str) -> str:
     value = value.replace('"', '""')
 
     # Проверяем, нужно ли оборачивать в кавычки
-    if ',' in value or '"' in value or '\n' in value or '\r' in value:
+    if "," in value or '"' in value or "\n" in value or "\r" in value:
         value = f'"{value}"'
 
     return value
@@ -307,6 +307,7 @@ def escape_for_csv(value: str) -> str:
 # === Инжект отделов пользователя ===
 
 # === Валидация размера запроса ===
+
 
 class RequestSizeValidator:
     """Валидатор размера запроса."""

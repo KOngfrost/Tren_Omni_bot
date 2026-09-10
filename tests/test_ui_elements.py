@@ -48,12 +48,21 @@ def client(monkeypatch):
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     modules_to_patch = [
-        database_module, ticket_service_module, reporting_module, outbox_module,
+        database_module,
+        ticket_service_module,
+        reporting_module,
+        outbox_module,
     ]
     for mod_name in (
-        "web.routes.tickets", "web.routes.dashboard", "web.routes.faq",
-        "web.routes.events", "web.routes.knowledge_base", "web.routes.departments",
-        "web.routes.api", "web.routes.logs", "web.routes.admin_panel",
+        "web.routes.tickets",
+        "web.routes.dashboard",
+        "web.routes.faq",
+        "web.routes.events",
+        "web.routes.knowledge_base",
+        "web.routes.departments",
+        "web.routes.api",
+        "web.routes.logs",
+        "web.routes.admin_panel",
     ):
         mod = __import__(mod_name, fromlist=["async_session_maker"])
         if hasattr(mod, "async_session_maker"):
@@ -69,6 +78,7 @@ def client(monkeypatch):
     monkeypatch.setattr("web.routes.auth.settings.VK_REPORT_ADMIN_ID", 0)
 
     from web.main import app
+
     yield TestClient(app, raise_server_exceptions=False)
 
     asyncio.run(engine.dispose())
@@ -97,6 +107,7 @@ def _get_session_cookie(client):
 # ==========================================
 # A.1 Кнопки и навигация — страница логина
 # ==========================================
+
 
 class TestLoginPageUI:
     """A.1 — Проверка кнопок и форм на странице логина."""
@@ -144,6 +155,7 @@ class TestLoginPageUI:
 # A.1 Кнопки и навигация — боковая панель
 # ==========================================
 
+
 class TestSidebarNavigation:
     """A.1 — Проверка навигационных ссылок в боковой панели."""
 
@@ -153,11 +165,11 @@ class TestSidebarNavigation:
         assert _get_session_cookie(client) is not None, "Session cookie not found after login"
         resp = client.get("/")
         assert resp.status_code == 200
-        assert '/tickets/' in resp.text
-        assert '/knowledge/' in resp.text
-        assert '/faq/' in resp.text
-        assert '/events/' in resp.text
-        assert '/logs/' in resp.text
+        assert "/tickets/" in resp.text
+        assert "/knowledge/" in resp.text
+        assert "/faq/" in resp.text
+        assert "/events/" in resp.text
+        assert "/logs/" in resp.text
 
     def test_logout_button_present_in_sidebar(self, client):
         """Кнопка «Выйти» отображается в боковой панели."""
@@ -178,7 +190,11 @@ class TestSidebarNavigation:
         csrf_token = re.search(r'name="csrf_token" value="([^"]+)"', login_page.text).group(1)
         response = client.post(
             "/auth/login",
-            data={"username": "testadmin", "password": "test_password_123", "csrf_token": csrf_token},
+            data={
+                "username": "testadmin",
+                "password": "test_password_123",
+                "csrf_token": csrf_token,
+            },
             follow_redirects=False,
         )
         assert response.status_code == 303
@@ -186,9 +202,28 @@ class TestSidebarNavigation:
         assert location == "/"
         assert "session=" in response.headers.get("set-cookie", "")
 
+    def test_menu_toggle_button_and_backdrop_present(self, client):
+        """Кнопка открытия меню и бэкдроп присутствуют в шаблоне."""
+        _login(client)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'id="menu-toggle-btn"' in resp.text
+        assert "mobile-nav-toggle" in resp.text
+        assert 'id="mobile-backdrop"' in resp.text
+        assert 'id="sidebar-close-btn"' in resp.text
+
+    def test_css_does_not_hide_menu_toggle(self, client):
+        """CSS не содержит глобальных правил display: none для кнопки меню и бэкдропа."""
+        resp = client.get("/static/style.css")
+        assert resp.status_code == 200
+        assert not re.search(r"\.mobile-nav-toggle[^}]*display:\s*none", resp.text)
+        assert not re.search(r"\.mobile-menu-backdrop[^}]*display:\s*none", resp.text)
+
+
 # ==========================================
 # A.1 Кнопки и навигация — страницы модулей
 # ==========================================
+
 
 class TestDashboardButtons:
     """A.1 — Проверка кнопок на странице дашборда."""

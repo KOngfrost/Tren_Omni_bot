@@ -54,9 +54,7 @@ def _db_query(web_client, sql, params=()):
     """Прямой SELECT к shared in-memory БД теста (stdlib sqlite3)."""
     import sqlite3
 
-    conn = sqlite3.connect(
-        f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True
-    )
+    conn = sqlite3.connect(f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True)
     try:
         cur = conn.execute(sql, params)
         return cur.fetchall()
@@ -68,9 +66,7 @@ def _db_execute(web_client, sql, params=()):
     """Прямой INSERT/UPDATE к shared in-memory БД теста."""
     import sqlite3
 
-    conn = sqlite3.connect(
-        f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True
-    )
+    conn = sqlite3.connect(f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True)
     try:
         conn.execute(sql, params)
         conn.commit()
@@ -88,6 +84,7 @@ def _seed_department(web_client, name):
 # ==========================================
 # A.2 — Валидация формы создания отдела (/departments/create)
 # ==========================================
+
 
 class TestDepartmentFormValidation:
     """A.2 — Обязательные поля и граничные значения для отделов."""
@@ -178,6 +175,7 @@ class TestDepartmentFormValidation:
 # A.2 — Валидация FAQ (/faq/)
 # ==========================================
 
+
 class TestFAQFormValidation:
     """A.2 — Обязательные поля FAQ и XSS-санитизация."""
 
@@ -186,7 +184,8 @@ class TestFAQFormValidation:
         _login(web_client)
         csrf = _page_csrf(web_client, "/faq/")
         resp = _post_form(
-            web_client, "/faq/",
+            web_client,
+            "/faq/",
             {"department_id": "", "question": ""},
             csrf,
         )
@@ -201,7 +200,8 @@ class TestFAQFormValidation:
 
         csrf = _page_csrf(web_client, "/faq/")
         resp = _post_form(
-            web_client, "/faq/",
+            web_client,
+            "/faq/",
             {
                 "department_id": str(dept_id),
                 "question": "Как получить справку?",
@@ -220,9 +220,10 @@ class TestFAQFormValidation:
         dept_id = _seed_department(web_client, "Информ")
 
         csrf = _page_csrf(web_client, "/faq/")
-        xss = '<img src=x onerror=alert(1)>Как заселиться?'
+        xss = "<img src=x onerror=alert(1)>Как заселиться?"
         resp = _post_form(
-            web_client, "/faq/",
+            web_client,
+            "/faq/",
             {"department_id": str(dept_id), "question": xss},
             csrf,
         )
@@ -239,6 +240,7 @@ class TestFAQFormValidation:
 # A.2 — Валидация событий (/events/)
 # ==========================================
 
+
 class TestEventFormValidation:
     """A.2 — Обязательные поля и корректность даты события."""
 
@@ -247,7 +249,8 @@ class TestEventFormValidation:
         _login(web_client)
         csrf = _page_csrf(web_client, "/events/")
         resp = _post_form(
-            web_client, "/events/",
+            web_client,
+            "/events/",
             {"title": "", "event_date": "2026-10-01T10:30"},
             csrf,
         )
@@ -262,7 +265,8 @@ class TestEventFormValidation:
 
         csrf = _page_csrf(web_client, "/events/")
         resp = _post_form(
-            web_client, "/events/",
+            web_client,
+            "/events/",
             {
                 "department_id": str(dept_id),
                 "title": "День открытых дверей",
@@ -280,9 +284,10 @@ class TestEventFormValidation:
         dept_id = _seed_department(web_client, "Культмасс")
 
         csrf = _page_csrf(web_client, "/events/")
-        xss = '<script>alert(1)</script>Концерт'
+        xss = "<script>alert(1)</script>Концерт"
         resp = _post_form(
-            web_client, "/events/",
+            web_client,
+            "/events/",
             {
                 "department_id": str(dept_id),
                 "title": xss,
@@ -303,6 +308,7 @@ class TestEventFormValidation:
 # A.2 — Валидация базы знаний (/knowledge/)
 # ==========================================
 
+
 class TestKnowledgeBaseFormValidation:
     """A.2 — Обязательные поля и санитизация базы знаний."""
 
@@ -312,10 +318,15 @@ class TestKnowledgeBaseFormValidation:
         dept_id = _seed_department(web_client, "Жилбыт")
 
         csrf = _page_csrf(web_client, "/knowledge/")
-        xss_keywords = '<script>alert(1)</script>кран'
+        xss_keywords = "<script>alert(1)</script>кран"
         resp = _post_form(
-            web_client, "/knowledge/",
-            {"department_id": str(dept_id), "keywords": xss_keywords, "answer": "Звоните в Жилбыт"},
+            web_client,
+            "/knowledge/",
+            {
+                "department_id": str(dept_id),
+                "keywords": xss_keywords,
+                "answer": "Звоните в Жилбыт",
+            },
             csrf,
         )
         assert resp.status_code == 303
@@ -333,7 +344,8 @@ class TestKnowledgeBaseFormValidation:
 
         csrf = _page_csrf(web_client, "/knowledge/")
         resp = _post_form(
-            web_client, "/knowledge/",
+            web_client,
+            "/knowledge/",
             {"department_id": str(dept_id), "keywords": "", "answer": ""},
             csrf,
         )

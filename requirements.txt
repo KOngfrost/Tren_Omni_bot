@@ -20,7 +20,3 @@ argon2-cffi==23.1.0
 bleach==6.4.0
 # Асинхронный SMTP для отправки отчётов (core/reporting.py)
 aiosmtplib==4.0.0
-aiosqlite==0.21.0
-
-
-

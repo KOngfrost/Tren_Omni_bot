@@ -49,5 +49,23 @@
             </tbody>
         </table>
     </div>
+
+    {% if total_pages and total_pages > 1 %}
+    <div class="pagination">
+        {% if current_page > 1 %}
+        <a href="?page={{ current_page - 1 }}" class="pagination-btn">‹ Назад</a>
+        {% else %}
+        <span class="pagination-btn disabled">‹ Назад</span>
+        {% endif %}
+
+        <span class="pagination-info">Страница {{ current_page }} из {{ total_pages }} (всего записей: {{ total_logs }})</span>
+
+        {% if current_page < total_pages %}
+        <a href="?page={{ current_page + 1 }}" class="pagination-btn">Вперёд ›</a>
+        {% else %}
+        <span class="pagination-btn disabled">Вперёд ›</span>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

@@ -11,29 +11,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from core.config import settings
 from core.models import WebRole, WebUser
 from web.security.passwords import hash_password
 
 
 async def main():
-    # Подключаемся через Docker
-    db_url = (
-        "postgresql+asyncpg://oss_bot:"
-        "@db:5432/oss_bot"
-    )
-
-    # Читаем пароль из .env
-    import os
-
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    postgres_pass = os.getenv("POSTGRES_PASSWORD", "")
-
-    db_url = (
-        f"postgresql+asyncpg://oss_bot:{postgres_pass}"
-        f"@db:5432/oss_bot"
-    )
+    db_url = settings.database_url
+    if not db_url:
+        print("Ошибка: параметры подключения к базе данных не настроены в .env")
+        return
 
     print("=" * 60)
     print("Проверка подключения к БД через Docker")
@@ -89,7 +76,7 @@ async def main():
             print("=" * 60)
             choice = input("Сбросить пароли всех пользователей? (y/n): ").strip().lower()
 
-            if choice == 'y':
+            if choice == "y":
                 password = getpass.getpass("\nВведите новый пароль: ")
                 if len(password) < 8:
                     print("❌ Пароль должен быть не короче 8 символов!")
@@ -106,6 +93,7 @@ async def main():
     except Exception as e:
         print(f"❌ Ошибка: {e}")
         import traceback
+
         traceback.print_exc()
 
 

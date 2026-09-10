@@ -12,11 +12,11 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Ticket, TicketStatus, User
+from core.models import Department, Ticket, User
 from core.ticket_service import (
     StatusTransitionError,
     assign_ticket_department,
@@ -24,7 +24,7 @@ from core.ticket_service import (
     get_ticket_messages,
     reply_to_ticket,
 )
-from web.constants import STATUS_CHOICES
+from web.constants import STATUS_CHOICES, TICKET_FILTER_CHOICES, resolve_ticket_status
 from web.dependencies import (
     get_admin_scope,
     get_departments_for_user,
@@ -41,63 +41,128 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _build_ticket_search_filter(clean_q: str):
+    """Полнотекстовый гибкий поиск по словам, фразе, номеру, автору и отделу."""
+    terms = [t for t in clean_q.split() if t]
+    term_conditions = []
+    for term in terms:
+        term_lower = term.lower()
+        term_clean_num = term.lstrip("#").lstrip("№").strip()
+        conds = [
+            func.lower(Ticket.topic).like(f"%{term_lower}%"),
+            Ticket.topic.ilike(f"%{term}%"),
+            func.lower(Ticket.description).like(f"%{term_lower}%"),
+            Ticket.description.ilike(f"%{term}%"),
+            func.lower(Ticket.response_text).like(f"%{term_lower}%"),
+            Ticket.response_text.ilike(f"%{term}%"),
+            func.lower(User.full_name).like(f"%{term_lower}%"),
+            User.full_name.ilike(f"%{term}%"),
+            cast(User.vk_id, String).like(f"%{term}%"),
+            func.lower(Department.name).like(f"%{term_lower}%"),
+            Department.name.ilike(f"%{term}%"),
+        ]
+        if term_clean_num.isdigit():
+            conds.append(Ticket.id == int(term_clean_num))
+        term_conditions.append(or_(*conds))
+
+    if len(terms) > 1:
+        phrase_lower = clean_q.lower()
+        phrase_clean_num = clean_q.lstrip("#").lstrip("№").strip()
+        phrase_conds = [
+            func.lower(Ticket.topic).like(f"%{phrase_lower}%"),
+            Ticket.topic.ilike(f"%{clean_q}%"),
+            func.lower(Ticket.description).like(f"%{phrase_lower}%"),
+            Ticket.description.ilike(f"%{clean_q}%"),
+            func.lower(Ticket.response_text).like(f"%{phrase_lower}%"),
+            Ticket.response_text.ilike(f"%{clean_q}%"),
+            func.lower(User.full_name).like(f"%{phrase_lower}%"),
+            User.full_name.ilike(f"%{clean_q}%"),
+            func.lower(Department.name).like(f"%{phrase_lower}%"),
+            Department.name.ilike(f"%{clean_q}%"),
+        ]
+        if phrase_clean_num.isdigit():
+            phrase_conds.append(Ticket.id == int(phrase_clean_num))
+        return or_(and_(*term_conditions), or_(*phrase_conds))
+    if term_conditions:
+        return term_conditions[0]
+    return None
+
+
 @router.get("/")
 async def tickets_page(
     request: Request,
-    page: int = 1,
-    page_size: int = 25,
+    page: str | int = 1,
+    page_size: str | int = 25,
     q: str = "",
     status: str = "",
-    department_id: int | None = None,
+    department_id: str | None = None,
     user: dict = Depends(require_auth),
 ):
-    """Страница заявок с IDOR-защитой и пагинацией."""
+    """Страница заявок с IDOR-защитой, поиском и пагинацией."""
     tickets: list[Ticket] = []
     departments: list = []
     db_error: bool = False
     total: int = 0
-    current_page: int = max(1, page)
-    page_size = min(max(1, page_size), 100)
-    offset: int = (current_page - 1) * page_size
+
+    # Безопасный парсинг числовых параметров (защита от 422 при пустых строках в HTML-форме)
+    try:
+        current_page = max(1, int(page))
+    except (ValueError, TypeError):
+        current_page = 1
+
+    try:
+        clean_page_size = min(max(1, int(page_size)), 100)
+    except (ValueError, TypeError):
+        clean_page_size = 25
+
+    offset: int = (current_page - 1) * clean_page_size
     total_pages: int = 1
+
+    dept_filter_id: int | None = None
+    if department_id is not None and str(department_id).strip().isdigit():
+        dept_filter_id = int(str(department_id).strip())
+
+    resolved_status = resolve_ticket_status(status)
 
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
 
-            count_stmt = select(func.count(Ticket.id)).outerjoin(User, Ticket.user_id == User.id)
+            count_stmt = (
+                select(func.count(Ticket.id))
+                .outerjoin(User, Ticket.user_id == User.id)
+                .outerjoin(Department, Ticket.department_id == Department.id)
+            )
             filters: list = []
+
+            # IDOR разграничение
             if not is_super:
                 filters.append(Ticket.department_id == dept_id)
-            elif department_id is not None:
-                filters.append(Ticket.department_id == department_id)
-            if q.strip():
-                clean_q = q.strip()
-                clean_num = clean_q.lstrip("#").strip()
-                search_conds = [
-                    Ticket.topic.ilike(f"%{clean_q}%"),
-                    Ticket.description.ilike(f"%{clean_q}%"),
-                    User.full_name.ilike(f"%{clean_q}%"),
-                    cast(User.vk_id, String).ilike(f"%{clean_q}%"),
-                ]
-                if clean_num.isdigit():
-                    search_conds.append(Ticket.id == int(clean_num))
-                filters.append(or_(*search_conds))
-            if status:
-                try:
-                    filters.append(Ticket.status == TicketStatus(status))
-                except ValueError:
-                    status = ""
+            elif dept_filter_id is not None:
+                filters.append(Ticket.department_id == dept_filter_id)
+
+            # Фильтр по статусу
+            if resolved_status is not None:
+                filters.append(Ticket.status == resolved_status)
+
+            # Полнотекстовый гибкий поиск
+            clean_q = q.strip()
+            if clean_q:
+                search_filter = _build_ticket_search_filter(clean_q)
+                if search_filter is not None:
+                    filters.append(search_filter)
+
             count_stmt = count_stmt.where(*filters)
             total = int((await session.scalar(count_stmt)) or 0)
 
             stmt = (
                 select(Ticket)
                 .outerjoin(User, Ticket.user_id == User.id)
+                .outerjoin(Department, Ticket.department_id == Department.id)
                 .options(selectinload(Ticket.user), selectinload(Ticket.department))
                 .order_by(Ticket.created_at.desc())
                 .offset(offset)
-                .limit(page_size)
+                .limit(clean_page_size)
             )
             stmt = stmt.where(*filters)
             tickets = list((await session.scalars(stmt)).all())
@@ -107,7 +172,7 @@ async def tickets_page(
         db_error = True
         logger.error("Не удалось загрузить заявки: %s", e)
 
-    total_pages = max(1, (total + page_size - 1) // page_size if total > 0 else 1)
+    total_pages = max(1, (total + clean_page_size - 1) // clean_page_size if total > 0 else 1)
 
     return templates.TemplateResponse(
         "tickets.html",
@@ -117,6 +182,7 @@ async def tickets_page(
             "tickets": tickets,
             "departments": departments,
             "status_choices": STATUS_CHOICES,
+            "filter_status_choices": TICKET_FILTER_CHOICES,
             "db_error": db_error,
             "active": "tickets",
             "flash_success": request.session.pop("flash_success", None),
@@ -125,10 +191,10 @@ async def tickets_page(
             "current_page": current_page,
             "total_pages": total_pages,
             "total_tickets": total,
-            "page_size": page_size,
+            "page_size": clean_page_size,
             "query": q,
-            "selected_status": status,
-            "selected_department": department_id,
+            "selected_status": resolved_status.value if resolved_status else "",
+            "selected_department": dept_filter_id,
             "session_id": request.state.session_id,
         },
     )
@@ -170,7 +236,13 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
         "id": ticket.id,
         "topic": ticket.topic,
         "description": ticket.description,
-        "status": {"value": ticket.status.value if ticket.status else ""},
+        "status": {
+            "value": (
+                ticket.status.value
+                if hasattr(ticket.status, "value")
+                else (str(ticket.status) if ticket.status else "")
+            )
+        },
         "is_anonymous": ticket.is_anonymous,
         "auto_closed": ticket.auto_closed,
         "response_text": ticket.response_text,
@@ -178,13 +250,21 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
         "user": {
             "full_name": ticket.user.full_name if ticket.user else None,
             "dormitory": ticket.user.dormitory if ticket.user else None,
-        } if ticket.user else None,
+        }
+        if ticket.user
+        else None,
         "department": {
             "name": ticket.department.name if ticket.department else None,
-        } if ticket.department else None,
+        }
+        if ticket.department
+        else None,
         "messages": [
             {
-                "author_type": m.author_type.value if m.author_type else None,
+                "author_type": (
+                    m.author_type.value
+                    if hasattr(m.author_type, "value")
+                    else (str(m.author_type) if m.author_type else None)
+                ),
                 "message": m.message,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
@@ -230,7 +310,9 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
 
 
 @router.post("/{ticket_id}/status")
-async def set_ticket_status(ticket_id: int, request: Request, user: dict = Depends(require_writer)):
+async def set_ticket_status(
+    ticket_id: int, request: Request, user: dict = Depends(require_writer)
+):
     """Смена статуса заявки с валидацией переходов.
 
     Безопасность:
@@ -243,10 +325,9 @@ async def set_ticket_status(ticket_id: int, request: Request, user: dict = Depen
     form = await request.form()
     new_status_raw: str = str(form.get("status", ""))
 
-    try:
-        new_status = TicketStatus(new_status_raw)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Неизвестный статус") from None
+    new_status = resolve_ticket_status(new_status_raw)
+    if new_status is None:
+        raise HTTPException(status_code=400, detail="Неизвестный статус")
 
     await _load_ticket_for_user(ticket_id, user)
 
@@ -268,7 +349,9 @@ async def set_ticket_status(ticket_id: int, request: Request, user: dict = Depen
 
 
 @router.post("/{ticket_id}/assign")
-async def assign_ticket(ticket_id: int, request: Request, user: dict = Depends(require_superadmin)):
+async def assign_ticket(
+    ticket_id: int, request: Request, user: dict = Depends(require_superadmin)
+):
     """Передача заявки другому отделу (только суперадмин).
 
     Безопасность:

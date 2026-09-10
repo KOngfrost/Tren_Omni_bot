@@ -60,8 +60,11 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>Последние заявки отдела</h2>
-                <a href="/tickets/?department_id={{ department.id }}" class="btn btn-secondary btn-small">Все заявки →</a>
+                <div>
+                    <h2>Последние заявки отдела</h2>
+                    <div class="page-desc">Обращения студентов, направленные в данный отдел</div>
+                </div>
+                <a href="/tickets/?department_id={{ department.id }}" class="btn btn-secondary btn-small">Все заявки отдела →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -89,8 +92,11 @@
     <section class="tab-panel" data-tab-panel="kb">
         <div class="card">
             <div class="card-header">
-                <h2>База знаний отдела</h2>
-                <a href="/knowledge/" class="btn btn-secondary btn-small">Управлять →</a>
+                <div>
+                    <h2>База знаний отдела</h2>
+                    <div class="page-desc">Шаблоны быстрых ответов бота по ключевым словам</div>
+                </div>
+                <a href="/knowledge/" class="btn btn-secondary btn-small">Управлять базой знаний →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -115,8 +121,11 @@
     <section class="tab-panel" data-tab-panel="faq">
         <div class="card">
             <div class="card-header">
-                <h2>FAQ отдела</h2>
-                <a href="/faq/" class="btn btn-secondary btn-small">Управлять →</a>
+                <div>
+                    <h2>FAQ отдела</h2>
+                    <div class="page-desc">Древовидная структура частых вопросов и ответов</div>
+                </div>
+                <a href="/faq/" class="btn btn-secondary btn-small">Управлять FAQ →</a>
             </div>
             <div class="faq-list">
                 {% for node in faq_items %}
@@ -136,9 +145,7 @@
                     {% endif %}
                 </div>
                 {% else %}
-                <div class="faq-item">
-                    <div class="faq-question"><span>Элементов FAQ в отделе пока нет</span></div>
-                </div>
+                <div class="empty-state">Элементов FAQ в отделе пока нет</div>
                 {% endfor %}
             </div>
         </div>
@@ -148,8 +155,11 @@
     <section class="tab-panel" data-tab-panel="events">
         <div class="card">
             <div class="card-header">
-                <h2>События отдела</h2>
-                <a href="/events/" class="btn btn-secondary btn-small">Управлять →</a>
+                <div>
+                    <h2>События отдела</h2>
+                    <div class="page-desc">Мероприятия и записи на них в рамках отдела</div>
+                </div>
+                <a href="/events/" class="btn btn-secondary btn-small">Управлять событиями →</a>
             </div>
             <div class="table-container">
                 <table>

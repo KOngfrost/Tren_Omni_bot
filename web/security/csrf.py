@@ -70,7 +70,10 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if "application/json" in content_type:
             return await self._token_from_json(request)
 
-        if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        if (
+            "multipart/form-data" in content_type
+            or "application/x-www-form-urlencoded" in content_type
+        ):
             if "application/x-www-form-urlencoded" in content_type:
                 return await self._token_from_raw_form(request)
             try:

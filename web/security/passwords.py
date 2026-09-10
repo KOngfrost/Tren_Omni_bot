@@ -16,14 +16,15 @@ import secrets
 try:
     from argon2 import PasswordHasher, Type
     from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+
     HAS_ARGON2 = True
     _argon2_ph = PasswordHasher(
-        time_cost=3,        # количество итераций
+        time_cost=3,  # количество итераций
         memory_cost=65536,  # 64 MB памяти
-        parallelism=4,      # количество потоков
-        hash_len=32,        # длина хеша (32 байта = 256 бит)
-        salt_len=16,        # длина соли (16 байт = 128 бит)
-        type=Type.ID,        # Argon2id — гибридная версия
+        parallelism=4,  # количество потоков
+        hash_len=32,  # длина хеша (32 байта = 256 бит)
+        salt_len=16,  # длина соли (16 байт = 128 бит)
+        type=Type.ID,  # Argon2id — гибридная версия
     )
     ALGORITHM = "argon2"
 except ImportError:
@@ -76,9 +77,7 @@ def verify_password(password: str, stored: str | None) -> bool:
                 salt.encode("utf-8"),
                 int(iterations),
             )
-            return secrets.compare_digest(
-                base64.b64encode(digest).decode("ascii"), expected
-            )
+            return secrets.compare_digest(base64.b64encode(digest).decode("ascii"), expected)
 
         return False
     except (ValueError, TypeError):

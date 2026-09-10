@@ -50,9 +50,7 @@ def _post_form(web_client, path, data, csrf_token=None):
 def _db_query(web_client, sql, params=()):
     import sqlite3
 
-    conn = sqlite3.connect(
-        f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True
-    )
+    conn = sqlite3.connect(f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True)
     try:
         return conn.execute(sql, params).fetchall()
     finally:
@@ -67,9 +65,7 @@ def _seed_department(web_client, name):
 def _db_execute(web_client, sql, params=()):
     import sqlite3
 
-    conn = sqlite3.connect(
-        f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True
-    )
+    conn = sqlite3.connect(f"file:{web_client._test_db_name}?mode=memory&cache=shared", uri=True)
     try:
         conn.execute(sql, params)
         conn.commit()
@@ -80,6 +76,7 @@ def _db_execute(web_client, sql, params=()):
 # ==========================================
 # B.1 — Полный путь: авторизация → дашборд → CRUD → выход
 # ==========================================
+
 
 class TestFullUserPathWebPanel:
     """B.1 — Сквозной пользовательский путь через веб-панель."""
@@ -112,27 +109,28 @@ class TestFullUserPathWebPanel:
 
         # Создание
         csrf = _page_csrf(web_client, "/departments/")
-        resp = _post_form(
-            web_client, "/departments/create", {"name": "Тестовый отдел"}, csrf
-        )
+        resp = _post_form(web_client, "/departments/create", {"name": "Тестовый отдел"}, csrf)
         assert resp.status_code == 303
+
+
 def test_logout_works(web_client):
-        """Шаг 6: выход из системы инвалидирует сессию."""
-        _login(web_client)
-        csrf = _page_csrf(web_client, "/")  # logout form есть в base.html sidebar
-        resp = web_client.post(
-            "/auth/logout",
-            data={"csrf_token": csrf},
-            follow_redirects=False,
-        )
-        assert resp.status_code in (302, 303)
-        # После выхода — редирект на логин
-        assert "/auth/login" in resp.headers.get("location", "")
+    """Шаг 6: выход из системы инвалидирует сессию."""
+    _login(web_client)
+    csrf = _page_csrf(web_client, "/")  # logout form есть в base.html sidebar
+    resp = web_client.post(
+        "/auth/logout",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert resp.status_code in (302, 303)
+    # После выхода — редирект на логин
+    assert "/auth/login" in resp.headers.get("location", "")
 
 
 # ==========================================
 # B.1 — Бизнес-путь заявки (через core-сервисы)
 # ==========================================
+
 
 class TestTicketLifecycle:
     """B.1 — Полный жизненный цикл заявки через core ticket_service."""
@@ -153,6 +151,7 @@ class TestTicketLifecycle:
     def test_invalid_transition_blocked(self):
         """Обратный переход COMPLETED → NEW запрещён."""
         from core.ticket_service import can_transition
+
         assert not can_transition(TicketStatus.COMPLETED, TicketStatus.NEW)
         assert not can_transition(TicketStatus.COMPLETED_AUTO, TicketStatus.NEW)
 
@@ -209,6 +208,14 @@ class TestTicketLifecycle:
     def test_navigation_to_all_sections(self, web_client):
         """Навигация: все разделы отображаются без ошибок."""
         _login(web_client)
-        for path in ("/", "/tickets/", "/faq/", "/events/", "/knowledge/", "/departments/", "/admin/admins/"):
+        for path in (
+            "/",
+            "/tickets/",
+            "/faq/",
+            "/events/",
+            "/knowledge/",
+            "/departments/",
+            "/admin/admins/",
+        ):
             page = web_client.get(path)
             assert page.status_code == 200, f"Failed: {path}"
