@@ -480,6 +480,7 @@ from web.routes import (
     knowledge_base,
     logs,
     tickets,
+    vk_callback,
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -494,6 +495,7 @@ app.include_router(dept_frame.router, prefix="/dept", tags=["dept_frame"])
 app.include_router(departments.router, prefix="/departments", tags=["departments"])
 app.include_router(api_v1.router, prefix="/api", tags=["api_v1"])
 app.include_router(api.router, prefix="/api", tags=["api"])
+app.include_router(vk_callback.router)
 
 
 # Healthcheck для мониторинга и docker healthcheck

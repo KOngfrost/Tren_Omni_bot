@@ -22,12 +22,20 @@ from starlette.responses import JSONResponse
 CSRF_SESSION_KEY = "csrf_token"
 CSRF_HEADER_NAME = "x-csrf-token"
 CSRF_FORM_FIELD = "csrf_token"
+CSRF_EXEMPT_PATHS = (
+    "/api/v1/vk/callback",
+    "/webhooks/vk",
+)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Middleware для генерации CSRF-токена и проверки изменяющих запросов."""
 
     async def dispatch(self, request: Request, call_next):
+        # Внешние вебхуки авторизуются по своим сигнатурам/токенам
+        if request.url.path in CSRF_EXEMPT_PATHS:
+            return await call_next(request)
+
         # GET/HEAD/OPTIONS — генерируем токен, если его нет в сессии
         if request.method in ("GET", "HEAD", "OPTIONS"):
             if CSRF_SESSION_KEY not in request.session:

@@ -64,6 +64,10 @@ class Settings:
     DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
     DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "1800"))
     DB_POOL_PRE_PING = os.getenv("DB_POOL_PRE_PING", "true").lower() in ("1", "true", "yes")
+    DB_USE_PGBOUNCER = os.getenv("DB_USE_PGBOUNCER", "false").lower() in ("1", "true", "yes")
+    DB_STATEMENT_CACHE_SIZE = int(
+        os.getenv("DB_STATEMENT_CACHE_SIZE", "0" if DB_USE_PGBOUNCER else "1024")
+    )
 
     # Собираем URL только если все обязательные поля заданы (dev-режим)
     _db_user = quote_plus(DB_USER) if DB_USER else ""
@@ -75,6 +79,11 @@ class Settings:
     )
 
     # VK
+    # Режим интеграции: "longpoll" (по умолчанию) или "callback" (вебхук)
+    VK_MODE = os.getenv("VK_MODE", "longpoll").strip().lower()
+    VK_CONFIRMATION_TOKEN = os.getenv("VK_CONFIRMATION_TOKEN", "").strip()
+    VK_CALLBACK_SECRET = os.getenv("VK_CALLBACK_SECRET", "").strip()
+
     VK_BOT_TOKEN = os.getenv("VK_BOT_TOKEN")
     ADMIN_VK_IDS = {
         int(value.strip())

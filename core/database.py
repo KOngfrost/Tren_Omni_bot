@@ -27,9 +27,18 @@ from core.config import settings
 #   DB_POOL_PRE_PING — проверка соединения перед выдачей (по умолчанию true)
 engine: AsyncEngine | None
 if settings.database_url:
+    connect_args = {}
+    if "asyncpg" in settings.database_url:
+        if settings.DB_USE_PGBOUNCER or settings.DB_STATEMENT_CACHE_SIZE == 0:
+            connect_args["statement_cache_size"] = 0
+            connect_args["prepared_statement_cache_size"] = 0
+        elif settings.DB_STATEMENT_CACHE_SIZE:
+            connect_args["statement_cache_size"] = settings.DB_STATEMENT_CACHE_SIZE
+
     engine = create_async_engine(
         settings.database_url,
         echo=False,
+        connect_args=connect_args,
         poolclass=pool.AsyncAdaptedQueuePool,
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,

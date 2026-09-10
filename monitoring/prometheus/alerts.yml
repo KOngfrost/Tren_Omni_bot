@@ -1,0 +1,59 @@
+groups:
+  - name: student_bot_alerts
+    rules:
+      - alert: FastApiInstanceDown
+        expr: up{job="oss_bot_web"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Веб-панель FastAPI недоступна"
+          description: "Инстанс {{ $labels.instance }} не отвечает на запросы метрик более 1 минуты."
+
+      - alert: HighHttpErrorRate
+        expr: >-
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) * 100 > 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Высокая доля ошибок 5xx (> 2%)"
+          description: "Уровень внутренних ошибок сервера составляет {{ $value | printf \"%.2f\" }}% за последние 5 минут."
+
+      - alert: HighHttpLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая задержка ответов HTTP (p95 > 1s)"
+          description: "95-й перцентиль времени ответа эндпоинтов превышает 1 секунду: {{ $value | printf \"%.2f\" }}s."
+
+      - alert: BotHeartbeatMissing
+        expr: (time() - oss_bot_heartbeat_timestamp_seconds) > 180
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "VK Bot Heartbeat отсутствует более 3 минут"
+          description: "Бот не обновляет метку активности. Возможен сбой соединения Long Poll или зависание процесса."
+
+      - alert: OutboxQueueBacklog
+        expr: oss_bot_outbox_pending_count > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Очередь исходящих сообщений Outbox переполнена"
+          description: "В очереди Outbox накопилось {{ $value }} неотправленных сообщений за 5 минут."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Память Redis заполнена более чем на 85%"
+          description: "Использование оперативной памяти Redis достигло {{ $value | printf \"%.2f\" }}%."

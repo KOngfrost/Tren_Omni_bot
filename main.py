@@ -111,11 +111,26 @@ async def run_vk_polling() -> None:
         retry_delay = min(retry_delay * 2, 300)
 
 
+async def run_bot_service() -> None:
+    """Запуск сервиса бота в зависимости от выбранного режима VK_MODE."""
+    await _start_scheduler()
+    if settings.VK_MODE == "callback":
+        logger.info(
+            "VK интеграция запущена в режиме Callback API. "
+            "События принимаются через HTTP webhook в веб-сервисе."
+        )
+        while True:
+            await asyncio.sleep(3600)
+
+    logger.info("VK интеграция запущена в режиме Long Poll")
+    await run_vk_polling()
+
+
 def run() -> None:
     try:
         settings.ensure_production_config()
         initialize_database()
-        asyncio.run(run_vk_polling())
+        asyncio.run(run_bot_service())
     except RuntimeError as error:
         logger.error("Ошибка конфигурации: %s", error)
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)

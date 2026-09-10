@@ -25,6 +25,35 @@ services:
       retries: 5
       start_period: 30s
 
+  # PgBouncer: пулер соединений (режим транзакций) для экономии ресурсов PostgreSQL
+  # при конкурентной нагрузке от воркеров Uvicorn и бота
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: oss_bot_pgbouncer
+    restart: unless-stopped
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - DB_NAME=${POSTGRES_DB:?POSTGRES_DB is required}
+      - LISTEN_PORT=6432
+      - POOL_MODE=transaction
+      - AUTH_TYPE=scram-sha-256
+      - MAX_CLIENT_CONN=200
+      - DEFAULT_POOL_SIZE=25
+      - MIN_POOL_SIZE=5
+      - RESERVE_POOL_SIZE=5
+      - SERVER_RESET_QUERY=DISCARD ALL
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+
   # Одноразовый контейнер миграций: схема изменяется только через Alembic.
   # bot и web-admin стартуют только после успешного завершения.
   migrate:
@@ -60,6 +89,8 @@ services:
       start_period: 60s
     depends_on:
       db:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -125,12 +156,32 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+
+  # Prometheus: сбор метрик и валидация правил алертинга
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: oss_bot_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    depends_on:
+      web-admin:
         condition: service_healthy
 
 volumes:
   postgres_data:
   tailscale_state:
   redis_data:
+  prometheus_data:
