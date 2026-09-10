@@ -82,13 +82,17 @@ student_bot/
 │   │   ├── knowledge_base.py  # База знаний
 │   │   ├── events.py          # События
 │   │   ├── logs.py            # Журнал аудита
-│   │   └── dept_frame.py      # Фрейм отделов
+│   │   ├── dept_frame.py      # Фрейм отделов
+│   │   └── vk_callback.py     # Обработка VK Callback API (вебхуки)
 │   └── security/              # Безопасность
 │       ├── __init__.py        # Пакет безопасности
 │       ├── passwords.py       # Хеширование паролей (PBKDF2)
 │       ├── csrf.py            # CSRF-защита
 │       ├── session_store.py   # Redis-хранилище сессий и middleware
 │       └── middleware.py      # Rate limiting (DBRateLimiter), security headers
+│
+├── monitoring/                # Мониторинг и алертинг
+│   └── prometheus/            # Конфигурация Prometheus и правила алертов (alerts.yml)
 │
 ├── alembic/                   # Миграции БД
 │   ├── alembic.ini            # Конфигурация Alembic
@@ -105,13 +109,14 @@ student_bot/
 │   ├── backup.sh              # Резервное копирование БД
 │   └── restore.sh             # Восстановление БД
 │
-├── tests/                     # Тесты (240 тестов, pytest-cov >= 60%)
+├── tests/                     # Тесты (245 тестов, pytest-cov >= 60%)
 │   ├── __init__.py            # Пакет тестов
 │   ├── conftest.py            # Фикстуры pytest
 │   ├── test_auth.py           # Тесты аутентификации
 │   ├── test_two_factor_and_bootstrap.py # Тесты 2FA и защиты bootstrap
 │   ├── test_redis_cache_and_sessions.py # Тесты Redis кэша и сессий
 │   ├── test_api_v1.py         # Тесты REST API v1 и Prometheus
+│   ├── test_vk_callback.py    # Тесты VK Callback API (вебхуки)
 │   ├── test_config.py         # Тесты конфигурации
 │   ├── test_models.py         # Тесты моделей SQLAlchemy
 │   ├── test_tickets.py        # Тесты заявок и сервиса
@@ -123,14 +128,17 @@ student_bot/
 │   ├── test_form_validation.py# Тесты валидации форм
 │   ├── test_ui_elements.py    # Тесты UI-элементов
 │   ├── test_e2e_scenarios.py  # Сценарии end-to-end
-│   └── test_postgres_integration.py  # Интеграция с PostgreSQL
+│   ├── test_postgres_integration.py  # Интеграция с PostgreSQL
+│   └── load/                  # Нагрузочное тестирование
+│       └── locustfile.py      # Сценарии Locust для нагрузочных тестов
 │
 ├── docs/                      # Документация
 │   ├── DEPLOYMENT.md          # Инструкция по развёртыванию
+│   ├── HA_AND_SCALING_GUIDE.md# Руководство по масштабированию, PgBouncer и HA
 │   ├── WEB_ADMIN_GUIDE.md     # Руководство администратора панели
 │   └── ADMIN_AND_DATABASE_GUIDE.md  # Администрирование и БД
 │
-├── docker-compose.yml         # Docker Compose (db, redis, migrate, bot, tailscale, web-admin)
+├── docker-compose.yml         # Docker Compose (db, pgbouncer, redis, migrate, bot, tailscale, web-admin, prometheus)
 ├── Dockerfile                 # Образ для бота и миграций
 ├── Dockerfile.web             # Образ для веб-панели (многоворкерный Uvicorn)
 ├── Dockerfile.tailscale       # Образ для Tailscale
@@ -153,10 +161,12 @@ student_bot/
 
 | Компонент | Что делает |
 |---|---|
-| `bot` | VK Long Poll сервис: приём сообщений, создание обращений, админ-команды |
+| `bot` | VK сервис (Long Poll или Callback API): приём сообщений, создание обращений, админ-команды |
 | `web-admin` | Веб-панель на FastAPI (статистика, заявки, FAQ, база знаний, события, логи, API v1, метрики) |
+| `pgbouncer` | Пулер соединений к PostgreSQL (режим транзакций, порт 6432) |
 | `db` | PostgreSQL 16, изолирован внутри docker-сети (порт 5432 наружу не публикуется) |
 | `oss_bot_redis` | Redis 7, распределённое сессионное хранилище, общий кэш с TTL, координация воркеров |
+| `prometheus` | Сервер сбора метрик и валидации правил алертинга (порт 9090) |
 | `tailscale` | VPN-узел: обеспечивает доступ к панели только из вашего tailnet |
 | `migrate` | Одноразовый контейнер Alembic-миграций (выполняется до `bot` и `web-admin`) |
 
@@ -164,13 +174,17 @@ student_bot/
 
 - Linux-сервер (Ubuntu 22.04/24.04 или совместимый) с Docker Engine и Docker Compose v2.24+
 - Аккаунт Tailscale и Auth key (https://login.tailscale.com/admin/settings/keys)
-- Токен сообщества VK с включённым Long Poll API
+- Токен сообщества VK с включённым Long Poll API или настроенным Callback API
 
 ## Быстрый запуск (Docker)
 
-1. Клонируйте проект и подготовьте конфигурацию:
+1. Создайте каталог проекта и клонируйте репозиторий:
 
 ```bash
+# Создание каталога и выдача прав пользователю
+sudo mkdir -p /opt/oss_bot
+sudo chown -R $USER:$USER /opt/oss_bot
+
 git clone https://github.com/KOngfrost/Student_bot.git /opt/oss_bot
 cd /opt/oss_bot
 cp .env.example .env
