@@ -50,3 +50,46 @@ class DepartmentNamePayload(BaseModel):
     @classmethod
     def _name_to_str(cls, value: Any) -> str:
         return coerce_optional_str(value)
+
+
+class DepartmentUsageSchema(BaseModel):
+    """Статистика использования отдела."""
+
+    tickets: int = 0
+    knowledge: int = 0
+    faq: int = 0
+    events: int = 0
+    web_users: int = 0
+    subscriptions: int = 0
+
+
+class DepartmentSchema(BaseModel):
+    """Схема данных отдела в ответах API v1."""
+
+    id: int
+    name: str
+    created_at: str | None = None
+    usage: DepartmentUsageSchema | None = None
+
+
+class SystemStatsResponse(BaseModel):
+    """Схема статистики системы для API v1."""
+
+    version: str
+    environment: str
+    redis_connected: bool
+    sentry_enabled: bool
+    two_factor_enabled: bool
+    total_tickets: int = 0
+    active_tickets: int = 0
+
+
+class TicketSummarySchema(BaseModel):
+    """Схема краткой информации о заявке в API v1."""
+
+    id: int
+    topic: str
+    status: str
+    department_id: int | None = None
+    department_name: str | None = None
+    created_at: str | None = None

@@ -30,8 +30,36 @@ jobs:
       - run: mypy core web scripts bots
 
   pytest:
-    name: Tests (pytest)
+    name: Tests (pytest + postgres + redis + coverage)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POSTGRES_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379/0
+      SESSION_SECRET_KEY: ci_super_secret_session_key_1234567890_test
+      APP_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +72,8 @@ jobs:
           heads=$(python -m alembic heads | grep -c '^[a-f0-9]')
           echo "heads: $heads"
           test "$heads" -eq 1
-      - run: pytest -v
+      - name: Run pytest with coverage
+        run: pytest -v --cov=core --cov=web --cov=bots --cov-report=xml --cov-report=term-missing
 
   docker-build:
     name: Docker build

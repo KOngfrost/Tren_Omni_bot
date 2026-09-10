@@ -9,6 +9,7 @@ alembic==1.18.5
 tzdata==2024.2
 # Web admin panel
 fastapi==0.115.0
+starlette==0.38.6
 uvicorn[standard]==0.30.0
 jinja2==3.1.4
 python-multipart==0.0.9
@@ -20,3 +21,10 @@ argon2-cffi==23.1.0
 bleach==6.4.0
 # Асинхронный SMTP для отправки отчётов (core/reporting.py)
 aiosmtplib==4.0.0
+# Redis для сессий, кэширования с TTL и распределённой координации
+redis>=5.0.8
+# Мониторинг ошибок: Sentry SDK
+sentry-sdk[fastapi]>=2.14.0
+# Метрики Prometheus для мониторинга
+prometheus-client>=0.20.0
+prometheus-fastapi-instrumentator==7.0.0

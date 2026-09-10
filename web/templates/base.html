@@ -81,6 +81,11 @@
                     <span class="mobile-user-badge">{{ user.username }}</span>
                 </div>
             </header>
+            {% if user.bootstrap %}
+            <div style="background: rgba(255, 51, 102, 0.15); border-bottom: 1px solid rgba(255, 51, 102, 0.4); color: #ff80a0; padding: 10px 24px; font-size: 13px;">
+                ⚠️ <strong>Режим безопасности:</strong> Вы вошли через аварийный bootstrap-доступ из .env. Создайте постоянного суперадминистратора в разделе <a href="/admin/admins/" style="color: #fff; text-decoration: underline; font-weight: 600;">«Администраторы»</a>.
+            </div>
+            {% endif %}
     {% endif %}
     {% block content %}{% endblock %}
     {% if user is defined and user %}

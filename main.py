@@ -12,11 +12,13 @@ from core.database import run_migrations
 from core.heartbeat import touch_heartbeat
 from core.logging_config import setup_logging
 from core.reporting import start_report_scheduler
+from core.sentry import init_sentry
 
 logger = logging.getLogger(__name__)
 
 # Настраиваем логирование при старте
 setup_logging()
+init_sentry("bot")
 
 # Флаг, чтобы планировщик запускался только один раз
 _scheduler_started = False

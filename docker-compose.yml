@@ -63,6 +63,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   # Tailscale запускается всегда (не по профилю): без tailnet панель и бот
   # недоступны извне. Наружу (в интернет) не публикуется ни один порт.
@@ -87,8 +89,22 @@ services:
       timeout: 5s
       retries: 3
 
+  # Redis для сессий веб-панели, кэширования и распределённой координации воркеров
+  redis:
+    image: redis:7-alpine
+    container_name: oss_bot_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Веб-панель работает в общей compose-сети (как bot/migrate), поэтому
-  # резолвит имя БД "db". Порт 8000 НЕ публикуется на хост: наружу панель
+  # резолвит имя БД "db" и Redis "redis". Порт 8000 НЕ публикуется на хост: наружу панель
   # отдаёт только Tailscale-контейнер через HTTPS-прокси (tailscale serve),
   # который адресует панель по имени сервиса web-admin.
   # Доступ: https://oss-web-panel.<tailnet>.ts.net
@@ -111,7 +127,10 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   tailscale_state:
+  redis_data:

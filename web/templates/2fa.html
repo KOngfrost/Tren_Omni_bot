@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Двухфакторная аутентификация - OSS Web Panel{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-brand">
+            <div class="monogram">OB</div>
+            <div>
+                <h1>Подтверждение 2FA</h1>
+                <div class="subtitle">Безопасный вход через ВК-бота</div>
+            </div>
+        </div>
+
+        <div style="background: rgba(255, 77, 157, 0.08); border: 1px solid rgba(255, 77, 157, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #d0d0dc; line-height: 1.5;">
+            Одноразовый 6-значный код отправлен вам в личные сообщения ВКонтакте
+            {% if masked_vk_id %}(<strong>VK ID: {{ masked_vk_id }}</strong>){% endif %}.
+        </div>
+
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/auth/2fa">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label for="code">Код из сообщения</label>
+                <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    required
+                    autofocus
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    placeholder="123456"
+                    style="font-size: 24px; letter-spacing: 8px; text-align: center; font-weight: 700; font-family: monospace;"
+                >
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" style="margin-top: 10px;">Подтвердить и войти</button>
+        </form>
+
+        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+            <form method="POST" action="/auth/2fa/resend" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-ghost" style="padding: 6px 12px; font-size: 12px; color: var(--primary);">
+                    ↻ Отправить код повторно
+                </button>
+            </form>
+            <a href="/auth/login" style="color: var(--text-muted); text-decoration: none;">← Ко входу</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

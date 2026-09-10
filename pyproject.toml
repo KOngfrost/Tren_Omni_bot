@@ -77,3 +77,20 @@ testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+addopts = "--cov=core --cov=web --cov=bots --cov-report=term-missing"
+
+# ============================================================
+# Coverage (pytest-cov)
+# ============================================================
+[tool.coverage.run]
+branch = true
+source = ["core", "web", "bots"]
+omit = [
+    "tests/*",
+    "alembic/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1

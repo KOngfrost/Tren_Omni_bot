@@ -208,12 +208,13 @@ class TestMiddlewareOrder:
         from starlette.middleware.sessions import SessionMiddleware
 
         from web.main import app
+        from web.security.session_store import RedisSessionMiddleware
 
         middleware_classes = [m.cls if hasattr(m, "cls") else type(m) for m in app.user_middleware]
 
         session_idx = None
         for i, m in enumerate(middleware_classes):
-            if m == SessionMiddleware:
+            if m in (SessionMiddleware, RedisSessionMiddleware):
                 session_idx = i
         assert session_idx is not None
 

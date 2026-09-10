@@ -168,6 +168,31 @@ class Settings:
         "yes",
     )
 
+    # === Redis для сессий, кэша и блокировок ===
+    _default_redis = (
+        "redis://redis:6379/0" if APP_ENV not in dev_environments else "redis://localhost:6379/0"
+    )
+    REDIS_URL = os.getenv("REDIS_URL", _default_redis)
+    CACHE_DEFAULT_TTL = int(os.getenv("CACHE_DEFAULT_TTL", "300"))
+    SESSION_TTL = int(os.getenv("SESSION_TTL", "86400"))
+
+    # === Sentry (Мониторинг ошибок) ===
+    SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip() or None
+    SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", APP_ENV)
+    SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+
+    # === Двухфакторная аутентификация (2FA через VK) ===
+    TWO_FACTOR_ENABLED = os.getenv("TWO_FACTOR_ENABLED", "true").lower() in ("1", "true", "yes")
+    TWO_FACTOR_CODE_TTL = int(os.getenv("TWO_FACTOR_CODE_TTL", "300"))
+
+    # === Безопасность bootstrap-входа ===
+    BOOTSTRAP_ALLOWED = os.getenv("BOOTSTRAP_ALLOWED", "true").lower() in ("1", "true", "yes")
+    FORCE_BOOTSTRAP_OVERRIDE = os.getenv("FORCE_BOOTSTRAP_OVERRIDE", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     # SMTP (email-рассылка отчётов)
     SMTP_HOST = os.getenv("SMTP_HOST", "")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))

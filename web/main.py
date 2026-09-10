@@ -25,18 +25,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.middleware.sessions import SessionMiddleware
 
 from core.config import settings
 from core.database import async_session_maker
 
 # Настраиваем логирование при старте веб-панели
 from core.logging_config import setup_logging
+from core.sentry import init_sentry
 from web.security.csrf import CSRFMiddleware
 from web.security.middleware import RequestSizeValidator, SecurityHeadersMiddleware
+from web.security.session_store import RedisSessionMiddleware
 from web.templating import templates
 
 setup_logging(log_dir=os.path.join(os.path.dirname(__file__), "..", "logs"))
+init_sentry("web-admin")
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError):
             await worker_task
         logger.info("Outbox-воркер веб-панели остановлен")
+    from core.redis_client import close_redis_client
+
+    await close_redis_client()
 
 
 app = FastAPI(
@@ -76,6 +81,18 @@ app = FastAPI(
     version=settings.PROJECT_VERSION,
     lifespan=lifespan,
 )
+
+# === Prometheus Метрики ===
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    instrumentator = Instrumentator(
+        should_group_status_codes=False,
+        excluded_handlers=[".*admin/health", "/health", "/metrics"],
+    )
+    instrumentator.instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+except Exception as e:
+    logger.warning("Не удалось настроить Prometheus Instrumentator: %s", e)
 
 # === Middleware безопасности ===
 # ВАЖНО: В Starlette add_middleware использует insert(0, ...), поэтому
@@ -97,7 +114,7 @@ app.add_middleware(
 # ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал
 app.add_middleware(CSRFMiddleware)
 
-# 3. Подписанная cookie-сессия с безопасными настройками (для CSRF и auth)
+# 3. Redis-backed сессия с безопасными настройками и TTL (для CSRF и auth)
 # ДОЛЖЕН выполняться ДО CSRFMiddleware,
 # чтобы scope["session"] был создан до того, как он попытается его прочитать.
 _session_secret = settings.session_secret_key
@@ -111,9 +128,9 @@ if not _session_secret:
 settings.ensure_production_config()
 
 app.add_middleware(
-    SessionMiddleware,
+    RedisSessionMiddleware,
     secret_key=_session_secret,
-    max_age=3600,
+    max_age=settings.SESSION_TTL,
     https_only=settings.SESSION_HTTPS_ONLY,
     same_site="strict",
     path="/",
@@ -450,6 +467,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 from web.routes import (
     admin_panel,
     api,
+    api_v1,
     auth,
     dashboard,
     departments,
@@ -471,6 +489,7 @@ app.include_router(logs.router, prefix="/logs", tags=["logs"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(dept_frame.router, prefix="/dept", tags=["dept_frame"])
 app.include_router(departments.router, prefix="/departments", tags=["departments"])
+app.include_router(api_v1.router, prefix="/api", tags=["api_v1"])
 app.include_router(api.router, prefix="/api", tags=["api"])
 
 

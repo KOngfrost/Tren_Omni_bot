@@ -24,10 +24,41 @@ from sqlalchemy.ext.asyncio import (
 )
 
 import core.database as database_module
-import core.outbox as outbox_module
-import core.reporting as reporting_module
-import core.ticket_service as ticket_service_module
 from core.models import Base
+
+ALL_MODULE_NAMES = (
+    "core.database",
+    "core.ticket_service",
+    "core.reporting",
+    "core.outbox",
+    "core.bot_core",
+    "bots.vk.bot",
+    "web.main",
+    "web.dependencies",
+    "web.routes.tickets",
+    "web.routes.dashboard",
+    "web.routes.faq",
+    "web.routes.events",
+    "web.routes.knowledge_base",
+    "web.routes.departments",
+    "web.routes.api",
+    "web.routes.api_v1",
+    "web.routes.logs",
+    "web.routes.admin_panel",
+    "web.routes.auth",
+    "web.routes.dept_frame",
+)
+
+
+def _patch_all_modules(monkeypatch, maker, engine):
+    monkeypatch.setattr(database_module, "engine", engine)
+    for mod_name in ALL_MODULE_NAMES:
+        try:
+            mod = __import__(mod_name, fromlist=["async_session_maker"])
+            if hasattr(mod, "async_session_maker"):
+                monkeypatch.setattr(mod, "async_session_maker", maker, raising=False)
+        except Exception:
+            pass
 
 
 @pytest_asyncio.fixture
@@ -43,33 +74,41 @@ async def db_session_maker(monkeypatch):
     """
     from sqlalchemy import event
 
-    engine = create_async_engine("sqlite+aiosqlite://")
+    from core.config import settings
 
-    @event.listens_for(engine.sync_engine, "connect")
-    def _set_sqlite_custom_lower(dbapi_con, con_record):
-        if hasattr(dbapi_con, "create_function"):
-            dbapi_con.create_function("lower", 1, lambda s: s.lower() if s is not None else None)
+    if not os.getenv("TEST_REDIS_URL"):
+        monkeypatch.setattr(settings, "REDIS_URL", None)
+    monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    test_pg_url = os.getenv("TEST_POSTGRES_URL")
+    if test_pg_url:
+        engine = create_async_engine(test_pg_url)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        engine = create_async_engine("sqlite+aiosqlite://")
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def _set_sqlite_custom_lower(dbapi_con, con_record):
+            if hasattr(dbapi_con, "create_function"):
+                dbapi_con.create_function(
+                    "lower", 1, lambda s: s.lower() if s is not None else None
+                )
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    import bots.vk.bot as vk_bot_module
-    import core.bot_core as bot_core_module
-    import web.routes.tickets as tickets_module
+    _patch_all_modules(monkeypatch, maker, engine)
 
-    for module in (
-        database_module,
-        ticket_service_module,
-        reporting_module,
-        outbox_module,
-        bot_core_module,
-        vk_bot_module,
-        tickets_module,
-    ):
-        monkeypatch.setattr(module, "async_session_maker", maker, raising=True)
-
-    yield maker
+    try:
+        yield maker
+    finally:
+        if test_pg_url:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
 
 
 @pytest.fixture
@@ -78,10 +117,10 @@ def web_client(monkeypatch):
 
     Особенности:
     - База: sqlite file:memdb_<uuid>?mode=memory&cache=shared — общая для
-      aiosqlite (через приложение) и для stdlib sqlite3 (для прямых
-      проверок данных из синхронных тестов через client._test_db_name).
+       aiosqlite (через приложение) и для stdlib sqlite3 (для прямых
+       проверок данных из синхронных тестов через client._test_db_name).
     - Подменяются async_session_maker во всех модулях приложения
-      (включая веб-роуты) — pytest восстанавливает атрибуты после теста.
+       (включая веб-роуты) — pytest восстанавливает атрибуты после теста.
     - Bootstrap-креды патчатся на Singleton settings (не env vars).
     """
     from uuid import uuid4
@@ -95,6 +134,10 @@ def web_client(monkeypatch):
     monkeypatch.setattr(settings, "VK_BOT_TOKEN", "test_vk_token")
     monkeypatch.setattr(settings, "ADMIN_VK_IDS", {123456789})
     monkeypatch.setattr(settings, "VK_REPORT_ADMIN_ID", 123456789)
+    # Отключаем внешние сетевые зависимости для быстрых локальных тестов
+    if not os.getenv("TEST_REDIS_URL"):
+        monkeypatch.setattr(settings, "REDIS_URL", None)
+    monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
 
     db_name = f"memdb_{uuid4().hex}"
     engine = create_async_engine(
@@ -108,29 +151,7 @@ def web_client(monkeypatch):
     asyncio.run(_setup())
 
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    modules_to_patch = [database_module, ticket_service_module, reporting_module, outbox_module]
-    for mod_name in (
-        "core.bot_core",
-        "web.routes.tickets",
-        "web.routes.dashboard",
-        "web.routes.faq",
-        "web.routes.events",
-        "web.routes.knowledge_base",
-        "web.routes.departments",
-        "web.routes.api",
-        "web.routes.logs",
-        "web.routes.admin_panel",
-        "web.routes.dept_frame",
-    ):
-        mod = __import__(mod_name, fromlist=["async_session_maker"])
-        if hasattr(mod, "async_session_maker"):
-            modules_to_patch.append(mod)
-
-    for mod in modules_to_patch:
-        monkeypatch.setattr(mod, "async_session_maker", maker, raising=True)
-
-    monkeypatch.setattr(database_module, "engine", engine)
+    _patch_all_modules(monkeypatch, maker, engine)
 
     from web.main import app
 
