@@ -1786,6 +1786,129 @@ textarea::placeholder {
     min-width: 140px;
 }
 
+/* ---------- Security Banner (Bootstrap Warning) ---------- */
+@keyframes bannerSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-16px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes bannerSlideUp {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        max-height: 120px;
+        margin-bottom: 20px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.96);
+        max-height: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        overflow: hidden;
+    }
+}
+
+.security-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, rgba(255, 51, 102, 0.16) 0%, rgba(255, 77, 157, 0.08) 100%);
+    border: 1px solid rgba(255, 77, 157, 0.4);
+    border-radius: var(--r-md, 14px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 0 20px rgba(255, 77, 157, 0.12);
+    color: #ff99be;
+    font-size: 13.5px;
+    line-height: 1.5;
+    animation: bannerSlideDown 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: all 0.25s ease;
+}
+
+.security-banner.is-hiding {
+    animation: bannerSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.security-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.security-banner-icon {
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 6px rgba(255, 77, 157, 0.6));
+    animation: pulse 2.5s ease-in-out infinite;
+}
+
+.security-banner-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.security-banner-text strong {
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.security-banner-link {
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.security-banner-link:hover {
+    color: var(--primary, #ff4d9d);
+    text-shadow: 0 0 10px rgba(255, 77, 157, 0.6);
+}
+
+.security-banner-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--r-sm, 8px);
+    color: #ff99be;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.security-banner-close:hover {
+    background: rgba(255, 77, 157, 0.25);
+    border-color: rgba(255, 77, 157, 0.5);
+    color: #ffffff;
+    transform: scale(1.08);
+}
+
+.security-banner-close:active {
+    transform: scale(0.95);
+}
+
 @media (max-width: 480px) {
     .error-code {
         font-size: 64px;
@@ -1798,5 +1921,10 @@ textarea::placeholder {
     }
     .error-actions .btn {
         width: 100%;
+    }
+    .security-banner {
+        padding: 12px 14px;
+        gap: 10px;
+        font-size: 13px;
     }
 }

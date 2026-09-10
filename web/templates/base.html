@@ -82,9 +82,25 @@
                 </div>
             </header>
             {% if user.bootstrap %}
-            <div style="background: rgba(255, 51, 102, 0.15); border-bottom: 1px solid rgba(255, 51, 102, 0.4); color: #ff80a0; padding: 10px 24px; font-size: 13px;">
-                ⚠️ <strong>Режим безопасности:</strong> Вы вошли через аварийный bootstrap-доступ из .env. Создайте постоянного суперадминистратора в разделе <a href="/admin/admins/" style="color: #fff; text-decoration: underline; font-weight: 600;">«Администраторы»</a>.
-            </div>
+            <aside class="security-banner" id="bootstrap-security-banner" role="alert" aria-live="polite">
+                <div class="security-banner-content">
+                    <span class="security-banner-icon" aria-hidden="true">⚠️</span>
+                    <div class="security-banner-text">
+                        <strong>Режим безопасности:</strong> Вы вошли с резервными данными доступа. Создайте постоянного суперадминистратора в разделе <a href="/admin/admins/" class="security-banner-link">«Администраторы»</a>.
+                    </div>
+                </div>
+                <button type="button" class="security-banner-close" id="close-security-banner-btn" data-dismiss="security-banner" aria-label="Закрыть предупреждение" title="Скрыть уведомление">✕</button>
+            </aside>
+            <script>
+                (function() {
+                    try {
+                        if (sessionStorage.getItem('dismiss_bootstrap_banner') === '1') {
+                            var b = document.getElementById('bootstrap-security-banner');
+                            if (b) b.style.display = 'none';
+                        }
+                    } catch(e) {}
+                })();
+            </script>
             {% endif %}
     {% endif %}
     {% block content %}{% endblock %}

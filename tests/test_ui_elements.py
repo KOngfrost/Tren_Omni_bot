@@ -364,3 +364,18 @@ class TestCssButtonStates:
         """Таблица стилей содержит :disabled для кнопок."""
         resp = client.get("/static/style.css")
         assert ":disabled" in resp.text
+
+
+class TestSecurityBanner:
+    """Проверка анимированного, закруглённого и закрываемого баннера безопасности."""
+
+    def test_bootstrap_security_banner_rendered_without_dotenv(self, client):
+        """Баннер отображается при bootstrap-логине, не содержит '.env' и имеет кнопку закрытия."""
+        _login(client)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "security-banner" in resp.text
+        assert "bootstrap-security-banner" in resp.text
+        assert "close-security-banner-btn" in resp.text
+        assert "резервными данными" in resp.text
+        assert ".env" not in resp.text

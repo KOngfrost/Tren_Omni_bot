@@ -473,4 +473,30 @@
         var idEl = card.querySelector('.department-id');
         if (idEl) idEl.textContent = 'ID: ' + dept.id;
     }
+
+    /**
+     * Закрытие предупреждающего баннера безопасности (bootstrap) с анимацией
+     */
+    document.addEventListener('click', function (event) {
+        var closeBtn = event.target.closest('#close-security-banner-btn, [data-dismiss="security-banner"]');
+        if (!closeBtn) return;
+        var banner = document.getElementById('bootstrap-security-banner') || closeBtn.closest('.security-banner');
+        if (banner) {
+            banner.classList.add('is-hiding');
+            try {
+                sessionStorage.setItem('dismiss_bootstrap_banner', '1');
+            } catch (e) {}
+            setTimeout(function () {
+                banner.remove();
+            }, 300);
+        }
+    });
+
+    // Проверка сохранённого состояния при инициализации
+    try {
+        if (sessionStorage.getItem('dismiss_bootstrap_banner') === '1') {
+            var bannerEl = document.getElementById('bootstrap-security-banner');
+            if (bannerEl) bannerEl.style.display = 'none';
+        }
+    } catch (e) {}
 })();
