@@ -11,6 +11,9 @@
     <link rel="canonical" href="{% block canonical_url %}{{ canonical_path|default(request.url.path) }}{% endblock %}">
     
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="alternate icon" href="/favicon.ico">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,14 +126,14 @@
     <footer class="site-footer" role="contentinfo">
         <div class="footer-container">
             <div class="footer-links">
-                <a href="/legal/privacy" class="footer-link">Политика конфиденциальности (152-ФЗ)</a>
+                <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
                 <span class="footer-sep" aria-hidden="true">•</span>
-                <a href="/legal/consent" class="footer-link">Согласие на обработку ПДн</a>
+                <a href="/legal/consent" class="footer-link">Согласие на обработку данных</a>
                 <span class="footer-sep" aria-hidden="true">•</span>
-                <a href="/legal/terms" class="footer-link">Условия пользования</a>
+                <a href="/legal/terms" class="footer-link">Условия сервиса</a>
             </div>
             <div class="footer-copy">
-                <span>© 2026 OSS Bot. Все права защищены. Базы данных и серверы расположены на территории РФ.</span>
+                <span>© 2026 OSS Bot. Все права защищены.</span>
             </div>
         </div>
     </footer>
@@ -142,17 +145,16 @@
     </main>
     {% endif %}
 
-    <!-- Баннер согласия на использование файлов cookie (152-ФЗ) -->
+    <!-- Баннер согласия на использование файлов cookie -->
     <aside class="cookie-banner" id="cookie-consent-banner" role="region" aria-label="Уведомление об использовании cookie" style="display: none;">
         <div class="cookie-banner-content">
             <span class="cookie-banner-icon" aria-hidden="true">🍪</span>
             <div class="cookie-banner-text">
-                Мы используем технические файлы cookie для авторизации и защиты сессий. Продолжая работу с сайтом, вы соглашаетесь с <a href="/legal/privacy" class="cookie-link">Политикой конфиденциальности</a> и правилами обработки данных.
+                Мы используем cookie для корректной работы сайта. Оставаясь с нами, вы принимаете <a href="/legal/privacy" class="cookie-link">правила сервиса</a>.
             </div>
         </div>
         <div class="cookie-banner-actions">
-            <button type="button" class="btn btn-sm btn-primary" id="cookie-consent-accept-btn" aria-label="Принять использование файлов cookie">Принять</button>
-            <a href="/legal/privacy" class="btn btn-sm btn-outline" aria-label="Подробнее о файлах cookie и политике">Подробнее</a>
+            <button type="button" class="btn-cookie-accept" id="cookie-consent-accept-btn" aria-label="Принять использование файлов cookie">Понятно</button>
         </div>
     </aside>
 
