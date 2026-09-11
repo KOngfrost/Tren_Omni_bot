@@ -251,9 +251,9 @@ https://oss-web-panel.<tailnet>.ts.net/
 # VK-суперадмин (получает ежедневные отчёты)
 docker compose exec bot python scripts/init_superadmin.py --vk-id 123456789 --name "Имя Фамилия"
 
-# Пользователь веб-панели
-docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN
-docker compose exec bot python scripts/create_web_user.py --username zhilbyt --role DEPARTMENT_ADMIN --department "Жилбыт"
+# Пользователь веб-панели (с привязкой к VK ID для двухфакторной аутентификации 2FA)
+docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN --vk-id 123456789
+docker compose exec bot python scripts/create_web_user.py --username zhilbyt --role DEPARTMENT_ADMIN --department "Жилбыт" --vk-id 987654321
 ```
 
 Роли и ограничения описаны в [docs/WEB_ADMIN_GUIDE.md](docs/WEB_ADMIN_GUIDE.md).

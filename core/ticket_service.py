@@ -493,9 +493,9 @@ def _match_department_in_memory(
         dept_by_id = {d.id: d for d in all_depts}
         for kb in kb_entries:
             if kb.keywords and keyword_matches(kb.keywords, raw):
-                dept = dept_by_id.get(kb.department_id)
-                if dept is not None:
-                    return dept
+                found_dept = dept_by_id.get(kb.department_id)
+                if found_dept is not None:
+                    return found_dept
     return None
 
 

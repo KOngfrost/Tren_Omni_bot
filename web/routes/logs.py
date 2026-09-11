@@ -12,11 +12,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Admin, Log
+from core.models import Admin, Log, Ticket
 from web.dependencies import get_admin_scope, require_auth
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
@@ -57,9 +57,15 @@ async def logs_page(
                 .limit(LOGS_PER_PAGE)
             )
             if not is_super:
-                allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
-                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
-                count_stmt = select(func.count(Log.id)).where(Log.user_id.in_(allowed_user_ids))
+                admin_user_ids = select(Admin.user_id).where(
+                    Admin.department_id == dept_id, Admin.user_id.is_not(None)
+                )
+                ticket_user_ids = select(Ticket.user_id).where(
+                    Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
+                )
+                dept_filter = or_(Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids))
+                logs_stmt = logs_stmt.where(dept_filter)
+                count_stmt = select(func.count(Log.id)).where(dept_filter)
             else:
                 count_stmt = select(func.count(Log.id))
             logs_result = await session.execute(logs_stmt)
@@ -99,7 +105,6 @@ async def export_logs(user=Depends(require_auth)):
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
-            allowed_user_ids = select(Admin.user_id).where(Admin.department_id == dept_id)
             logs_stmt = (
                 select(Log)
                 .options(selectinload(Log.user))
@@ -107,7 +112,14 @@ async def export_logs(user=Depends(require_auth)):
                 .limit(10000)  # Лимит для экспорта
             )
             if not is_super:
-                logs_stmt = logs_stmt.where(Log.user_id.in_(allowed_user_ids))
+                admin_user_ids = select(Admin.user_id).where(
+                    Admin.department_id == dept_id, Admin.user_id.is_not(None)
+                )
+                ticket_user_ids = select(Ticket.user_id).where(
+                    Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
+                )
+                dept_filter = or_(Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids))
+                logs_stmt = logs_stmt.where(dept_filter)
             logs_result = await session.execute(logs_stmt)
             logs: list[Log] = list(logs_result.scalars().all())
     except Exception:

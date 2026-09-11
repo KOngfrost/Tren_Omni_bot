@@ -17,7 +17,6 @@ from vkbottle.bot import Message
 from vkbottle.dispatch.rules.base import RegexRule
 from vkbottle.exception_factory.base_exceptions import VKAPIError
 from core.commands import (
-    ADMIN_REPLY_PATTERN,
     ADMIN_STATUS_PATTERN,
     COMMANDS_ADMIN,
     COMMANDS_ADMIN_TICKETS,
@@ -403,15 +402,44 @@ async def ticket_details_handler(message: Message):
     )
 
 
+async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
+    async with async_session_maker() as session:
+        is_super, dept_id = await get_admin_scope_for_vk_id(session, vk_id)
+        ticket = await session.get(Ticket, ticket_id)
+        if ticket is None:
+            return False
+        if is_super:
+            return True
+        if dept_id is None:
+            return False
+        return ticket.department_id == dept_id
+
+
 @vk_bot.on.private_message(RegexRule(STUDENT_REPLY_PATTERN))
-async def student_ticket_reply_handler(message: Message):
-    """Добавить ответ студента в его собственную заявку."""
-    match = re.match(STUDENT_REPLY_PATTERN, message.text or "")
+async def ticket_reply_handler(message: Message):
+    """Единый диспетчер ответов на заявки: операторы (глобальный ID) и студенты (локальный ID)."""
+    match = re.match(STUDENT_REPLY_PATTERN, message.text or "", re.DOTALL)
     if match is None:
         return
-    # Получаем локальный номер и преобразуем в глобальный ID
-    local_id = int(match.group(1))
+    parsed_id = int(match.group(1))
     reply_text = match.group(2).strip()
+
+    # 1. Если отправитель — оператор с доступом к глобальной заявке #parsed_id
+    if await _operator_can_access(message.from_id, parsed_id):
+        ticket, delivered = await reply_to_ticket(
+            ticket_id=parsed_id, admin_username=str(message.from_id), message=reply_text
+        )
+        if ticket is None:
+            await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+            return
+        await message.answer(
+            "Ответ сохранён." + (" Уведомление поставлено в очередь VK." if delivered else ""),
+            keyboard=build_admin_keyboard(),
+        )
+        return
+
+    # 2. Иначе обрабатываем как ответ студента по локальному номеру
+    local_id = parsed_id
     tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
 
     # Находим заявку по локальному номеру
@@ -422,13 +450,22 @@ async def student_ticket_reply_handler(message: Message):
             break
 
     if ticket is None or ticket.id is None:
+        async with async_session_maker() as session:
+            is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
+        if is_super or dept_id is not None:
+            await message.answer(
+                f"Заявка #{parsed_id} не найдена или недоступна вашему отделу.",
+                keyboard=build_admin_keyboard(),
+            )
+            return
+
         await message.answer(
             f"Заявка #{local_id} не найдена среди ваших заявок.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
-    # Используем глобальный ID для добавления ответа
+    # Используем глобальный ID для добавления ответа студента
     result = await add_student_reply(ticket.id, message.from_id, reply_text)
     if result is None:
         await message.answer(
@@ -732,39 +769,6 @@ async def admin_tickets_handler(message: Message):
     await message.answer("\n".join(lines), keyboard=build_admin_keyboard())
 
 
-async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
-    async with async_session_maker() as session:
-        is_super, dept_id = await get_admin_scope_for_vk_id(session, vk_id)
-        if is_super:
-            return True
-        # Если у пользователя нет доступа к отделу (не администратор), deny
-        if dept_id is None:
-            return False
-        ticket = await session.get(Ticket, ticket_id)
-        # Заявка должна существовать И принадлежать отделу пользователя
-        return ticket is not None and ticket.department_id == dept_id
-
-
-@vk_bot.on.private_message(RegexRule(ADMIN_REPLY_PATTERN))
-async def admin_reply_handler(message: Message):
-    match = re.match(ADMIN_REPLY_PATTERN, message.text or "", re.DOTALL)
-    if not match or not await _operator_can_access(message.from_id, int(match.group(1))):
-        await message.answer(
-            "Заявка не найдена или недоступна.",
-            keyboard=build_admin_keyboard(),
-        )
-        return
-    ticket_id, text = int(match.group(1)), match.group(2).strip()
-    ticket, delivered = await reply_to_ticket(
-        ticket_id=ticket_id, admin_username=str(message.from_id), message=text
-    )
-    if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
-        return
-    await message.answer(
-        "Ответ сохранён." + (" Уведомление поставлено в очередь VK." if delivered else ""),
-        keyboard=build_admin_keyboard(),
-    )
 
 
 def _parse_status(value: str) -> TicketStatus:

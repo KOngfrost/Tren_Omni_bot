@@ -9,6 +9,7 @@
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -48,7 +49,7 @@ def _build_ticket_search_filter(clean_q: str):
     for term in terms:
         term_lower = term.lower()
         term_clean_num = term.lstrip("#").lstrip("№").strip()
-        conds = [
+        conds: list[Any] = [
             func.lower(Ticket.topic).like(f"%{term_lower}%"),
             Ticket.topic.ilike(f"%{term}%"),
             func.lower(Ticket.description).like(f"%{term_lower}%"),
@@ -68,7 +69,7 @@ def _build_ticket_search_filter(clean_q: str):
     if len(terms) > 1:
         phrase_lower = clean_q.lower()
         phrase_clean_num = clean_q.lstrip("#").lstrip("№").strip()
-        phrase_conds = [
+        phrase_conds: list[Any] = [
             func.lower(Ticket.topic).like(f"%{phrase_lower}%"),
             Ticket.topic.ilike(f"%{clean_q}%"),
             func.lower(Ticket.description).like(f"%{phrase_lower}%"),

@@ -194,8 +194,8 @@ DNS в docker-сети, срок действия Auth key, затем обно�
 # VK-суперадмин (получает ежедневные отчёты)
 docker compose exec bot python scripts/init_superadmin.py --vk-id 123456789 --name "Имя Фамилия"
 
-# Пользователь веб-панели
-docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN
+# Пользователь веб-панели (с привязкой к VK ID для 2FA)
+docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN --vk-id 123456789
 ```
 
 Bootstrap-вход из `.env` отключается после создания первого активного

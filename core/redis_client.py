@@ -33,7 +33,7 @@ async def get_redis_client() -> Any | None:
         return None
 
     try:
-        import redis.asyncio as aioredis
+        import redis.asyncio as aioredis  # type: ignore[import-untyped]
 
         client = aioredis.from_url(
             settings.REDIS_URL,

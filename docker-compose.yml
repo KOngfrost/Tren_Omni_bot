@@ -64,6 +64,11 @@ services:
     restart: "no"
     env_file:
       - .env
+    environment:
+      # Миграции всегда выполняются напрямую к PostgreSQL (порт 5432),
+      # минуя PgBouncer (DDL транзакции не должны проходить через transaction pooling).
+      - DB_HOST=db
+      - DB_PORT=5432
     command: python -m alembic upgrade head
     depends_on:
       db:

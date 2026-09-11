@@ -93,9 +93,19 @@ async def cache_delete_pattern(pattern: str) -> int:
     redis = await get_redis_client()
     if redis is not None:
         try:
-            keys = await redis.keys(f"cache:{pattern}")
-            if keys:
-                total_deleted = await redis.delete(*keys)
+            if hasattr(redis, "scan_iter"):
+                keys: list[str] = []
+                async for k in redis.scan_iter(match=f"cache:{pattern}", count=100):
+                    keys.append(k)
+                    if len(keys) >= 500:
+                        total_deleted += await redis.delete(*keys)
+                        keys.clear()
+                if keys:
+                    total_deleted += await redis.delete(*keys)
+            else:
+                keys = await redis.keys(f"cache:{pattern}")
+                if keys:
+                    total_deleted = await redis.delete(*keys)
         except Exception as e:
             logger.debug("Redis cache_delete_pattern failed (%s): %s", pattern, e)
 

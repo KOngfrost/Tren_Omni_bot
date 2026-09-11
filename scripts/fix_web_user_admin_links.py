@@ -96,9 +96,9 @@ async def fix_links(apply: bool = False) -> dict:
 
             if web_user.role == WebRole.DEPARTMENT_ADMIN and web_user.department_id:
                 # Для DEPARTMENT_ADMIN ищем Admin в том же отделе
-                admin = dept_admin_by_dept.get(web_user.department_id)
-                if admin:
-                    new_admin_id = admin.id
+                target_admin = dept_admin_by_dept.get(web_user.department_id)
+                if target_admin:
+                    new_admin_id = target_admin.id
                 else:
                     skipped.append(
                         {

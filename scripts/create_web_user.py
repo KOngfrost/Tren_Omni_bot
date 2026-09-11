@@ -22,8 +22,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select
 
 from core.database import async_session_maker
-from core.models import Department, WebRole, WebUser
+from core.models import Admin, Department, User, UserRole, WebRole, WebUser
 from web.security.passwords import hash_password
+
+
+async def _resolve_admin_id(
+    session,
+    vk_id: int | None,
+    department_id: int | None,
+    role: WebRole,
+) -> int | None:
+    if not vk_id:
+        return None
+    user_obj = await session.scalar(select(User).where(User.vk_id == vk_id))
+    if not user_obj:
+        user_obj = User(vk_id=vk_id)
+        session.add(user_obj)
+        await session.flush()
+    target_role = UserRole.SUPERADMIN if role == WebRole.SUPERADMIN else UserRole.ADMIN
+    admin_obj = await session.scalar(select(Admin).where(Admin.user_id == user_obj.id))
+    if not admin_obj:
+        admin_obj = Admin(
+            user_id=user_obj.id,
+            department_id=department_id,
+            role=target_role,
+        )
+        session.add(admin_obj)
+        await session.flush()
+    else:
+        admin_obj.department_id = department_id
+        admin_obj.role = target_role
+    return admin_obj.id
 
 
 async def create_or_update(
@@ -32,6 +61,7 @@ async def create_or_update(
     role: WebRole,
     department_name: str | None,
     disable: bool,
+    vk_id: int | None = None,
 ) -> None:
     async with async_session_maker() as session:
         web_user = await session.scalar(select(WebUser).where(WebUser.username == username))
@@ -46,6 +76,8 @@ async def create_or_update(
                 sys.exit(1)
             department_id = department.id
 
+        admin_id = await _resolve_admin_id(session, vk_id, department_id, role)
+
         if web_user is None:
             if not password:
                 print("❌ Для нового пользователя нужен --password")
@@ -54,6 +86,7 @@ async def create_or_update(
                 username=username,
                 password_hash=hash_password(password),
                 role=role,
+                admin_id=admin_id,
                 department_id=department_id,
                 is_active=not disable,
             )
@@ -64,6 +97,8 @@ async def create_or_update(
                 web_user.password_hash = hash_password(password)
             web_user.role = role
             web_user.department_id = department_id
+            if admin_id is not None:
+                web_user.admin_id = admin_id
             if disable:
                 web_user.is_active = False
             action = "обновлён"
@@ -72,6 +107,13 @@ async def create_or_update(
         print(
             f"✅ Пользователь {username} {action}: роль {role.value}, активен: {web_user.is_active}"
         )
+        if vk_id:
+            print(f"🔒 2FA привязан к VK ID: {vk_id}")
+        elif not web_user.admin_id:
+            print(
+                "⚠️ Внимание: --vk-id не указан. Двухфакторная аутентификация (2FA через VK) "
+                "для этого пользователя будет отключена."
+            )
 
 
 def main() -> None:
@@ -85,6 +127,7 @@ def main() -> None:
         help="Роль (по умолчанию DEPARTMENT_ADMIN)",
     )
     parser.add_argument("--department", help="Название отдела (для DEPARTMENT_ADMIN)")
+    parser.add_argument("--vk-id", type=int, help="VK ID администратора для двухфакторной аутентификации (2FA)")
     parser.add_argument("--disable", action="store_true", help="Отключить пользователя")
     args = parser.parse_args()
 
@@ -101,6 +144,7 @@ def main() -> None:
                 WebRole(args.role),
                 args.department,
                 args.disable,
+                args.vk_id,
             )
         )
     except Exception as error:

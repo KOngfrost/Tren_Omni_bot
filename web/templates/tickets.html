@@ -157,8 +157,8 @@ function openTicket(id) {
             var body = '';
             body += '<div class="detail-block"><strong>Тема:</strong> ' + escapeHtml(ticket.topic || '—') + '</div>';
             body += '<div class="detail-block"><strong>Описание:</strong><div class="detail-box">' + escapeHtml(ticket.description || '—') + '</div></div>';
-            body += '<div class="detail-block"><strong>Пользователь:</strong> ' + (ticket.user ? (ticket.user.full_name || 'Аноним') : 'Аноним') + '</div>';
-            body += '<div class="detail-block"><strong>Отдел:</strong> ' + (ticket.department ? ticket.department.name : '—') + '</div>';
+            body += '<div class="detail-block"><strong>Пользователь:</strong> ' + escapeHtml(ticket.user ? (ticket.user.full_name || 'Аноним') : 'Аноним') + '</div>';
+            body += '<div class="detail-block"><strong>Отдел:</strong> ' + escapeHtml(ticket.department ? ticket.department.name : '—') + '</div>';
             var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
             var displayStatus = window.STATUS_LABELS[rawStatus] || rawStatus || '—';
             body += '<div class="detail-block"><strong>Статус:</strong> ' + escapeHtml(displayStatus) + '</div>';

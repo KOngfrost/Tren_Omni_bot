@@ -7,6 +7,7 @@ import pytest
 from core.models import Department, MessageAuthorType, Ticket, TicketMessage, TicketStatus, User
 from core.ticket_service import (
     StatusTransitionError,
+    _match_department_in_memory,
     can_transition,
     format_ticket_details,
     format_ticket_list,
@@ -357,3 +358,16 @@ async def test_tickets_web_search_and_filters(db_session_maker):
         )
         assert resp_st.status_code == 200
         assert len(resp_st.context["tickets"]) == 1
+
+
+def test_match_department_in_memory_kb():
+    """Проверка сопоставления отдела по ключевым словам базы знаний."""
+    from core.models import KnowledgeBase
+
+    dept1 = Department(id=1, name="Учебный отдел")
+    dept2 = Department(id=2, name="Бухгалтерия")
+    kb1 = KnowledgeBase(department_id=2, keywords="стипендия, выплата")
+    matched = _match_department_in_memory("вопрос где стипендия", [dept1, dept2], [kb1])
+    assert matched is not None
+    assert matched.id == 2
+

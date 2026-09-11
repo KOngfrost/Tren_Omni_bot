@@ -135,7 +135,9 @@ class DBRateLimiter:
 
         from sqlalchemy import text
 
-        cutoff = datetime.now(UTC) - timedelta(seconds=self.window_seconds)
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(seconds=self.window_seconds)
+        cleanup_cutoff = now - timedelta(hours=24)
 
         # Посчитать попытки за окно
         try:
@@ -155,9 +157,9 @@ class DBRateLimiter:
                 # Записать новую попытку
                 insert_stmt = text(
                     f"INSERT INTO {self.table_name} (ip, action, attempted_at) "
-                    f"VALUES (:ip, :action, NOW())"
+                    f"VALUES (:ip, :action, :now)"
                 )
-                await session.execute(insert_stmt, {"ip": ip, "action": action})
+                await session.execute(insert_stmt, {"ip": ip, "action": action, "now": now})
             else:
                 count_stmt = text(
                     f"SELECT COUNT(*) FROM {self.table_name} "
@@ -171,10 +173,15 @@ class DBRateLimiter:
 
                 # Записать новую попытку
                 insert_stmt = text(
-                    f"INSERT INTO {self.table_name} (ip, attempted_at) VALUES (:ip, NOW())"
+                    f"INSERT INTO {self.table_name} (ip, attempted_at) VALUES (:ip, :now)"
                 )
-                await session.execute(insert_stmt, {"ip": ip})
+                await session.execute(insert_stmt, {"ip": ip, "now": now})
 
+            # Очистка устаревших записей (> 24 ч) для предотвращения разрастания таблицы
+            cleanup_stmt = text(
+                f"DELETE FROM {self.table_name} WHERE attempted_at < :cleanup_cutoff"
+            )
+            await session.execute(cleanup_stmt, {"cleanup_cutoff": cleanup_cutoff})
             await session.commit()
             return True
 

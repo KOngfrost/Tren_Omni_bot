@@ -30,11 +30,11 @@ https://oss-web-panel.<tailnet>.ts.net/
 
 ### 3.1. Создание через консоль сервера
 ```bash
-# Создание суперадминистратора
-docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN
+# Создание суперадминистратора (с привязкой к VK ID для 2FA)
+docker compose exec bot python scripts/create_web_user.py --username admin --role SUPERADMIN --vk-id 123456789
 
 # Создание администратора отдела
-docker compose exec bot python scripts/create_web_user.py --username zhilbyt --role DEPARTMENT_ADMIN --department "Жилбыт"
+docker compose exec bot python scripts/create_web_user.py --username zhilbyt --role DEPARTMENT_ADMIN --department "Жилбыт" --vk-id 987654321
 ```
 
 ### 3.2. Создание и удаление через веб-интерфейс

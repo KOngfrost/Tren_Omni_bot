@@ -56,11 +56,11 @@ _LOGIN_WINDOW_SECONDS = 15 * 60
 # - Создание/передача заявок
 # - Создание/удаление пользователей админа
 #
-# Лимит: 20 операций на IP за 5 минут → временная блокировка (1 минута).
+# Лимит: 60 операций на IP за 5 минут → временная блокировка (1 минута).
 # Используем DBRateLimiter для многопроцессной совместимости.
 _crud_rate_limiter = DBRateLimiter(
     table_name="crud_attempts",
-    max_requests=20,
+    max_requests=60,
     window_seconds=5 * 60,
 )
 
@@ -117,6 +117,11 @@ async def _record_failed_attempt(ip: str) -> None:
     try:
         async with core_db.async_session_maker() as session:
             session.add(LoginAttempt(ip=ip, success=False))
+            # Очистка попыток старше 24 часов
+            cleanup_cutoff = datetime.now(UTC) - timedelta(hours=24)
+            await session.execute(
+                delete(LoginAttempt).where(LoginAttempt.attempted_at < cleanup_cutoff)
+            )
             await session.commit()
     except Exception:
         logger.warning("Rate-limit: не удалось записать попытку входа в БД")
