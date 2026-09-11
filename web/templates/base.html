@@ -21,15 +21,15 @@
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token|default('') }}">
-    <link rel="stylesheet" href="/static/style.css?v=0.7.9">
-    <script src="/static/store.js?v=0.7.9" defer></script>
-    <script src="/static/app.js?v=0.7.9" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v=0.7.9.5">
+    <script src="/static/store.js?v=0.7.9.5" defer></script>
+    <script src="/static/app.js?v=0.7.9.5" defer></script>
 </head>
 <body>
     <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
 
+    <div class="{% if user is defined and user %}container{% else %}auth-page-wrapper{% endif %}" id="app-container">
     {% if user is defined and user %}
-    <div class="container">
         <aside class="sidebar" id="sidebar" aria-label="Боковое меню навигации">
             <div class="sidebar-header">
                 <div class="sidebar-top-bar">
@@ -37,7 +37,7 @@
                         <span class="monogram" role="img" aria-label="Логотип OSS Bot">OB</span>
                         <span>
                             <span class="brand-name">OSS Bot</span>
-                            <span class="brand-sub">Панель управления v0.7.9</span>
+                            <span class="brand-sub">Панель управления v0.7.9.5</span>
                         </span>
                     </a>
                     <button class="sidebar-close-btn" id="sidebar-close-btn" type="button" aria-label="Закрыть меню" title="Закрыть меню">✕</button>
@@ -81,7 +81,9 @@
             </nav>
         </aside>
         <div class="mobile-menu-backdrop" id="mobile-backdrop" aria-hidden="true"></div>
-        <main class="main-content" id="main-content" role="main">
+    {% endif %}
+        <main class="{% if user is defined and user %}main-content{% else %}auth-main-content{% endif %}" id="main-content" role="main">
+            {% if user is defined and user %}
             <header class="top-nav-bar">
                 <button class="mobile-nav-toggle nav-toggle-btn" id="menu-toggle-btn" type="button" aria-controls="sidebar-nav" aria-expanded="false" aria-label="Открыть меню">
                     <span class="nav-icon" aria-hidden="true">☰</span>
@@ -89,7 +91,7 @@
                 </button>
                 <a href="/" class="mobile-brand" aria-label="OSS Bot главная страница">
                     <span class="monogram monogram-sm" role="img" aria-label="Логотип">OB</span>
-                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v0.7.9</small></span>
+                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v0.7.9.5</small></span>
                 </a>
                 <div class="top-nav-right">
                     {% block top_actions %}{% endblock %}
@@ -117,33 +119,46 @@
                 })();
             </script>
             {% endif %}
-    {% else %}
-    <main id="main-content" role="main">
-    {% endif %}
+            {% endif %}
 
-    {% block content %}{% endblock %}
+            {% block content %}{% endblock %}
 
-    <footer class="site-footer" role="contentinfo">
-        <div class="footer-container">
-            <div class="footer-links">
-                <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
-                <span class="footer-sep" aria-hidden="true">•</span>
-                <a href="/legal/consent" class="footer-link">Согласие на обработку данных</a>
-                <span class="footer-sep" aria-hidden="true">•</span>
-                <a href="/legal/terms" class="footer-link">Условия сервиса</a>
-            </div>
-            <div class="footer-copy">
-                <span>© 2026 OSS Bot. Все права защищены.</span>
-            </div>
-        </div>
-    </footer>
-
-    {% if user is defined and user %}
+            {% if user is defined and user %}
+            <footer class="site-footer" role="contentinfo">
+                <div class="footer-container">
+                    <div class="footer-copy">
+                        <span>© 2026 OSS Bot</span>
+                        <span class="footer-version-badge">v0.7.9.5</span>
+                    </div>
+                    <div class="footer-links">
+                        <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
+                        <span class="footer-sep" aria-hidden="true">•</span>
+                        <a href="/legal/consent" class="footer-link">Согласие на обработку данных</a>
+                        <span class="footer-sep" aria-hidden="true">•</span>
+                        <a href="/legal/terms" class="footer-link">Условия сервиса</a>
+                    </div>
+                </div>
+            </footer>
+            {% endif %}
         </main>
+        {% if not (user is defined and user) %}
+        <footer class="site-footer auth-footer" role="contentinfo">
+            <div class="footer-container">
+                <div class="footer-copy">
+                    <span>© 2026 OSS Bot</span>
+                    <span class="footer-version-badge">v0.7.9.5</span>
+                </div>
+                <div class="footer-links">
+                    <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
+                    <span class="footer-sep" aria-hidden="true">•</span>
+                    <a href="/legal/consent" class="footer-link">Согласие на обработку данных</a>
+                    <span class="footer-sep" aria-hidden="true">•</span>
+                    <a href="/legal/terms" class="footer-link">Условия сервиса</a>
+                </div>
+            </div>
+        </footer>
+        {% endif %}
     </div>
-    {% else %}
-    </main>
-    {% endif %}
 
     <!-- Баннер согласия на использование файлов cookie -->
     <aside class="cookie-banner" id="cookie-consent-banner" role="region" aria-label="Уведомление об использовании cookie" style="display: none;">
