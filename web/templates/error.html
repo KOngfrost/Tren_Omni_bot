@@ -3,14 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ error_title }} - OSS Web Panel</title>
+    <title>{{ error_title }} — OSS Bot</title>
+    <meta name="description" content="Ошибка {{ error_code }}: {{ error_message }}">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=0.7.8">
-    <script src="/static/app.js?v=0.7.8" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v=0.7.9">
+    <script src="/static/app.js?v=0.7.9" defer></script>
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
+    <main id="main-content" role="main">
     <div class="error-page">
         <div class="error-card">
             <div class="error-icon">{{ error_icon }}</div>
@@ -34,5 +39,17 @@
             </div>
         </div>
     </div>
+    </main>
+    <footer class="site-footer" role="contentinfo">
+        <div class="footer-container">
+            <div class="footer-links">
+                <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
+                <span class="footer-sep" aria-hidden="true">•</span>
+                <a href="/legal/consent" class="footer-link">Согласие на обработку ПДн</a>
+                <span class="footer-sep" aria-hidden="true">•</span>
+                <a href="/legal/terms" class="footer-link">Условия пользования</a>
+            </div>
+        </div>
+    </footer>
 </body>
 </html>

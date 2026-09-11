@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% block title %}{{ department.name if department else 'Отдел' }} — OSS Web Panel{% endblock %}
+{% block title %}{{ department.name if department else 'Отдел' }} — OSS Bot{% endblock %}
+{% block meta_description %}Рабочий фрейм отдела {{ department.name if department else '' }}: заявки, FAQ, мероприятия и база знаний.{% endblock %}
+{% block canonical_url %}/dept/{{ department.id if department else '' }}/{% endblock %}
 
 {% block content %}
 {% if department %}

@@ -1,0 +1,11 @@
+﻿<svg xmlns=http://www.w3.org/2000/svg viewBox=0 0 32 32 width=32 height=32>
+  <defs>
+    <linearGradient id=neon-grad x1=0% y1=0% x2=100% y2=100%>
+      <stop offset=0% stop-color=#ff4d9d/>
+      <stop offset=100% stop-color=#7928ca/>
+    </linearGradient>
+  </defs>
+  <rect width=32 height=32 rx=7 fill=#0f141c/>
+  <rect x=1 y=1 width=30 height=30 rx=6 fill=none stroke=url(#neon-grad) stroke-width=1.5/>
+  <text x=16 y=21 font-family=-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif font-size=13 font-weight=800 fill=#ffffff text-anchor=middle letter-spacing=-0.5>OB</text>
+</svg>

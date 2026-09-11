@@ -290,6 +290,7 @@ def _main_reply_text(departments: list[str] | None = None) -> str:
         "• База знаний — полезные статьи и инструкции",
         "• Мои заявки — список ваших обращений и их статусы\n",
         "💡 При создании обращения можно выбрать: получить ответ в VK или отправить анонимно.",
+        "🔒 Отправляя обращение, вы даёте согласие на обработку персональных данных в соответствии с 152-ФЗ.",
     ]
     return "\n".join(lines)
 
@@ -767,8 +768,6 @@ async def admin_tickets_handler(message: Message):
     lines.append("  Ответ #N: текст ответа. Например: «Ответ #12: Уже исправили»")
     lines.append("  Статус #N: статус. Например: «Статус #12: Выполнено»")
     await message.answer("\n".join(lines), keyboard=build_admin_keyboard())
-
-
 
 
 def _parse_status(value: str) -> TicketStatus:

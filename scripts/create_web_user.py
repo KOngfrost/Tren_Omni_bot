@@ -127,7 +127,9 @@ def main() -> None:
         help="Роль (по умолчанию DEPARTMENT_ADMIN)",
     )
     parser.add_argument("--department", help="Название отдела (для DEPARTMENT_ADMIN)")
-    parser.add_argument("--vk-id", type=int, help="VK ID администратора для двухфакторной аутентификации (2FA)")
+    parser.add_argument(
+        "--vk-id", type=int, help="VK ID администратора для двухфакторной аутентификации (2FA)"
+    )
     parser.add_argument("--disable", action="store_true", help="Отключить пользователя")
     args = parser.parse_args()
 

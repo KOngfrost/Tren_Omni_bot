@@ -1,38 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Вход - OSS Web Panel{% endblock %}
+{% block title %}Вход в систему — OSS Bot{% endblock %}
+{% block meta_description %}Авторизация в панели управления OSS Bot для приёма и обработки обращений студентов.{% endblock %}
+{% block canonical_url %}/auth/login{% endblock %}
 
 {% block content %}
 <div class="login-container">
     <div class="login-card">
         <div class="login-brand">
-            <div class="monogram">OB</div>
+            <div class="monogram" role="img" aria-label="Логотип OSS Bot">OB</div>
             <div>
                 <h1>OSS Bot</h1>
-                <div class="subtitle">Вход в oss-web-panel v0.7.8</div>
+                <div class="subtitle">Вход в панель управления v0.7.9</div>
             </div>
         </div>
         
         {% if flash_error %}
-        <div class="alert alert-error">{{ flash_error }}</div>
+        <div class="alert alert-error" role="alert" aria-live="assertive">{{ flash_error }}</div>
         {% endif %}
         
-        <form method="POST" action="/auth/login">
+        <form method="POST" action="/auth/login" novalidate>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
-                <label for="username">Логин</label>
-                <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="Введите логин">
+                <label for="username">Логин <span class="required-star" aria-hidden="true">*</span></label>
+                <input type="text" id="username" name="username" required aria-required="true" autofocus autocomplete="username" placeholder="Введите логин">
             </div>
             <div class="form-group">
-                <label for="password">Пароль</label>
+                <label for="password">Пароль <span class="required-star" aria-hidden="true">*</span></label>
                 <div class="password-input-wrapper">
-                    <input type="password" id="password" name="password" required placeholder="Введите пароль">
-                    <button type="button" class="toggle-password" aria-label="Показать пароль">
-                        <span class="icon-eye-open"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+                    <input type="password" id="password" name="password" required aria-required="true" autocomplete="current-password" placeholder="Введите пароль">
+                    <button type="button" class="toggle-password" aria-label="Показать пароль" title="Показать или скрыть пароль">
+                        <span class="icon-eye-open" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
                     </button>
                 </div>
             </div>
             <button type="submit" class="btn btn-primary btn-full">Войти</button>
         </form>
+
+        <div class="login-footer-legal">
+            Нажимая «Войти», вы принимаете <a href="/legal/terms">Условия пользования</a> и подтверждаете <a href="/legal/consent">Согласие на обработку персональных данных</a> в соответствии с <a href="/legal/privacy">Политикой конфиденциальности (152-ФЗ)</a>.
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -370,4 +370,3 @@ def test_match_department_in_memory_kb():
     matched = _match_department_in_memory("вопрос где стипендия", [dept1, dept2], [kb1])
     assert matched is not None
     assert matched.id == 2
-

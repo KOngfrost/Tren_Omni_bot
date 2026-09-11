@@ -22,9 +22,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.gzip import GZipMiddleware
 
 from core.config import settings
 from core.database import async_session_maker
@@ -136,18 +137,40 @@ app.add_middleware(
     path="/",
 )
 
-# 4. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
+# 4. Сжатие ответов GZip для оптимизации производительности (размер от 1 КБ)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# 5. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
 # (outermost - выполняется первым)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Static
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_endpoint():
+    """Отдача иконки favicon.ico."""
+    return FileResponse("web/static/favicon.ico", media_type="image/x-icon")
+
+
+# Middleware для кэширования статических файлов (Cache-Control)
+@app.middleware("http")
+async def add_static_cache_headers(request: Request, call_next):
+    """Добавляет Cache-Control заголовок для статики."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=86400, immutable"
+    return response
+
+
 # === Константы путей для пропуска middleware ===
 _SKIP_MIDDLEWARE_PREFIXES = (
     "/static/",
     "/health",
     "/auth/",
+    "/legal/",
+    "/favicon.ico",
 )
 
 # Валидатор размера запроса (10MB лимит)
@@ -478,12 +501,14 @@ from web.routes import (
     events,
     faq,
     knowledge_base,
+    legal,
     logs,
     tickets,
     vk_callback,
 )
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(legal.router, prefix="/legal", tags=["legal"])
 app.include_router(admin_panel.router, prefix="/admin/admins", tags=["admin"])
 app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
 app.include_router(knowledge_base.router, prefix="/knowledge", tags=["knowledge_base"])

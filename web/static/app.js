@@ -499,4 +499,40 @@
             if (bannerEl) bannerEl.style.display = 'none';
         }
     } catch (e) {}
+
+    /**
+     * Баннер согласия на использование файлов cookie (152-ФЗ)
+     */
+    function initCookieConsent() {
+        var banner = document.getElementById('cookie-consent-banner');
+        if (!banner) return;
+
+        try {
+            if (localStorage.getItem('cookie_consent_accepted') === 'true') {
+                banner.style.display = 'none';
+                return;
+            }
+        } catch (e) {}
+
+        banner.style.display = 'flex';
+
+        var acceptBtn = document.getElementById('cookie-consent-accept-btn');
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', function () {
+                try {
+                    localStorage.setItem('cookie_consent_accepted', 'true');
+                } catch (e) {}
+                banner.classList.add('is-hiding');
+                setTimeout(function () {
+                    banner.style.display = 'none';
+                }, 300);
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCookieConsent);
+    } else {
+        initCookieConsent();
+    }
 })();

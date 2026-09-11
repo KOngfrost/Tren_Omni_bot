@@ -63,7 +63,9 @@ async def logs_page(
                 ticket_user_ids = select(Ticket.user_id).where(
                     Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
                 )
-                dept_filter = or_(Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids))
+                dept_filter = or_(
+                    Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids)
+                )
                 logs_stmt = logs_stmt.where(dept_filter)
                 count_stmt = select(func.count(Log.id)).where(dept_filter)
             else:
@@ -118,7 +120,9 @@ async def export_logs(user=Depends(require_auth)):
                 ticket_user_ids = select(Ticket.user_id).where(
                     Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
                 )
-                dept_filter = or_(Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids))
+                dept_filter = or_(
+                    Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids)
+                )
                 logs_stmt = logs_stmt.where(dept_filter)
             logs_result = await session.execute(logs_stmt)
             logs: list[Log] = list(logs_result.scalars().all())
