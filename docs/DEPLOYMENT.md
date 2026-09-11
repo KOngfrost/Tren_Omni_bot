@@ -27,7 +27,26 @@ newgrp docker
 docker compose version   # ожидается v2.24.0 или новее
 ```
 
-### 1.3. Firewall
+### 1.3. Настройка зеркал Docker Hub (для РФ / при connection refused)
+
+Если при загрузке базовых образов возникает ошибка `dial tcp ...:443: connect: connection refused` или таймауты:
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<EOF
+{
+  "registry-mirrors": [
+    "https://dockerhub.timeweb.cloud",
+    "https://mirror.gcr.io",
+    "https://huecker.io"
+  ]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+### 1.4. Firewall
 
 Наружу открыт только SSH (22/tcp). Порты PostgreSQL (5432) и панели (8000)
 в интернет НЕ публикуются - панель доступна через Tailscale.
@@ -114,6 +133,19 @@ docker compose logs --tail 100 migrate      # миграции должны за
 docker compose logs --tail 100 bot web-admin
 curl -s http://localhost:8000/health        # {"status":"ok"} (с самого сервера)
 ```
+
+> [!TIP]
+> **Решение проблем со сборкой:**
+> - Если сборка обрывается с `connection refused` или таймаутом при загрузке базовых образов, скачайте их предварительно:
+>   ```bash
+>   docker pull python:3.11-slim-bookworm
+>   docker pull tailscale/tailscale:latest
+>   ```
+> - Если сборка подвисает на параллельных шагах BuildKit:
+>   ```bash
+>   DOCKER_BUILDKIT=0 docker compose build
+>   docker compose up -d
+>   ```
 
 Tailscale-контейнер поднимается вместе со стеком автоматически. Схема БД
 изменяется только через Alembic (контейнер `migrate`).

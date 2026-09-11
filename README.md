@@ -213,6 +213,8 @@ docker compose ps
 curl -s http://localhost:8000/health   # ожидается {"status":"ok"} (с самого сервера)
 ```
 
+*(При ошибках связи с Docker Hub или `connection refused` настройте зеркала по инструкции в [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#13-настройка-зеркал-docker-hub-для-рф--при-connection-refused)).*
+
 4. Включите HTTPS-доступ к панели через Tailscale:
 
 ```bash
