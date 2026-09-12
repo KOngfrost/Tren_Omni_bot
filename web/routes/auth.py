@@ -395,6 +395,14 @@ async def two_factor_verify(request: Request):
     client_ip = _get_client_ip(request)
     form = await request.form()
     submitted_code = str(form.get("code", "")).strip()
+    if not submitted_code:
+        code_parts = [str(form.get(f"code_{i}", "")).strip() for i in range(1, 7)]
+        if any(code_parts):
+            submitted_code = "".join(code_parts)
+
+    import re
+
+    submitted_code = re.sub(r"\D", "", submitted_code)
 
     if pending.get("attempts", 0) >= 5:
         request.session.pop("pending_2fa", None)

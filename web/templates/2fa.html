@@ -32,15 +32,15 @@
             <div class="form-group otp-form-group">
                 <label id="otp-label" class="otp-label">Код из сообщения</label>
                 <div class="otp-inputs" id="otpInputs" role="group" aria-labelledby="otp-label">
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="0" autocomplete="one-time-code" autofocus aria-label="Цифра 1">
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="1" autocomplete="off" aria-label="Цифра 2">
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="2" autocomplete="off" aria-label="Цифра 3">
+                    <input type="text" name="code_1" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="0" autocomplete="one-time-code" autofocus required aria-label="Цифра 1">
+                    <input type="text" name="code_2" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="1" autocomplete="off" aria-label="Цифра 2">
+                    <input type="text" name="code_3" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="2" autocomplete="off" aria-label="Цифра 3">
                     <div class="otp-separator" aria-hidden="true"></div>
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="3" autocomplete="off" aria-label="Цифра 4">
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="4" autocomplete="off" aria-label="Цифра 5">
-                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="5" autocomplete="off" aria-label="Цифра 6">
+                    <input type="text" name="code_4" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="3" autocomplete="off" aria-label="Цифра 4">
+                    <input type="text" name="code_5" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="4" autocomplete="off" aria-label="Цифра 5">
+                    <input type="text" name="code_6" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="5" autocomplete="off" aria-label="Цифра 6">
                 </div>
-                <input type="hidden" id="code" name="code" required maxlength="6" pattern="[0-9]{6}">
+                <input type="hidden" id="code" name="code" value="">
             </div>
             <button type="submit" class="btn btn-primary btn-full" id="btnSubmit" style="margin-top: 6px;">
                 Подтвердить и войти
@@ -74,171 +74,236 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const digits = Array.from(document.querySelectorAll('.otp-digit'));
-    const hiddenCode = document.getElementById('code');
-    const form = document.getElementById('twoFactorForm');
-    const otpContainer = document.getElementById('otpInputs');
-    const btnResend = document.getElementById('btnResend');
-    const resendLabel = document.getElementById('resendLabel');
-    const resendForm = document.getElementById('resendForm');
+(function() {
+    function init2FA() {
+        const digits = Array.from(document.querySelectorAll('.otp-digit'));
+        const hiddenCode = document.getElementById('code');
+        const form = document.getElementById('twoFactorForm');
+        const otpContainer = document.getElementById('otpInputs');
+        const btnResend = document.getElementById('btnResend');
+        const resendLabel = document.getElementById('resendLabel');
+        const resendForm = document.getElementById('resendForm');
 
-    function syncCode() {
-        const val = digits.map(d => d.value).join('');
-        hiddenCode.value = val;
-        digits.forEach(d => {
-            if (d.value) {
-                d.classList.add('is-filled');
+        if (!digits.length || !form) return;
+
+        function syncCode() {
+            const val = digits.map(d => d.value.trim()).join('');
+            if (hiddenCode) {
+                hiddenCode.value = val;
+            }
+            digits.forEach(d => {
+                if (d.value.trim()) {
+                    d.classList.add('is-filled');
+                } else {
+                    d.classList.remove('is-filled');
+                }
+            });
+            return val;
+        }
+
+        function handlePastedText(rawText) {
+            if (!rawText) return false;
+            // Ищем 6 цифр подряд в тексте (например 291321 или "Код: 291321")
+            const match = rawText.match(/\b\d{6}\b/) || rawText.match(/\d{6}/);
+            let code = '';
+            if (match) {
+                code = match[0];
             } else {
-                d.classList.remove('is-filled');
+                code = rawText.replace(/\D/g, '').slice(0, 6);
             }
-        });
-        return val;
-    }
+            if (!code || code.length === 0) return false;
 
-    function handlePastedText(rawText) {
-        if (!rawText) return false;
-        // Извлекаем 6 цифр подряд (например "291321" или из текста "код: 291321")
-        const match = rawText.match(/\b\d{6}\b/) || rawText.match(/\d{6}/);
-        let code = '';
-        if (match) {
-            code = match[0];
-        } else {
-            code = rawText.replace(/\D/g, '').slice(0, 6);
+            for (let i = 0; i < 6; i++) {
+                if (digits[i]) {
+                    digits[i].value = code[i] || '';
+                }
+            }
+            const fullCode = syncCode();
+
+            if (fullCode.length === 6) {
+                digits[5].focus();
+                digits[5].select();
+                setTimeout(() => {
+                    if (syncCode().length === 6) {
+                        form.requestSubmit ? form.requestSubmit() : form.submit();
+                    }
+                }, 150);
+            } else if (digits[fullCode.length]) {
+                digits[fullCode.length].focus();
+                digits[fullCode.length].select();
+            }
+            return true;
         }
-        if (!code) return false;
 
-        code.split('').forEach((char, i) => {
-            if (digits[i]) {
-                digits[i].value = char;
-            }
+        // Перехват вставки на всех уровнях
+        [otpContainer, form, document].forEach(target => {
+            if (!target) return;
+            target.addEventListener('paste', (e) => {
+                const text = (e.clipboardData || window.clipboardData)?.getData('text');
+                if (text && handlePastedText(text)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
         });
-        syncCode();
 
-        if (code.length === 6) {
-            digits[5].focus();
-            digits[5].select();
-            setTimeout(() => {
-                form.requestSubmit();
-            }, 180);
-        } else if (digits[code.length]) {
-            digits[code.length].focus();
-        }
-        return true;
-    }
+        digits.forEach((digit, idx) => {
+            // keydown для надежного перехвата стрелок, backspace и цифр
+            digit.addEventListener('keydown', (e) => {
+                const key = e.key;
+                const keyCode = e.keyCode;
 
-    // Обработка вставки на любом уровне формы
-    [otpContainer, form, document].forEach(target => {
-        if (!target) return;
-        target.addEventListener('paste', (e) => {
-            const text = (e.clipboardData || window.clipboardData)?.getData('text');
-            if (text && handlePastedText(text)) {
-                e.preventDefault();
-            }
-        });
-    });
-
-    digits.forEach((digit, idx) => {
-        digit.addEventListener('input', (e) => {
-            const rawVal = e.target.value;
-            // Если в поле попало больше 1 символа (например через autofill)
-            if (rawVal.length > 1) {
-                if (handlePastedText(rawVal)) {
+                // Стрелка влево
+                if (key === 'ArrowLeft' || keyCode === 37) {
+                    e.preventDefault();
+                    if (idx > 0) {
+                        digits[idx - 1].focus();
+                        digits[idx - 1].select();
+                    }
                     return;
                 }
-            }
-            const cleanVal = rawVal.replace(/\D/g, '');
-            if (cleanVal.length > 0) {
-                digit.value = cleanVal[cleanVal.length - 1];
-                const code = syncCode();
-                if (idx < digits.length - 1) {
-                    digits[idx + 1].focus();
-                    digits[idx + 1].select();
-                } else if (code.length === 6) {
-                    digit.blur();
-                }
-            } else {
-                digit.value = '';
-                syncCode();
-            }
-        });
 
-        digit.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                if (idx > 0) {
-                    digits[idx - 1].focus();
-                    digits[idx - 1].select();
-                }
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                if (idx < digits.length - 1) {
-                    digits[idx + 1].focus();
-                    digits[idx + 1].select();
-                }
-            } else if (e.key === 'ArrowUp' || e.key === 'Home') {
-                e.preventDefault();
-                digits[0].focus();
-                digits[0].select();
-            } else if (e.key === 'ArrowDown' || e.key === 'End') {
-                e.preventDefault();
-                digits[digits.length - 1].focus();
-                digits[digits.length - 1].select();
-            } else if (e.key === 'Backspace') {
-                if (!digit.value && idx > 0) {
+                // Стрелка вправо
+                if (key === 'ArrowRight' || keyCode === 39) {
                     e.preventDefault();
-                    digits[idx - 1].focus();
-                    digits[idx - 1].value = '';
-                    syncCode();
+                    if (idx < digits.length - 1) {
+                        digits[idx + 1].focus();
+                        digits[idx + 1].select();
+                    }
+                    return;
+                }
+
+                // Стрелка вверх или Home -> в начало
+                if (key === 'ArrowUp' || keyCode === 38 || key === 'Home' || keyCode === 36) {
+                    e.preventDefault();
+                    digits[0].focus();
+                    digits[0].select();
+                    return;
+                }
+
+                // Стрелка вниз или End -> в конец
+                if (key === 'ArrowDown' || keyCode === 40 || key === 'End' || keyCode === 35) {
+                    e.preventDefault();
+                    digits[digits.length - 1].focus();
+                    digits[digits.length - 1].select();
+                    return;
+                }
+
+                // Backspace
+                if (key === 'Backspace' || keyCode === 8) {
+                    if (!digit.value && idx > 0) {
+                        e.preventDefault();
+                        digits[idx - 1].focus();
+                        digits[idx - 1].value = '';
+                        syncCode();
+                    } else {
+                        digit.value = '';
+                        syncCode();
+                    }
+                    return;
+                }
+
+                // Ввод цифры с клавиатуры (0-9 или numpad 0-9)
+                if ((key >= '0' && key <= '9') || (keyCode >= 96 && keyCode <= 105)) {
+                    e.preventDefault();
+                    const digitChar = (key >= '0' && key <= '9') ? key : String(keyCode - 96);
+                    digit.value = digitChar;
+                    const code = syncCode();
+                    if (idx < digits.length - 1) {
+                        digits[idx + 1].focus();
+                        digits[idx + 1].select();
+                    } else if (code.length === 6) {
+                        digit.blur();
+                    }
+                    return;
+                }
+            });
+
+            // Обработка input (для мобильных клавиатур, автозаполнения, виртуальных клавиатур)
+            digit.addEventListener('input', (e) => {
+                const rawVal = e.target.value;
+                if (rawVal.length > 1) {
+                    if (handlePastedText(rawVal)) {
+                        return;
+                    }
+                }
+                const cleanVal = rawVal.replace(/\D/g, '');
+                if (cleanVal.length > 0) {
+                    digit.value = cleanVal[cleanVal.length - 1];
+                    const code = syncCode();
+                    if (idx < digits.length - 1) {
+                        digits[idx + 1].focus();
+                        digits[idx + 1].select();
+                    } else if (code.length === 6) {
+                        digit.blur();
+                    }
                 } else {
                     digit.value = '';
                     syncCode();
                 }
+            });
+
+            digit.addEventListener('focus', () => {
+                digit.select();
+            });
+
+            digit.addEventListener('click', () => {
+                digit.select();
+            });
+        });
+
+        form.addEventListener('submit', (e) => {
+            const val = syncCode();
+            if (val.length !== 6) {
+                e.preventDefault();
+                const firstEmpty = digits.find(d => !d.value.trim());
+                if (firstEmpty) {
+                    firstEmpty.focus();
+                    firstEmpty.select();
+                }
             }
         });
 
-        digit.addEventListener('focus', () => {
-            digit.select();
-        });
-    });
+        // Cooldown timer для кнопки "Отправить повторно"
+        if (btnResend && resendLabel && resendForm) {
+            const COOLDOWN_KEY = '2fa_resend_cooldown_end';
+            function updateResendTimer() {
+                const cooldownEnd = parseInt(sessionStorage.getItem(COOLDOWN_KEY) || '0', 10);
+                const now = Date.now();
+                const diff = Math.ceil((cooldownEnd - now) / 1000);
 
-    form.addEventListener('submit', (e) => {
-        const val = syncCode();
-        if (val.length !== 6) {
-            e.preventDefault();
-            const firstEmpty = digits.find(d => !d.value);
-            if (firstEmpty) {
-                firstEmpty.focus();
+                if (diff > 0) {
+                    btnResend.disabled = true;
+                    resendLabel.textContent = `Отправить повторно (${diff} с)`;
+                    setTimeout(updateResendTimer, 1000);
+                } else {
+                    btnResend.disabled = false;
+                    resendLabel.textContent = 'Отправить код повторно';
+                    sessionStorage.removeItem(COOLDOWN_KEY);
+                }
             }
+
+            resendForm.addEventListener('submit', () => {
+                sessionStorage.setItem(COOLDOWN_KEY, (Date.now() + 60000).toString());
+            });
+
+            updateResendTimer();
         }
-    });
 
-    const COOLDOWN_KEY = '2fa_resend_cooldown_end';
-    function updateResendTimer() {
-        const cooldownEnd = parseInt(sessionStorage.getItem(COOLDOWN_KEY) || '0', 10);
-        const now = Date.now();
-        const diff = Math.ceil((cooldownEnd - now) / 1000);
-
-        if (diff > 0) {
-            btnResend.disabled = true;
-            resendLabel.textContent = `Отправить повторно (${diff} с)`;
-            setTimeout(updateResendTimer, 1000);
-        } else {
-            btnResend.disabled = false;
-            resendLabel.textContent = 'Отправить код повторно';
-            sessionStorage.removeItem(COOLDOWN_KEY);
+        // Автофокус на первую ячейку
+        if (digits[0]) {
+            setTimeout(() => {
+                digits[0].focus();
+                digits[0].select();
+            }, 50);
         }
     }
 
-    resendForm.addEventListener('submit', () => {
-        sessionStorage.setItem(COOLDOWN_KEY, (Date.now() + 60000).toString());
-    });
-
-    updateResendTimer();
-
-    if (digits[0]) {
-        digits[0].focus();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init2FA);
+    } else {
+        init2FA();
     }
-});
+})();
 </script>
 {% endblock %}
