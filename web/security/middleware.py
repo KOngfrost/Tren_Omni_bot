@@ -2,12 +2,12 @@
 Модуль безопасности: заголовки, rate limiting, валидация ввода.
 """
 
+import html
 import logging
 import secrets
 import time
 from collections import defaultdict
 
-import bleach
 from fastapi import HTTPException, Request, status
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -124,7 +124,11 @@ class DBRateLimiter:
             raise HTTPException(429, "Too many requests")
     """
 
+    ALLOWED_TABLES = frozenset({"crud_attempts", "login_attempts"})
+
     def __init__(self, table_name: str, max_requests: int, window_seconds: int):
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"Недопустимая таблица rate-limiter: {table_name!r}")
         self.table_name = table_name
         self.max_requests = max_requests
         self.window_seconds = window_seconds
@@ -204,57 +208,24 @@ def check_rate_limit(key: str, limiter: RateLimiter) -> bool:
     return limiter.is_allowed(key)
 
 
-# === XSS-санитизация через bleach ===
-
-# Разрешённые HTML-теги для очистки пользовательского ввода.
-# Пустой список — strip all tags (максимальная безопасность).
-ALLOWED_TAGS: list[str] = []
-
-# Разрешённые атрибуты (пусто — удаляем все атрибуты, включая on*).
-ALLOWED_ATTRIBUTES: dict[str, list[str]] = {}
+# === XSS-санитизация через stdlib html.escape ===
 
 
 def sanitize_html(value: str) -> str:
-    """Очистить HTML-ввод от XSS с помощью bleach.
+    """Очистить пользовательский ввод от XSS.
 
-    Экранирует все HTML-теги и атрибуты (strip=False) — данные пользователя
-    сохраняются и безопасно отображаются как текст. В отличие от strip=True,
-    не вырезает содержимое тегов («error in line < 5» остаётся читаемым).
-    bleach корректно обрабатывает вложенные теги, сущности и edge-кейсы,
-    которые regex мог пропустить.
+    Удаляет опасные нуль-байты (\x00) и управляющие символы,
+    экранирует все HTML-символы (<, >, &, ", ') с помощью стандартного модуля html.
     """
     if not value or not isinstance(value, str):
         return value or ""
 
-    try:
-        cleaned = bleach.clean(
-            value,
-            tags=ALLOWED_TAGS,
-            attributes=ALLOWED_ATTRIBUTES,
-            strip=False,
-        )
-        # bleach экранирует < > &, но не кавычки — дополняем вручную,
-        # чтобы вложить результат в HTML-атрибут было безопасно
-        cleaned = cleaned.replace('"', "&quot;").replace("'", "&#x27;")
-        # Логирование попыток XSS
-        if cleaned != value:
-            logger.warning("XSS-паттерн очищен bleach: %s", value[:200])
-        return cleaned
-    except Exception:
-        # На случай проблем с bleach — безопасный fallback: HTML-экранирование
-        logger.exception("Ошибка в bleach.clean, fallback на HTML-экранирование")
-        return _html_escape(value)
-
-
-def _html_escape(value: str) -> str:
-    """Базовое HTML-экранирование (fallback, если bleach недоступен)."""
-    value = str(value)
-    value = value.replace("&", "&amp;")
-    value = value.replace("<", "&lt;")
-    value = value.replace(">", "&gt;")
-    value = value.replace('"', "&quot;")
-    value = value.replace("'", "&#x27;")
-    return value
+    # Удаляем нуль-байты и опасные управляющие символы (оставляем переводы строк и табуляцию)
+    cleaned = "".join(ch for ch in value if ch in ("\n", "\r", "\t") or ord(ch) >= 32)
+    escaped = html.escape(cleaned, quote=True).replace("'", "&#x27;")
+    if escaped != value:
+        logger.debug("Пользовательский ввод экранирован: %s", value[:100])
+    return escaped
 
 
 # === CSV Injection защита ===

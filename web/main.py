@@ -14,7 +14,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -188,35 +187,9 @@ async def validate_request_size(request: Request, call_next):
 
 # === Кэширование department_name ===
 
-# LRU-кэш: до 256 записей, автоматически удаляет старые при переполнении.
-# TTL = 5 минут для каждого элемента.
-_department_cache: dict[int, tuple[str | None, list, int | None, float]] = {}
-_DEPARTMENT_CACHE_MAX_SIZE = 256
-_DEPARTMENT_CACHE_TTL = 300  # 5 минут
+from types import SimpleNamespace
 
-
-def _get_cached_department(user_id: int) -> tuple[str | None, list, int | None] | None:
-    """Получить department_name из кэша. Возвращает None, если кэш истёк."""
-    entry = _department_cache.get(user_id)
-    if entry is None:
-        return None
-    cached_name, cached_depts, cached_dept_id, cached_at = entry
-    if time.time() - cached_at > _DEPARTMENT_CACHE_TTL:
-        del _department_cache[user_id]
-        return None
-    return cached_name, cached_depts, cached_dept_id
-
-
-def _set_department_cache(
-    user_id: int, name: str | None, depts: list, dept_id: int | None
-) -> None:
-    """Сохранить department_name в кэш с ограничением по размеру."""
-    # Удаляем самые старые записи, если кэш переполнен
-    if user_id not in _department_cache and len(_department_cache) >= _DEPARTMENT_CACHE_MAX_SIZE:
-        # Удаляем первую попавшуюся запись (самую старую в dict-порядке)
-        oldest_key = next(iter(_department_cache))
-        del _department_cache[oldest_key]
-    _department_cache[user_id] = (name, depts, dept_id, time.time())
+from core.cache import cache_get, cache_set
 
 
 # Middleware для загрузки department_name в контекст шаблонов
@@ -237,10 +210,14 @@ async def add_department_name(request: Request, call_next):
             from web.dependencies import get_admin_scope, get_departments_for_user
 
             web_user_id = user.get("web_user_id")
-            # Попытка получить из кэша
-            cached = _get_cached_department(web_user_id) if web_user_id else None
+            # Попытка получить из распределённого кэша
+            cached = await cache_get(f"dept_ctx:{web_user_id}") if web_user_id else None
             if cached is not None:
-                department_name, user_departments, dept_id = cached
+                department_name = cached.get("department_name")
+                user_departments = [
+                    SimpleNamespace(id=d["id"], name=d["name"])
+                    for d in cached.get("departments", [])
+                ]
             else:
                 async with async_session_maker() as db_session:
                     user_departments = await get_departments_for_user(db_session, user)
@@ -249,15 +226,19 @@ async def add_department_name(request: Request, call_next):
                 department_name = (
                     user_departments[0].name if not is_super and user_departments else None
                 )
-                dept_id = None
-                if request.url.path.startswith("/dept/"):
-                    parts = request.url.path.strip("/").split("/")
-                    if len(parts) >= 2 and parts[1].isdigit():
-                        dept_id = int(parts[1])
 
-                # Сохраняем в кэш
+                # Сохраняем в распределённый кэш
                 if web_user_id:
-                    _set_department_cache(web_user_id, department_name, user_departments, dept_id)
+                    await cache_set(
+                        f"dept_ctx:{web_user_id}",
+                        {
+                            "department_name": department_name,
+                            "departments": [
+                                {"id": d.id, "name": d.name} for d in user_departments
+                            ],
+                        },
+                        ttl=300,
+                    )
 
             # The selected department belongs to the current URL, not the user.
             dept_id = None

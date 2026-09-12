@@ -17,8 +17,7 @@ httpx>=0.28.1
 itsdangerous==2.2.0
 # Хеширование паролей: Argon2id (победитель PHC 2015) с fallback на PBKDF2
 argon2-cffi==23.1.0
-# XSS-санитизация пользовательского ввода (core/models.py, web/security/middleware.py)
-bleach==6.4.0
+
 # Асинхронный SMTP для отправки отчётов (core/reporting.py)
 aiosmtplib==4.0.0
 # Redis для сессий, кэширования с TTL и распределённой координации

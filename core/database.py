@@ -65,6 +65,13 @@ else:
 # тип остаётся не-Optional, что честно для 35+ мест использования.
 async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    """Dependency для FastAPI эндпоинтов: yield AsyncSession."""
+    async with async_session_maker() as session:
+        yield session
+
+
 # Строгая валидация имени базы данных.
 # - Начинается с буквы или подчёркивания
 # - Только буквы, цифры, подчёркивания

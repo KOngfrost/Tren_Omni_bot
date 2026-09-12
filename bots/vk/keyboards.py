@@ -71,6 +71,27 @@ def build_cancel_keyboard() -> str:
 build_admin_cancel_keyboard = build_cancel_keyboard
 
 
+def build_anonymous_choice_keyboard() -> str:
+    """Клавиатура выбора анонимности."""
+    return json.dumps(
+        {
+            "one_time": True,
+            "buttons": [
+                [
+                    {
+                        "action": {"type": "text", "label": "Остаться анонимным"},
+                        "color": "secondary",
+                    },
+                    {
+                        "action": {"type": "text", "label": "Остаться не анонимным"},
+                        "color": "primary",
+                    },
+                ]
+            ],
+        }
+    )
+
+
 def build_tickets_keyboard(ticket_ids: list[int], max_buttons: int = 5) -> str:
     """Клавиатура со списком заявок: кнопка «Подробнее #N» на каждую заявку (до max_buttons)."""
     buttons = [(f"Подробнее #{ticket_id}", "secondary") for ticket_id in ticket_ids[:max_buttons]]

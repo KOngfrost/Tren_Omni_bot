@@ -8,7 +8,7 @@
 
 import asyncio
 import logging
-import random
+import secrets
 
 import httpx
 
@@ -74,7 +74,7 @@ async def send_vk_message(vk_id: int, text: str) -> bool:
                 "access_token": settings.VK_BOT_TOKEN,
                 "v": VK_API_VERSION,
                 "peer_id": vk_id,
-                "random_id": random.randint(1, 2**31 - 1),
+                "random_id": secrets.randbelow(2**31 - 1) + 1,
                 "message": text[:4000],
             },
         )

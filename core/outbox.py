@@ -68,7 +68,6 @@ async def deliver_pending_messages(
 ) -> int:
     """Доставить одну партию отложенных сообщений. Возвращает число попыток."""
     delivered = 0
-    message_ids: list[int] = []
     stale_before = datetime.now(UTC) - timedelta(seconds=OUTBOX_CLAIM_TIMEOUT_SECONDS)
     async with async_session_maker() as session:
         stale = await session.scalars(
@@ -88,26 +87,25 @@ async def deliver_pending_messages(
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
-        messages = list(pending)
-        for message in messages:
-            message.status = "sending"
-            message.claimed_at = datetime.now(UTC)
-            if message.id is not None:
-                message_ids.append(message.id)
+        to_send: list[tuple[int, int, str]] = []
+        for message in pending:
+            if message.id is not None and message.vk_id is not None and message.text is not None:
+                message.status = "sending"
+                message.claimed_at = datetime.now(UTC)
+                to_send.append((message.id, message.vk_id, message.text))
         await session.commit()
 
-    for message_id in message_ids:
-        async with async_session_maker() as session:
-            claimed = await session.get(VkOutbox, message_id)
-            if claimed is None or claimed.status != "sending":
-                continue
-            if claimed.vk_id is None or claimed.text is None:
-                continue
-            vk_id, text = claimed.vk_id, claimed.text
+    if not to_send:
+        return 0
 
+    results: list[tuple[int, int, bool]] = []
+    for msg_id, vk_id, text in to_send:
         ok = await send_vk_message(vk_id, text)
-        async with async_session_maker() as session:
-            result = await session.get(VkOutbox, message_id)
+        results.append((msg_id, vk_id, ok))
+
+    async with async_session_maker() as session:
+        for msg_id, _vk_id, ok in results:
+            result = await session.get(VkOutbox, msg_id)
             if result is None or result.status != "sending":
                 continue
             result.attempts = (result.attempts or 0) + 1
@@ -137,7 +135,7 @@ async def deliver_pending_messages(
                     )
                     result.status = "pending"
                     result.claimed_at = None
-            await session.commit()
+        await session.commit()
     return delivered
 
 
