@@ -48,6 +48,7 @@ from core.heartbeat import touch_heartbeat
 from core.models import Event, FAQNode, KnowledgeBase, Registration, Ticket, TicketStatus
 from core.reporting import (
     build_daily_report,
+    get_app_tz,
     get_report_for_date,
     get_report_for_period,
     parse_report_date,
@@ -77,6 +78,8 @@ from bots.vk.keyboards import (
 
 vk_bot = Bot(token=settings.VK_BOT_TOKEN)
 
+logger = logging.getLogger(__name__)
+
 # Глобальный перехватчик ошибок: ни одна ошибка не должна уйти
 # пользователю в виде traceback. ErrorHandler подключается ко всем
 # view роутера (API vkbottle 4.11: см. exception_factory.error_handler).
@@ -99,8 +102,6 @@ async def _handle_bot_error(error: Exception, message: Message | None = None):
 
 for _view in vk_bot.on.views().values():
     _view.error_handler = _error_handler
-
-logger = logging.getLogger(__name__)
 
 
 # FSM StateGroup для отчётов
@@ -879,7 +880,8 @@ async def report_by_date_input(message: Message):
 
     try:
         data = await get_report_for_date(parsed)
-        report_bytes = build_daily_report(data, datetime(*parsed.timetuple()[:6]))
+        report_dt = datetime.combine(parsed, datetime.min.time(), tzinfo=get_app_tz())
+        report_bytes = build_daily_report(data, report_dt)
         filename = f"report_{parsed:%Y-%m-%d}.xlsx"
         await send_report_to_vk(
             vk_bot.api,
@@ -966,7 +968,8 @@ async def report_by_period_input(message: Message):
 
     try:
         data = await get_report_for_period(date_from, date_to)
-        report_bytes = build_daily_report(data, datetime(*date_from.timetuple()[:6]))
+        report_dt = datetime.combine(date_from, datetime.min.time(), tzinfo=get_app_tz())
+        report_bytes = build_daily_report(data, report_dt)
         filename = f"report_{date_from:%Y-%m-%d}_to_{date_to:%Y-%m-%d}.xlsx"
         await send_report_to_vk(
             vk_bot.api,

@@ -98,9 +98,16 @@ async def run_vk_polling() -> None:
     while True:
         try:
             await _start_scheduler()
+            retry_delay = 5  # сброс задержки при успешном подключении
             await vk_bot.run_polling()
             logger.warning("VK polling stopped; retrying in %s seconds", retry_delay)
-        except (aiohttp.ClientError, OSError, socket.gaierror, TimeoutError) as error:
+        except (
+            aiohttp.ClientError,
+            OSError,
+            socket.gaierror,
+            TimeoutError,
+            VKAPIError,
+        ) as error:
             logger.error(
                 "VK polling is unavailable: %s; retrying in %s seconds",
                 error,

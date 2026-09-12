@@ -53,9 +53,6 @@ class Settings:
     DB_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", ""))
     DB_PASS = os.getenv("POSTGRES_PASSWORD", os.getenv("DB_PASS", ""))
     DB_NAME = os.getenv("POSTGRES_DB", os.getenv("DB_NAME", "oss_bot"))
-    # По умолчанию: localhost для dev, "db" для Docker
-    _default_host = "db" if APP_ENV not in dev_environments else "localhost"
-    DB_HOST = os.getenv("DB_HOST", _default_host)
     DB_PORT = os.getenv("DB_PORT", "5432")
 
     # Настройки пула соединений (используется в core/database.py)
@@ -69,14 +66,19 @@ class Settings:
         os.getenv("DB_STATEMENT_CACHE_SIZE", "0" if DB_USE_PGBOUNCER else "1024")
     )
 
-    # Собираем URL только если все обязательные поля заданы (dev-режим)
-    _db_user = quote_plus(DB_USER) if DB_USER else ""
-    _db_pass = quote_plus(DB_PASS) if DB_PASS else ""
-    database_url = (
-        (f"postgresql+asyncpg://{_db_user}:{_db_pass}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
-        if DB_USER and DB_PASS
-        else ""
-    )
+    @property
+    def db_host(self) -> str:
+        default = "db" if self.APP_ENV not in self.dev_environments else "localhost"
+        return os.getenv("DB_HOST", default)
+
+    # Собираем URL динамически, чтобы URL пересчитывался при изменении настроек
+    @property
+    def database_url(self) -> str:
+        if not self.DB_USER or not self.DB_PASS:
+            return ""
+        _db_user = quote_plus(self.DB_USER)
+        _db_pass = quote_plus(self.DB_PASS)
+        return f"postgresql+asyncpg://{_db_user}:{_db_pass}@{self.db_host}:{self.DB_PORT}/{self.DB_NAME}"
 
     # VK
     # Режим интеграции: "longpoll" (по умолчанию) или "callback" (вебхук)

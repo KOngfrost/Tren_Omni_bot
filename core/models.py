@@ -37,9 +37,9 @@ class WebRole(enum.StrEnum):
 class MessageAuthorType(enum.StrEnum):
     """Автор сообщения в истории заявки."""
 
-    USER = "user"  # студент (VK)
-    ADMIN = "admin"  # администратор (веб-панель)
-    SYSTEM = "system"  # системные события (смена статуса и т.п.)
+    USER = "USER"  # студент (VK)
+    ADMIN = "ADMIN"  # администратор (веб-панель)
+    SYSTEM = "SYSTEM"  # системные события (смена статуса и т.п.)
 
 
 class TicketStatus(enum.StrEnum):

@@ -605,7 +605,11 @@ async def create_anonymous_ticket(
     keep_identity: bool = False,
     department_name: str | None = None,
 ) -> Ticket:
-    """Обратная совместимость: анонимное обращение (с опциональным отделом)."""
+    """Обратная совместимость: анонимное обращение (с опциональным отделом).
+
+    .. deprecated:: 0.7.9
+       Используйте напрямую :func:`create_ticket`.
+    """
     return await create_ticket(
         topic=topic,
         description=description,

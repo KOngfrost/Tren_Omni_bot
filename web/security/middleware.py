@@ -33,7 +33,7 @@ SECURITY_HEADERS = {
 CONTENT_SECURITY_POLICY_BASE = (
     "default-src 'self'; "
     "script-src 'self' 'nonce-{nonce}'; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "style-src 'self' 'nonce-{nonce_style}' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' https://fonts.gstatic.com; "
     "img-src 'self' data:; "
     "frame-ancestors 'none'; "
@@ -173,7 +173,7 @@ class DBRateLimiter:
 
                 # Записать новую попытку
                 insert_stmt = text(
-                    f"INSERT INTO {self.table_name} (ip, attempted_at) VALUES (:ip, :now)"
+                    f"INSERT INTO {self.table_name} (ip, attempted_at, success) VALUES (:ip, :now, false)"
                 )
                 await session.execute(insert_stmt, {"ip": ip, "now": now})
 

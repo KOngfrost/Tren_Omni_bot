@@ -29,9 +29,9 @@ async def test_bootstrap_blocked_when_superadmin_exists(db_session_maker, monkey
         await session.commit()
 
         result = await _authenticate(session, "admin_bootstrap", "bootstrap_pass_123")
-        assert (
-            result is None
-        ), "Bootstrap должен быть заблокирован при наличии постоянного суперадмина"
+        assert result is None, (
+            "Bootstrap должен быть заблокирован при наличии постоянного суперадмина"
+        )
 
 
 @pytest.mark.asyncio

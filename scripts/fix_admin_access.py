@@ -33,7 +33,7 @@ async def check_db_connection():
     print("ШАГ 1: Проверка подключения к базе данных")
     print("=" * 60)
 
-    print(f"  DB_HOST: {settings.DB_HOST}")
+    print(f"  DB_HOST: {settings.db_host}")
     print(f"  DB_PORT: {settings.DB_PORT}")
     print(f"  DB_NAME: {settings.DB_NAME}")
 

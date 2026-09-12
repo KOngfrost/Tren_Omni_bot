@@ -63,45 +63,20 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         total = len(dept_tickets)
         completed = sum(1 for t in dept_tickets if t.status in COMPLETED_STATUSES)
         percent = round(completed / total * 100, 1) if total else 0.0
+
+        def _count_dept(predicate, tickets_list=dept_tickets) -> int:
+            return sum(1 for t in tickets_list if predicate(t))
+
         rows.append(
             [
                 department.name,
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.NEW
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.IN_PROGRESS
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.TRANSFERRED_ADMIN
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id
-                        and t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.COMPLETED
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.COMPLETED_AUTO
-                    )
-                ),
-                _count(
-                    lambda t, d=department: (
-                        t.department_id == d.id and t.status == TicketStatus.ANONYMOUS
-                    )
-                ),
+                _count_dept(lambda t: t.status == TicketStatus.NEW),
+                _count_dept(lambda t: t.status == TicketStatus.IN_PROGRESS),
+                _count_dept(lambda t: t.status == TicketStatus.TRANSFERRED_ADMIN),
+                _count_dept(lambda t: t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING),
+                _count_dept(lambda t: t.status == TicketStatus.COMPLETED),
+                _count_dept(lambda t: t.status == TicketStatus.COMPLETED_AUTO),
+                _count_dept(lambda t: t.status == TicketStatus.ANONYMOUS),
                 total,
                 percent,
             ]

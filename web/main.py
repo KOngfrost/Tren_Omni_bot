@@ -242,9 +242,9 @@ async def add_department_name(request: Request, call_next):
             if cached is not None:
                 department_name, user_departments, dept_id = cached
             else:
-                async with async_session_maker() as session:
-                    user_departments = await get_departments_for_user(session, user)
-                    is_super, _dept_id = await get_admin_scope(session, user)
+                async with async_session_maker() as db_session:
+                    user_departments = await get_departments_for_user(db_session, user)
+                    is_super, _dept_id = await get_admin_scope(db_session, user)
 
                 department_name = (
                     user_departments[0].name if not is_super and user_departments else None
@@ -271,7 +271,7 @@ async def add_department_name(request: Request, call_next):
             request.state.dept_id = dept_id
     except Exception:
         # Если не удалось загрузить — продолжаем без department_name
-        pass
+        logger.debug("Не удалось загрузить department_name для middleware", exc_info=True)
 
     response = await call_next(request)
     return response
@@ -530,6 +530,12 @@ async def health():
     from sqlalchemy import text
 
     from core.database import engine
+
+    if engine is None:
+        return JSONResponse(
+            content={"status": "error", "detail": "database engine not configured"},
+            status_code=503,
+        )
 
     try:
         async with engine.begin() as conn:

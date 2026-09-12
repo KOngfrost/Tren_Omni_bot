@@ -104,7 +104,7 @@ async def ensure_database_exists(max_retries: int = 10, retry_delay: float = 2.0
                 user=settings.DB_USER,
                 password=settings.DB_PASS,
                 database="postgres",
-                host=settings.DB_HOST,
+                host=settings.db_host,
                 port=int(settings.DB_PORT),
             )
             db_exists = await admin_conn.fetchval(
@@ -129,8 +129,9 @@ async def ensure_database_exists(max_retries: int = 10, retry_delay: float = 2.0
 
 def run_migrations(max_retries: int = 5, retry_delay: float = 2.0) -> None:
     """Apply Alembic migrations to the database."""
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     last_error = None
 

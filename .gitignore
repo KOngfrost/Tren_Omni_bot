@@ -76,3 +76,4 @@ test_form_result.txt
 test_output.txt
 test_result.txt
 test_ui_result.txt
+*.bundle
