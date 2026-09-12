@@ -19,8 +19,7 @@
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
             <div>
-                Одноразовый 6-значный код отправлен вам в личные сообщения ВКонтакте
-                {% if masked_vk_id %}(<span class="twofa-vk-badge">VK ID: {{ masked_vk_id }}</span>){% endif %}.
+                Одноразовый 6-значный код отправлен вам в личные сообщения ВКонтакте{% if masked_vk_id %} <span class="twofa-vk-badge">VK ID: {{ masked_vk_id }}</span>{% endif %}
             </div>
         </div>
 
@@ -79,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const digits = Array.from(document.querySelectorAll('.otp-digit'));
     const hiddenCode = document.getElementById('code');
     const form = document.getElementById('twoFactorForm');
+    const otpContainer = document.getElementById('otpInputs');
     const btnResend = document.getElementById('btnResend');
     const resendLabel = document.getElementById('resendLabel');
     const resendForm = document.getElementById('resendForm');
@@ -96,11 +96,60 @@ document.addEventListener('DOMContentLoaded', () => {
         return val;
     }
 
+    function handlePastedText(rawText) {
+        if (!rawText) return false;
+        // Извлекаем 6 цифр подряд (например "291321" или из текста "код: 291321")
+        const match = rawText.match(/\b\d{6}\b/) || rawText.match(/\d{6}/);
+        let code = '';
+        if (match) {
+            code = match[0];
+        } else {
+            code = rawText.replace(/\D/g, '').slice(0, 6);
+        }
+        if (!code) return false;
+
+        code.split('').forEach((char, i) => {
+            if (digits[i]) {
+                digits[i].value = char;
+            }
+        });
+        syncCode();
+
+        if (code.length === 6) {
+            digits[5].focus();
+            digits[5].select();
+            setTimeout(() => {
+                form.requestSubmit();
+            }, 180);
+        } else if (digits[code.length]) {
+            digits[code.length].focus();
+        }
+        return true;
+    }
+
+    // Обработка вставки на любом уровне формы
+    [otpContainer, form, document].forEach(target => {
+        if (!target) return;
+        target.addEventListener('paste', (e) => {
+            const text = (e.clipboardData || window.clipboardData)?.getData('text');
+            if (text && handlePastedText(text)) {
+                e.preventDefault();
+            }
+        });
+    });
+
     digits.forEach((digit, idx) => {
         digit.addEventListener('input', (e) => {
-            const val = e.target.value.replace(/\D/g, '');
-            if (val.length > 0) {
-                digit.value = val[val.length - 1];
+            const rawVal = e.target.value;
+            // Если в поле попало больше 1 символа (например через autofill)
+            if (rawVal.length > 1) {
+                if (handlePastedText(rawVal)) {
+                    return;
+                }
+            }
+            const cleanVal = rawVal.replace(/\D/g, '');
+            if (cleanVal.length > 0) {
+                digit.value = cleanVal[cleanVal.length - 1];
                 const code = syncCode();
                 if (idx < digits.length - 1) {
                     digits[idx + 1].focus();
@@ -115,45 +164,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         digit.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace') {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (idx > 0) {
+                    digits[idx - 1].focus();
+                    digits[idx - 1].select();
+                }
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (idx < digits.length - 1) {
+                    digits[idx + 1].focus();
+                    digits[idx + 1].select();
+                }
+            } else if (e.key === 'ArrowUp' || e.key === 'Home') {
+                e.preventDefault();
+                digits[0].focus();
+                digits[0].select();
+            } else if (e.key === 'ArrowDown' || e.key === 'End') {
+                e.preventDefault();
+                digits[digits.length - 1].focus();
+                digits[digits.length - 1].select();
+            } else if (e.key === 'Backspace') {
                 if (!digit.value && idx > 0) {
+                    e.preventDefault();
                     digits[idx - 1].focus();
                     digits[idx - 1].value = '';
                     syncCode();
-                    e.preventDefault();
                 } else {
                     digit.value = '';
                     syncCode();
                 }
-            } else if (e.key === 'ArrowLeft' && idx > 0) {
-                digits[idx - 1].focus();
-                digits[idx - 1].select();
-            } else if (e.key === 'ArrowRight' && idx < digits.length - 1) {
-                digits[idx + 1].focus();
-                digits[idx + 1].select();
-            }
-        });
-
-        digit.addEventListener('paste', (e) => {
-            e.preventDefault();
-            const text = (e.clipboardData || window.clipboardData).getData('text');
-            const cleanDigits = text.replace(/\D/g, '').slice(0, 6);
-            if (!cleanDigits) return;
-
-            cleanDigits.split('').forEach((char, i) => {
-                if (digits[i]) {
-                    digits[i].value = char;
-                }
-            });
-            syncCode();
-
-            if (cleanDigits.length === 6) {
-                digits[5].focus();
-                setTimeout(() => {
-                    form.requestSubmit();
-                }, 200);
-            } else if (digits[cleanDigits.length]) {
-                digits[cleanDigits.length].focus();
             }
         });
 
