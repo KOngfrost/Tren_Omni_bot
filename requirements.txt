@@ -27,3 +27,5 @@ sentry-sdk[fastapi]>=2.14.0
 # Метрики Prometheus для мониторинга
 prometheus-client>=0.20.0
 prometheus-fastapi-instrumentator==7.0.0
+# Настройки приложения через Pydantic BaseSettings
+pydantic-settings>=2.0.0
