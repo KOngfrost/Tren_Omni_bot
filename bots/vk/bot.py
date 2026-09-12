@@ -42,8 +42,10 @@ from bots.vk.handlers.knowledge import (
 )
 from bots.vk.handlers.reports import (
     report_by_date,
+    report_by_date_input,
     report_by_date_start,
     report_by_period_handler,
+    report_by_period_input,
     report_by_period_start,
     report_date_from_received,
     report_date_received,
@@ -153,8 +155,10 @@ __all__ = [
     "register_event_handler",
     "regular_menu_handler",
     "report_by_date",
+    "report_by_date_input",
     "report_by_date_start",
     "report_by_period_handler",
+    "report_by_period_input",
     "report_by_period_start",
     "report_date_from_received",
     "report_date_received",
