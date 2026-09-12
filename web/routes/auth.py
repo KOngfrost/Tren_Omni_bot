@@ -275,6 +275,10 @@ async def login_page(request: Request):
             "flash_error": flash_error,
             "csrf_token": get_csrf_token(request),
         },
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
     )
 
 
@@ -380,6 +384,10 @@ async def two_factor_page(request: Request):
             "error": error,
             "csrf_token": get_csrf_token(request),
         },
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
     )
 
 
@@ -410,6 +418,12 @@ async def two_factor_verify(request: Request):
         return RedirectResponse(url="/auth/login", status_code=303)
 
     expected_code = str(pending.get("code", ""))
+    logger.info(
+        "2FA проверка для user=%s: длина ввода=%d, длина ожидаемого=%d",
+        pending.get("user_data", {}).get("username"),
+        len(submitted_code),
+        len(expected_code),
+    )
     if secrets.compare_digest(submitted_code.encode("utf-8"), expected_code.encode("utf-8")):
         user_data = pending["user_data"]
         request.session.pop("pending_2fa", None)
