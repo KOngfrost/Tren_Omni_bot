@@ -14,49 +14,191 @@
             </div>
         </div>
 
-        <div style="background: rgba(255, 77, 157, 0.08); border: 1px solid rgba(255, 77, 157, 0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #d0d0dc; line-height: 1.5;">
-            Одноразовый 6-значный код отправлен вам в личные сообщения ВКонтакте
-            {% if masked_vk_id %}(<strong>VK ID: {{ masked_vk_id }}</strong>){% endif %}.
+        <div class="twofa-info-banner">
+            <svg class="twofa-info-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <div>
+                Одноразовый 6-значный код отправлен вам в личные сообщения ВКонтакте
+                {% if masked_vk_id %}(<span class="twofa-vk-badge">VK ID: {{ masked_vk_id }}</span>){% endif %}.
+            </div>
         </div>
 
         {% if error %}
         <div class="alert alert-error" role="alert" aria-live="assertive">{{ error }}</div>
         {% endif %}
 
-        <form method="POST" action="/auth/2fa">
+        <form method="POST" action="/auth/2fa" id="twoFactorForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="form-group">
-                <label for="code">Код из сообщения</label>
-                <input
-                    type="text"
-                    id="code"
-                    name="code"
-                    required
-                    autofocus
-                    maxlength="6"
-                    pattern="[0-9]{6}"
-                    inputmode="numeric"
-                    autocomplete="one-time-code"
-                    placeholder="123456"
-                    style="font-size: 24px; letter-spacing: 8px; text-align: center; font-weight: 700; font-family: monospace;"
-                >
+            <div class="form-group otp-form-group">
+                <label id="otp-label" class="otp-label">Код из сообщения</label>
+                <div class="otp-inputs" id="otpInputs" role="group" aria-labelledby="otp-label">
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="0" autocomplete="one-time-code" autofocus aria-label="Цифра 1">
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="1" autocomplete="off" aria-label="Цифра 2">
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="2" autocomplete="off" aria-label="Цифра 3">
+                    <div class="otp-separator" aria-hidden="true"></div>
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="3" autocomplete="off" aria-label="Цифра 4">
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="4" autocomplete="off" aria-label="Цифра 5">
+                    <input type="text" class="otp-digit" inputmode="numeric" pattern="[0-9]" maxlength="1" data-index="5" autocomplete="off" aria-label="Цифра 6">
+                </div>
+                <input type="hidden" id="code" name="code" required maxlength="6" pattern="[0-9]{6}">
             </div>
-            <button type="submit" class="btn btn-primary btn-full" style="margin-top: 10px;">Подтвердить и войти</button>
+            <button type="submit" class="btn btn-primary btn-full" id="btnSubmit" style="margin-top: 6px;">
+                Подтвердить и войти
+            </button>
         </form>
 
-        <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
-            <form method="POST" action="/auth/2fa/resend" style="display: inline;">
+        <div class="twofa-secondary-actions">
+            <form method="POST" action="/auth/2fa/resend" id="resendForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn btn-ghost" style="padding: 6px 12px; font-size: 12px; color: var(--primary);">
-                    ↻ Отправить код повторно
+                <button type="submit" class="btn-resend-code" id="btnResend">
+                    <svg class="icon-refresh" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    <span id="resendLabel">Отправить код повторно</span>
                 </button>
             </form>
-            <a href="/auth/login" style="color: var(--text-muted); text-decoration: none;">← Ко входу</a>
+
+            <a href="/auth/login" class="link-back-login">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Вернуться ко входу</span>
+            </a>
         </div>
 
-        <div class="login-footer-legal" style="margin-top: 18px; font-size: 11px; text-align: center; color: var(--text-muted);">
+        <div class="login-footer-legal" style="margin-top: 24px; font-size: 11px; text-align: center; color: var(--text-tertiary);">
             Вход в систему означает согласие с <a href="/legal/terms">Условиями пользования</a> и <a href="/legal/consent">Согласием на обработку персональных данных</a> (<a href="/legal/privacy">152-ФЗ</a>).
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const digits = Array.from(document.querySelectorAll('.otp-digit'));
+    const hiddenCode = document.getElementById('code');
+    const form = document.getElementById('twoFactorForm');
+    const btnResend = document.getElementById('btnResend');
+    const resendLabel = document.getElementById('resendLabel');
+    const resendForm = document.getElementById('resendForm');
+
+    function syncCode() {
+        const val = digits.map(d => d.value).join('');
+        hiddenCode.value = val;
+        digits.forEach(d => {
+            if (d.value) {
+                d.classList.add('is-filled');
+            } else {
+                d.classList.remove('is-filled');
+            }
+        });
+        return val;
+    }
+
+    digits.forEach((digit, idx) => {
+        digit.addEventListener('input', (e) => {
+            const val = e.target.value.replace(/\D/g, '');
+            if (val.length > 0) {
+                digit.value = val[val.length - 1];
+                const code = syncCode();
+                if (idx < digits.length - 1) {
+                    digits[idx + 1].focus();
+                    digits[idx + 1].select();
+                } else if (code.length === 6) {
+                    digit.blur();
+                }
+            } else {
+                digit.value = '';
+                syncCode();
+            }
+        });
+
+        digit.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                if (!digit.value && idx > 0) {
+                    digits[idx - 1].focus();
+                    digits[idx - 1].value = '';
+                    syncCode();
+                    e.preventDefault();
+                } else {
+                    digit.value = '';
+                    syncCode();
+                }
+            } else if (e.key === 'ArrowLeft' && idx > 0) {
+                digits[idx - 1].focus();
+                digits[idx - 1].select();
+            } else if (e.key === 'ArrowRight' && idx < digits.length - 1) {
+                digits[idx + 1].focus();
+                digits[idx + 1].select();
+            }
+        });
+
+        digit.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            const cleanDigits = text.replace(/\D/g, '').slice(0, 6);
+            if (!cleanDigits) return;
+
+            cleanDigits.split('').forEach((char, i) => {
+                if (digits[i]) {
+                    digits[i].value = char;
+                }
+            });
+            syncCode();
+
+            if (cleanDigits.length === 6) {
+                digits[5].focus();
+                setTimeout(() => {
+                    form.requestSubmit();
+                }, 200);
+            } else if (digits[cleanDigits.length]) {
+                digits[cleanDigits.length].focus();
+            }
+        });
+
+        digit.addEventListener('focus', () => {
+            digit.select();
+        });
+    });
+
+    form.addEventListener('submit', (e) => {
+        const val = syncCode();
+        if (val.length !== 6) {
+            e.preventDefault();
+            const firstEmpty = digits.find(d => !d.value);
+            if (firstEmpty) {
+                firstEmpty.focus();
+            }
+        }
+    });
+
+    const COOLDOWN_KEY = '2fa_resend_cooldown_end';
+    function updateResendTimer() {
+        const cooldownEnd = parseInt(sessionStorage.getItem(COOLDOWN_KEY) || '0', 10);
+        const now = Date.now();
+        const diff = Math.ceil((cooldownEnd - now) / 1000);
+
+        if (diff > 0) {
+            btnResend.disabled = true;
+            resendLabel.textContent = `Отправить повторно (${diff} с)`;
+            setTimeout(updateResendTimer, 1000);
+        } else {
+            btnResend.disabled = false;
+            resendLabel.textContent = 'Отправить код повторно';
+            sessionStorage.removeItem(COOLDOWN_KEY);
+        }
+    }
+
+    resendForm.addEventListener('submit', () => {
+        sessionStorage.setItem(COOLDOWN_KEY, (Date.now() + 60000).toString());
+    });
+
+    updateResendTimer();
+
+    if (digits[0]) {
+        digits[0].focus();
+    }
+});
+</script>
 {% endblock %}

@@ -1324,6 +1324,203 @@ textarea::placeholder {
     background: var(--bg-surface-3);
 }
 
+/* ---------- 2FA Authentication Component ---------- */
+.twofa-info-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(255, 77, 157, 0.08) 0%, rgba(255, 77, 157, 0.03) 100%);
+    border: 1px solid rgba(255, 77, 157, 0.22);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    margin-bottom: 22px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+}
+
+.twofa-info-icon {
+    flex-shrink: 0;
+    color: var(--primary);
+    margin-top: 1px;
+}
+
+.twofa-vk-badge {
+    display: inline-block;
+    background: rgba(255, 77, 157, 0.15);
+    color: var(--primary);
+    padding: 1px 7px;
+    border-radius: var(--r-xs);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+}
+
+.otp-form-group {
+    margin-bottom: 22px;
+}
+
+.otp-label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.otp-inputs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.otp-digit {
+    width: 48px;
+    height: 56px;
+    background: var(--bg-surface-2);
+    border: 1.5px solid var(--line-strong);
+    border-radius: var(--r-md);
+    color: var(--text-primary);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 24px;
+    font-weight: 800;
+    text-align: center;
+    line-height: 56px;
+    padding: 0;
+    caret-color: var(--primary);
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.otp-digit:hover {
+    border-color: rgba(255, 77, 157, 0.45);
+    background: var(--bg-surface-3);
+}
+
+.otp-digit:focus {
+    border-color: var(--primary);
+    background: #1c1a24;
+    box-shadow: 0 0 0 3px rgba(255, 77, 157, 0.22), 0 0 16px rgba(255, 77, 157, 0.35);
+    transform: translateY(-2px);
+}
+
+.otp-digit.is-filled {
+    border-color: rgba(255, 77, 157, 0.55);
+    background: rgba(255, 77, 157, 0.06);
+    color: #ffffff;
+}
+
+.otp-separator {
+    width: 8px;
+    height: 2px;
+    background: var(--line-strong);
+    border-radius: var(--r-full);
+    flex-shrink: 0;
+    margin: 0 2px;
+}
+
+.twofa-secondary-actions {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+}
+
+.twofa-secondary-actions form {
+    width: 100%;
+}
+
+.btn-resend-code {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    padding: 10px 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-resend-code:hover:not(:disabled) {
+    background: rgba(255, 77, 157, 0.08);
+    border-color: rgba(255, 77, 157, 0.35);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.btn-resend-code:hover:not(:disabled) .icon-refresh {
+    transform: rotate(180deg);
+}
+
+.btn-resend-code .icon-refresh {
+    transition: transform 0.4s ease;
+}
+
+.btn-resend-code:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.02);
+    border-color: var(--line);
+    color: var(--text-tertiary);
+}
+
+.link-back-login {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: var(--r-sm);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.link-back-login:hover {
+    color: var(--text-primary);
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.link-back-login:hover svg {
+    transform: translateX(-3px);
+}
+
+.link-back-login svg {
+    transition: transform 0.2s ease;
+}
+
+@media (max-width: 480px) {
+    .otp-inputs {
+        gap: 6px;
+    }
+    .otp-digit {
+        width: 40px;
+        height: 50px;
+        font-size: 20px;
+        line-height: 50px;
+        border-radius: var(--r-sm);
+    }
+    .otp-separator {
+        width: 4px;
+        margin: 0 1px;
+    }
+}
+
 /* ---------- Misc helpers ---------- */
 .faq-question .badge {
     flex-shrink: 0;
