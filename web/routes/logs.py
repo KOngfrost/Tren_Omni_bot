@@ -1,3 +1,12 @@
+"""
+Маршруты системного журнала аудита (логи действий).
+
+Безопасность и ограничения:
+- Доступ строго ограничен ролью SUPERADMIN (зависимость require_superadmin).
+- Обычные администраторы отделов не имеют доступа к системному журналу.
+- Поддерживается пагинация по 100 записей и экспорт в CSV с защитой от CSV-инъекций.
+"""
+
 import logging
 from datetime import datetime
 
@@ -17,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Количество записей логов на одну страницу таблицы
 LOGS_PER_PAGE = 100
 
 
@@ -26,6 +36,7 @@ async def logs_page(
     page: str | int = 1,
     user=Depends(require_superadmin),
 ):
+    """Отображение системного журнала действий (только для суперадминистраторов)."""
     logs: list[Log] = []
     db_error: bool = False
     total: int = 0
@@ -73,6 +84,7 @@ async def logs_page(
 
 @router.get("/export")
 async def export_logs(user=Depends(require_superadmin)):
+    """Выгрузка системного журнала в CSV с UTF-8 BOM и экранированием полей."""
     try:
         async with async_session_maker() as session:
             logs_stmt = (

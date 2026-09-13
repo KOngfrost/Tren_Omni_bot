@@ -313,11 +313,13 @@ async def login(request: Request):
             request.session["flash_error"] = "Неверный логин или пароль"
             return RedirectResponse(url="/auth/login", status_code=302)
 
-        # 2FA проверка через VK
+        # 2FA проверка через VK: если для администратора включена двухфакторная аутентификация
         if user_data.get("needs_2fa"):
+            # Генерируем криптографически стойкий 6-значный одноразовый код (OTP)
             otp_code = f"{secrets.randbelow(900000) + 100000}"
             vk_admin_id = user_data.get("vk_admin_id")
 
+            # Сохраняем временное состояние 2FA в сессии с ограничением по времени (TTL)
             request.session["pending_2fa"] = {
                 "user_data": {
                     "username": user_data["username"],
@@ -332,6 +334,7 @@ async def login(request: Request):
             }
 
             if vk_admin_id:
+                # Отправляем код через Transactional Outbox для надёжной доставки в VK
                 from core.outbox import add_outbox_message, fire_outbox_delivery
 
                 add_outbox_message(

@@ -105,7 +105,13 @@ async def faq_page(request: Request, user=Depends(require_auth)):
 
 @router.post("/")
 async def add_faq(request: Request, user=Depends(require_writer)):
+    """Добавление нового вопроса/ответа FAQ.
+
+    Упрощённая модель: отдел (автор), конкретный вопрос и ответ.
+    Если ответ заполнен, элемент автоматически считается конечным (is_final = True).
+    """
     form = await request.form()
+    # Санитизация входных данных для защиты от XSS
     question: str = sanitize_html(str(form.get("question", ""))).strip()
     final_answer_raw = str(form.get("final_answer", "")).strip()
     final_answer: str | None = sanitize_html(final_answer_raw) if final_answer_raw else None

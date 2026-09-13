@@ -28,10 +28,19 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
+# Список реальных отделов из БД по умолчанию.
+# Гарантирует создание ровно 4 листов отделов (+ 1 лист сводки = 5 листов в Excel).
 DEFAULT_DEPTS = ["Жилищно-бытовой", "Информационный", "Корпоративный", "Культурно-массовый"]
 
 
 def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
+    """Формирует Лист 1 ('Краткая информация') со сводной аналитикой.
+
+    Содержит разбивку по каждому отделу:
+    - количество тикетов по статусам (новые, в работе, переданные, завершённые, анонимные)
+    - общее количество и процент выполнения
+    - итоговую строку 'ИТОГО' с суммой по всем отделам.
+    """
     sheet = workbook.active
     sheet.title = "Краткая информация"
 
@@ -113,15 +122,24 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
     for row in rows:
         sheet.append(row)
 
+    # Автоподбор ширины столбцов под длину текста
     for column in sheet.columns:
         max_length = max(len(str(cell.value or "")) for cell in column)
         sheet.column_dimensions[column[0].column_letter].width = max_length + 2
 
 
 def _build_department_sheets(workbook: Workbook, data: dict) -> None:
+    """Формирует Листы 2–5 с подробным реестром тикетов по каждому из 4 отделов.
+
+    Особенности:
+    - строго 4 отдела (из базы данных или дополненные до 4 из DEFAULT_DEPTS)
+    - маскирование персональных данных для анонимных обращений ('Аноним')
+    - маркер способа закрытия: 'авто' (по таймауту) или 'ручной' (оператором).
+    """
     tickets = data.get("tickets", [])
     raw_depts = list(data.get("departments", []))
 
+    # Гарантируем ровно 4 отдела
     final_depts = list(raw_depts)
     for default_name in DEFAULT_DEPTS:
         if len(final_depts) >= 4:
