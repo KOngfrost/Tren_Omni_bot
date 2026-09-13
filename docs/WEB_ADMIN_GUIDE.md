@@ -162,8 +162,8 @@ https://oss-web-panel.<tailnet>.ts.net/
 
 ---
 
-## 11. Планы развития и мобильное приложение Android
+## 11. Планы развития (Android App, Telegram Bot, Telegram Mini App)
 
-Подготовлена подробная дорожная карта и архитектурная спецификация нативного мобильного приложения для Android (Kotlin + Jetpack Compose + Clean Architecture) с интеграцией с REST API v1, push-уведомлениями и офлайн-режимом.
+Подготовлена подробная дорожная карта и архитектурная спецификация нативного мобильного приложения для Android (Kotlin + Jetpack Compose + Clean Architecture), а также Telegram-бота (aiogram 3) и интерактивного Telegram Mini App (React + Tailwind + Telegram WebApp SDK) с интеграцией с REST API v1, push-уведомлениями и офлайн-режимом.
 
 Подробная документация: [docs/PLANS.md](PLANS.md).
