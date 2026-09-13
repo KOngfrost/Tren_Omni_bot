@@ -227,6 +227,6 @@ In-memory `RateLimiter` (словарь `requests: dict[str, list[float]]`) хр
   - Модуль `core/time_utils.py` и проверка дрейфа часов между сервером и СУБД PostgreSQL в `/health`.
 - **Упрощение FAQ**:
   - Прозрачная модель: отдел (автор), конкретный вопрос, ответ.
-- **Планы развития (Android App, Telegram Bot, Telegram Mini App)**:
-  - Разработан документ [docs/PLANS.md](docs/PLANS.md) с архитектурой нативного мобильного приложения для Android (Kotlin, Jetpack Compose, Clean Architecture, Retrofit2, Room DB, FCM/RuStore пуши, биометрия), а также Telegram-бота (aiogram 3, Outbox) и Telegram Mini App (React, Tailwind, Telegram WebApp SDK, бесшовная аутентификация по HMAC initData).
+- **Планы развития (Android App, Telegram Bot, Telegram Mini App для администраторов)**:
+  - Разработан документ [docs/PLANS.md](docs/PLANS.md) с архитектурой мобильного рабочего места оператора и суперадминистратора: нативное приложение для Android (Kotlin, Jetpack Compose, Clean Architecture, Retrofit2, Room DB, FCM/RuStore пуши, биометрия) и Telegram Mini App (React, Tailwind, Telegram UI, строгая проверка прав администратора по HMAC initData). Обычные студенты используют публичный VK-бот.
 

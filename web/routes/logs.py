@@ -20,7 +20,7 @@ from core.models import Log
 from web.dependencies import require_superadmin
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
-from web.templating import templates
+from web.templating import format_datetime, templates
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +103,12 @@ async def export_logs(user=Depends(require_superadmin)):
         username: str = escape_for_csv((log.user.full_name or "Аноним") if log.user else "Аноним")
         action: str = escape_for_csv(log.action or "")
         details: str = escape_for_csv(sanitize_csv_field(log.details or ""))
-        date_str: str = log.created_at.strftime("%Y-%m-%d %H:%M") if log.created_at else ""
+        date_str: str = format_datetime(log.created_at, "%Y-%m-%d %H:%M") if log.created_at else ""
         csv_content += f"{log.id},{username},{action},{details},{date_str}\n"
 
+    filename_date = format_datetime(datetime.now(), "%Y-%m-%d")
     return Response(
         content=csv_content,
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f"attachment; filename=logs_{datetime.now().strftime('%Y-%m-%d')}.csv"
-        },
+        headers={"Content-Disposition": f"attachment; filename=logs_{filename_date}.csv"},
     )

@@ -56,7 +56,7 @@
                     <td>{{ event.id }}</td>
                     <td>{{ event.department.name }}</td>
                     <td>{{ event.title }}</td>
-                    <td>{{ event.event_date.strftime('%d.%m.%Y %H:%M') if event.event_date else '—' }}</td>
+                    <td>{{ event.event_date|format_dt }}</td>
                     <td>{{ event.registrations|length }}</td>
                     <td>
                         <form method="post" action="/events/{{ event.id }}/delete"

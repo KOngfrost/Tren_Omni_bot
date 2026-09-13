@@ -79,7 +79,7 @@
                             <td data-label="Статус">
                                 <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
                             </td>
-                            <td data-label="Дата">{{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else '—' }}</td>
+                            <td data-label="Дата">{{ ticket.created_at|format_dt }}</td>
                         </tr>
                         {% else %}
                         <tr><td colspan="4" class="empty-state">Заявок пока нет</td></tr>
@@ -170,7 +170,7 @@
                         {% for event in events %}
                         <tr>
                             <td data-label="Название" class="td-topic">{{ event.title }}</td>
-                            <td data-label="Дата">{{ event.event_date.strftime('%d.%m.%Y %H:%M') if event.event_date else '—' }}</td>
+                            <td data-label="Дата">{{ event.event_date|format_dt }}</td>
                             <td data-label="Регистраций">{{ event.registrations|length }}</td>
                         </tr>
                         {% else %}

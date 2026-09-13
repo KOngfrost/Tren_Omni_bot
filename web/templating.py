@@ -1,20 +1,35 @@
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
+
 from fastapi.templating import Jinja2Templates
+from starlette.requests import Request
+from starlette.responses import Response
+
+from core.config import settings
+from core.ticket_service import status_label
+from web.constants import status_badge_class
 
 # Вынесено в отдельный модуль, чтобы избежать циклического импорта:
 # web.main импортирует роутеры, а роутерам нужен только templates.
 templates = Jinja2Templates(directory="web/templates")
 
-# Фильтры статусов заявки:
-# {{ ticket.status|status_label }} — русская метка,
-# {{ ticket.status|status_badge }} — CSS-класс бейджа.
-from core.ticket_service import status_label  # noqa: E402
-from web.constants import status_badge_class  # noqa: E402
+
+def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
+    """Форматирует дату/время с автоматическим переводом в часовой пояс приложения (Europe/Moscow)."""
+    if not dt:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    try:
+        app_tz = ZoneInfo(settings.APP_TIMEZONE)
+        return dt.astimezone(app_tz).strftime(fmt)
+    except Exception:
+        return dt.strftime(fmt)
+
 
 templates.env.filters["status_label"] = status_label
 templates.env.filters["status_badge"] = status_badge_class
-
-from starlette.requests import Request  # noqa: E402
-from starlette.responses import Response  # noqa: E402
+templates.env.filters["format_dt"] = format_datetime
 
 
 def render_admin_template(

@@ -192,11 +192,13 @@ def _build_department_sheets(workbook: Workbook, data: dict) -> None:
                 full_name = user.full_name if user and user.full_name else "—"
                 dormitory = user.dormitory if user and user.dormitory else "—"
 
-            created_str = (
-                ticket.created_at.strftime("%Y-%m-%d %H:%M")
-                if getattr(ticket, "created_at", None)
-                else ""
-            )
+            if getattr(ticket, "created_at", None):
+                t_dt = ticket.created_at
+                if t_dt.tzinfo is None:
+                    t_dt = t_dt.replace(tzinfo=UTC)
+                created_str = t_dt.astimezone(get_app_tz()).strftime("%Y-%m-%d %H:%M")
+            else:
+                created_str = ""
 
             sheet.append(
                 [

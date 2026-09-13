@@ -64,7 +64,7 @@
                     <td>
                         <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
                     </td>
-                    <td>{{ ticket.created_at.strftime('%d.%m.%Y %H:%M') if ticket.created_at else '—' }}</td>
+                    <td>{{ ticket.created_at|format_dt }}</td>
                 </tr>
                 {% else %}
                 <tr>

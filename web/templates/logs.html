@@ -39,7 +39,7 @@
                     <td>{{ log.user.full_name if log.user else '—' }}</td>
                     <td><code>{{ log.action }}</code></td>
                     <td>{{ log.details[:100] }}{% if log.details and log.details|length > 100 %}...{% endif %}</td>
-                    <td>{{ log.created_at.strftime('%d.%m.%Y %H:%M') if log.created_at else '—' }}</td>
+                    <td>{{ log.created_at|format_dt }}</td>
                 </tr>
                 {% else %}
                 <tr>
