@@ -40,7 +40,7 @@ async def admin_panel(message: Message):
     if not await BotCore.is_admin(user):
         await message.answer(
             "У вас нет доступа к админ-панели.\n\n"
-            "По всем вопросам обращайтесь к главному администратору.",
+            "По всем вопросам обращайтесь к Техническому администратору.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -49,7 +49,7 @@ async def admin_panel(message: Message):
     await message.answer(
         "Админ-панель\n\n"
         "Доступные функции: просмотр заявок, формирование отчётов.\n"
-        "Нажмите «Заявки администратора» для просмотра активных заявок.\n"
+        "Нажмите «Заявки» для просмотра активных заявок.\n"
         "Нажмите «Сформировать отчет», чтобы получить файл отчёта в VK.",
         keyboard=build_admin_keyboard(),
     )
@@ -122,8 +122,8 @@ async def admin_tickets_handler(message: Message):
         )
     lines.append("")
     lines.append("Как ответить на заявку:")
-    lines.append("  Ответ #N: текст ответа. Например: «Ответ #12: Уже исправили»")
-    lines.append("  Статус #N: статус. Например: «Статус #12: Выполнено»")
+    lines.append("  Ответ #N: текст ответа.\nНапример: «Ответ #1: Уже исправили»")
+    lines.append("  Статус #N: статус.\nНапример: «Статус #1: Выполнено»")
     await message.answer("\n".join(lines), keyboard=build_admin_keyboard())
 
 
@@ -155,8 +155,12 @@ async def admin_status_handler(message: Message):
     except (ValueError, StatusTransitionError):
         await message.answer(
             "Неизвестный статус или недопустимый переход.\n"
-            "Допустимые статусы: Новое, В обработке, Выполнено, Передано в администрацию, "
-            "Передано в хозчасть.",
+            " Допустимые статусы: "
+            " Новое,"
+            " В обработке,"
+            " Выполнено,"
+            " Передано в администрацию,"
+            " Передано в хозчасть.",
             keyboard=build_admin_keyboard(),
         )
         return

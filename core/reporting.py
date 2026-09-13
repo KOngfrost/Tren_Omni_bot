@@ -28,17 +28,19 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
+DEFAULT_DEPTS = ["Жилищно-бытовой", "Учебный", "Спортивный", "Культурно-массовый"]
+
+
 def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
-    """Лист 1: Сводка по отделам и процент выполнения."""
     sheet = workbook.active
-    sheet.title = "Сводка"
+    sheet.title = "Краткая информация"
 
     headers = [
         "Отдел",
         "Новые",
         "В обработке",
         "Передано в адм.",
-        "Передано в хоз.",
+        "Передано в локальный Студсовет",
         "Выполнено",
         "Выполнено (авто)",
         "Анонимные",
@@ -49,8 +51,8 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
-    tickets = data["tickets"]
-    departments = data["departments"]
+    tickets = data.get("tickets", [])
+    departments = data.get("departments", [])
 
     def _count(predicate) -> int:
         return sum(1 for t in tickets if predicate(t))
@@ -82,7 +84,6 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
             ]
         )
 
-    # Итоговая строка
     total = len(tickets)
     completed = sum(1 for t in tickets if t.status in COMPLETED_STATUSES)
     percent = round(completed / total * 100, 1) if total else 0.0
@@ -109,88 +110,84 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         sheet.column_dimensions[column[0].column_letter].width = max_length + 2
 
 
-def _build_details_sheet(workbook: Workbook, data: dict) -> None:
-    """Лист 2: Детализация заявок."""
-    sheet = workbook.create_sheet("Детализация")
+def _build_department_sheets(workbook: Workbook, data: dict) -> None:
+    tickets = data.get("tickets", [])
+    raw_depts = list(data.get("departments", []))
+
+    final_depts = list(raw_depts)
+    for default_name in DEFAULT_DEPTS:
+        if len(final_depts) >= 4:
+            break
+        if not any(getattr(d, "name", None) == default_name for d in final_depts):
+            final_depts.append(Department(id=-(len(final_depts) + 1), name=default_name))
+
+    final_depts = final_depts[:4]
 
     headers = [
         "ID",
+        "Дата",
         "ФИО",
         "Общежитие",
-        "Отдел",
         "Тема",
         "Описание",
         "Статус",
         "Ответ",
         "Маркер",
     ]
-    sheet.append(headers)
-    for cell in sheet[1]:
-        cell.font = Font(bold=True)
 
-    for ticket in data["tickets"]:
-        marker = "авто" if ticket.auto_closed else "ручной"
-        # Маскируем персональные данные для анонимных заявок
-        if ticket.is_anonymous:
-            full_name = "Аноним"
-            dormitory = "Аноним"
-        else:
-            full_name = ticket.user.full_name if ticket.user and ticket.user.full_name else "—"
-            dormitory = ticket.user.dormitory if ticket.user and ticket.user.dormitory else "—"
-        sheet.append(
-            [
-                ticket.id,
-                full_name,
-                dormitory,
-                ticket.department.name if ticket.department else "—",
-                ticket.topic or "",
-                ticket.description or "",
-                status_label(ticket.status),
-                ticket.response_text or "",
-                marker,
-            ]
-        )
+    for dept in final_depts:
+        title = (dept.name or f"Отдел {dept.id}")[:31]
+        sheet = workbook.create_sheet(title)
+        sheet.append(headers)
+        for cell in sheet[1]:
+            cell.font = Font(bold=True)
 
-    for column in sheet.columns:
-        max_length = max(len(str(cell.value or "")) for cell in column)
-        sheet.column_dimensions[column[0].column_letter].width = min(max_length + 2, 60)
+        dept_tickets = [
+            t
+            for t in tickets
+            if (getattr(t, "department_id", None) == getattr(dept, "id", None))
+            or (getattr(getattr(t, "department", None), "name", None) == dept.name)
+        ]
 
+        for ticket in dept_tickets:
+            marker = "авто" if getattr(ticket, "auto_closed", False) else "ручной"
+            if getattr(ticket, "is_anonymous", False):
+                full_name = "Аноним"
+                dormitory = "Аноним"
+            else:
+                user = getattr(ticket, "user", None)
+                full_name = user.full_name if user and user.full_name else "—"
+                dormitory = user.dormitory if user and user.dormitory else "—"
 
-def _build_anonymous_sheet(workbook: Workbook, data: dict) -> None:
-    """Лист 3: Анонимные обращения."""
-    sheet = workbook.create_sheet("Анонимные обращения")
+            created_str = (
+                ticket.created_at.strftime("%Y-%m-%d %H:%M")
+                if getattr(ticket, "created_at", None)
+                else ""
+            )
 
-    headers = ["ID", "Тема", "Описание", "Статус", "Дата создания"]
-    sheet.append(headers)
-    for cell in sheet[1]:
-        cell.font = Font(bold=True)
+            sheet.append(
+                [
+                    ticket.id,
+                    created_str,
+                    full_name,
+                    dormitory,
+                    ticket.topic or "",
+                    ticket.description or "",
+                    status_label(ticket.status),
+                    ticket.response_text or "",
+                    marker,
+                ]
+            )
 
-    anonymous = [
-        t for t in data["tickets"] if t.is_anonymous or t.status == TicketStatus.ANONYMOUS
-    ]
-    for ticket in anonymous:
-        sheet.append(
-            [
-                ticket.id,
-                ticket.topic or "",
-                ticket.description or "",
-                status_label(ticket.status),
-                ticket.created_at.strftime("%Y-%m-%d %H:%M") if ticket.created_at else "",
-            ]
-        )
-
-    for column in sheet.columns:
-        max_length = max(len(str(cell.value or "")) for cell in column)
-        sheet.column_dimensions[column[0].column_letter].width = min(max_length + 2, 60)
+        for column in sheet.columns:
+            max_length = max(len(str(cell.value or "")) for cell in column)
+            sheet.column_dimensions[column[0].column_letter].width = min(max_length + 2, 50)
 
 
 def build_daily_report(data: dict, report_date: datetime) -> bytes:
-    """Строит Excel-отчёт по ТЗ: Сводка, Детализация, Анонимные обращения."""
     workbook = Workbook()
-
     _build_summary_sheet(workbook, data)
-    _build_details_sheet(workbook, data)
-    _build_anonymous_sheet(workbook, data)
+    _build_department_sheets(workbook, data)
 
     output = BytesIO()
     workbook.save(output)
@@ -245,7 +242,7 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
     await api.messages.send(
         peer_id=admin_vk_id,
         random_id=secrets.randbelow(2**31) + 1,
-        message="Ежедневный отчёт во вложении.",
+        message="Ежедневный отчёт.",
         attachment=attachment,
     )
 

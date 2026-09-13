@@ -10,8 +10,8 @@ from core.models import TicketStatus
 # Используется в tickets.py и dept_frame.py.
 STATUS_CHOICES = [
     (TicketStatus.IN_PROGRESS.value, "В обработке"),
-    (TicketStatus.TRANSFERRED_ADMIN.value, "Передать в администрацию СГ"),
-    (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "Передать в Хозчасть"),
+    (TicketStatus.TRANSFERRED_ADMIN.value, "Передать в администрацию"),
+    (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "Передать в локальный Студсовет"),
     (TicketStatus.COMPLETED.value, "Выполнено"),
 ]
 
@@ -19,8 +19,8 @@ STATUS_CHOICES = [
 TICKET_FILTER_CHOICES = [
     (TicketStatus.NEW.value, "Новые"),
     (TicketStatus.IN_PROGRESS.value, "В обработке"),
-    (TicketStatus.TRANSFERRED_ADMIN.value, "В администрации СГ"),
-    (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "В хозчасти"),
+    (TicketStatus.TRANSFERRED_ADMIN.value, "В администрации "),
+    (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "В локальном Студсовете"),
     (TicketStatus.COMPLETED.value, "Выполнено"),
     (TicketStatus.COMPLETED_AUTO.value, "Выполнено (авто)"),
     (TicketStatus.ANONYMOUS.value, "Анонимные"),

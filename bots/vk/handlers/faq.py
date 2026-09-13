@@ -24,7 +24,7 @@ async def faq_handler(message: Message):
         )
     if not nodes:
         await message.answer(
-            "В FAQ пока нет опубликованных вопросов.",
+            "В Частых вопросах, пока нет опубликованных вопросов.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return

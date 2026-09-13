@@ -84,7 +84,7 @@ async def faq_page(request: Request, user=Depends(require_auth)):
             _attach_depths(faq_nodes)
     except Exception as e:
         db_error = True
-        logger.error("Не удалось загрузить FAQ: %s", e)
+        logger.error("Не удалось загрузить частые вопросы: %s", e)
 
     return templates.TemplateResponse(
         "faq.html",
@@ -105,18 +105,17 @@ async def faq_page(request: Request, user=Depends(require_auth)):
 
 @router.post("/")
 async def add_faq(request: Request, user=Depends(require_writer)):
-    """Добавление элемента FAQ с санитизацией входных данных."""
     form = await request.form()
-    question: str = sanitize_html(str(form.get("question", "")))
-    is_final: bool = form.get("is_final") == "on"
-    final_answer: str | None = (
-        sanitize_html(str(form.get("final_answer", ""))) if is_final else None
-    )
+    question: str = sanitize_html(str(form.get("question", ""))).strip()
+    final_answer_raw = str(form.get("final_answer", "")).strip()
+    final_answer: str | None = sanitize_html(final_answer_raw) if final_answer_raw else None
+    is_final: bool = form.get("is_final") == "on" or bool(final_answer)
 
-    if not question.strip():
+    if not question:
         request.session["flash_error"] = "Текст вопроса обязателен"
         return RedirectResponse(url="/faq/", status_code=303)
-    if is_final and not (final_answer or "").strip():
+
+    if is_final and not final_answer:
         request.session["flash_error"] = "Для конечного элемента нужен ответ"
         return RedirectResponse(url="/faq/", status_code=303)
 
@@ -125,7 +124,6 @@ async def add_faq(request: Request, user=Depends(require_writer)):
             is_super, dept_id = await get_admin_scope(session, user)
             department_id: int | None = parse_form_int(form, "department_id", default=dept_id)
             if not is_super:
-                # Админ отдела жёстко привязан к своему отделу
                 department_id = dept_id
             if department_id is None:
                 request.session["flash_error"] = "Не выбран отдел"
@@ -133,7 +131,6 @@ async def add_faq(request: Request, user=Depends(require_writer)):
 
             parent_id: int | None = parse_form_int(form, "parent_id")
             if parent_id is not None:
-                # Родитель должен существовать и принадлежать тому же отделу
                 parent = await session.get(FAQNode, parent_id)
                 if parent is None or parent.department_id != department_id:
                     request.session["flash_error"] = "Родительский вопрос не найден"

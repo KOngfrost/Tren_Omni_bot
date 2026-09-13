@@ -1,23 +1,14 @@
-"""
-Маршруты логов.
-
-Безопасность:
-- Пагинация: логи загружаются страницами по 100 записей (DoS protection)
-- CSV-экспорт: санитизация полей от CSV-injection
-- IDOR: суперадмин видит все логи, обычный админ — логи своего отдела
-"""
-
 import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Admin, Log, Ticket
-from web.dependencies import get_admin_scope, require_auth
+from core.models import Log
+from web.dependencies import require_superadmin
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
 from web.templating import templates
@@ -26,16 +17,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-LOGS_PER_PAGE = 100  # Пагинация: 100 записей на страницу
+LOGS_PER_PAGE = 100
 
 
 @router.get("/")
 async def logs_page(
     request: Request,
     page: str | int = 1,
-    user=Depends(require_auth),
+    user=Depends(require_superadmin),
 ):
-    """Страница логов с пагинацией."""
     logs: list[Log] = []
     db_error: bool = False
     total: int = 0
@@ -47,8 +37,6 @@ async def logs_page(
 
     try:
         async with async_session_maker() as session:
-            is_super, dept_id = await get_admin_scope(session, user)
-
             logs_stmt = (
                 select(Log)
                 .options(selectinload(Log.user))
@@ -56,20 +44,7 @@ async def logs_page(
                 .offset(offset)
                 .limit(LOGS_PER_PAGE)
             )
-            if not is_super:
-                admin_user_ids = select(Admin.user_id).where(
-                    Admin.department_id == dept_id, Admin.user_id.is_not(None)
-                )
-                ticket_user_ids = select(Ticket.user_id).where(
-                    Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
-                )
-                dept_filter = or_(
-                    Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids)
-                )
-                logs_stmt = logs_stmt.where(dept_filter)
-                count_stmt = select(func.count(Log.id)).where(dept_filter)
-            else:
-                count_stmt = select(func.count(Log.id))
+            count_stmt = select(func.count(Log.id))
             logs_result = await session.execute(logs_stmt)
             logs = list(logs_result.scalars().all())
             total = int((await session.scalar(count_stmt)) or 0)
@@ -97,33 +72,15 @@ async def logs_page(
 
 
 @router.get("/export")
-async def export_logs(user=Depends(require_auth)):
-    """Экспорт логов в CSV с защитой от CSV-injection.
-
-    Безопасность:
-    - Все поля экранируются через escape_for_csv и sanitize_csv_field
-    - Лимит: максимум 10000 записей за раз (DoS protection)
-    """
+async def export_logs(user=Depends(require_superadmin)):
     try:
         async with async_session_maker() as session:
-            is_super, dept_id = await get_admin_scope(session, user)
             logs_stmt = (
                 select(Log)
                 .options(selectinload(Log.user))
                 .order_by(Log.created_at.desc())
-                .limit(10000)  # Лимит для экспорта
+                .limit(10000)
             )
-            if not is_super:
-                admin_user_ids = select(Admin.user_id).where(
-                    Admin.department_id == dept_id, Admin.user_id.is_not(None)
-                )
-                ticket_user_ids = select(Ticket.user_id).where(
-                    Ticket.department_id == dept_id, Ticket.user_id.is_not(None)
-                )
-                dept_filter = or_(
-                    Log.user_id.in_(admin_user_ids), Log.user_id.in_(ticket_user_ids)
-                )
-                logs_stmt = logs_stmt.where(dept_filter)
             logs_result = await session.execute(logs_stmt)
             logs: list[Log] = list(logs_result.scalars().all())
     except Exception:

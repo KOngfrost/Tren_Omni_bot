@@ -18,7 +18,7 @@ import secrets
 import time
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,7 @@ from sqlalchemy.orm import selectinload
 
 from core import database as core_db
 from core.config import settings
+from core.database import get_db
 from core.models import Log, LoginAttempt, WebRole, WebUser
 from core.vk_client import send_vk_message
 from web.security.csrf import get_csrf_token
@@ -337,7 +338,7 @@ async def login(request: Request):
                     session,
                     vk_id=vk_admin_id,
                     text=(
-                        f"🔐 Одноразовый код для входа в панель управления OSS Bot: {otp_code}\n"
+                        f"🔐 Одноразовый код для входа в панель управления OSS Bot:\n{otp_code}\n"
                         f"Код действителен {settings.TWO_FACTOR_CODE_TTL // 60} мин. "
                         "Если это были не вы, немедленно смените пароль."
                     ),
@@ -392,7 +393,7 @@ async def two_factor_page(request: Request):
 
 
 @router.post("/2fa")
-async def two_factor_verify(request: Request):
+async def two_factor_verify(request: Request, session: AsyncSession = Depends(get_db)):
     """Проверка 2FA-кода подтверждения."""
     pending = request.session.get("pending_2fa")
     if not pending or time.time() > pending.get("expires_at", 0):
@@ -430,12 +431,11 @@ async def two_factor_verify(request: Request):
         request.session["user"] = user_data
         request.session["csrf_token"] = secrets.token_urlsafe(32)
 
-        async with core_db.async_session_maker():
-            await _clear_attempts(client_ip)
-            await _log_action(
-                "web_login_2fa_success",
-                f"Успешный 2FA-вход {user_data['username']} с IP {client_ip}",
-            )
+        await _clear_attempts(client_ip)
+        await _log_action(
+            "web_login_2fa_success",
+            f"Успешный 2FA-вход {user_data['username']} с IP {client_ip}",
+        )
         return RedirectResponse(url="/", status_code=303)
     else:
         pending["attempts"] = pending.get("attempts", 0) + 1
@@ -445,7 +445,7 @@ async def two_factor_verify(request: Request):
 
 
 @router.post("/2fa/resend")
-async def two_factor_resend(request: Request):
+async def two_factor_resend(request: Request, session: AsyncSession = Depends(get_db)):
     """Повторная отправка 2FA-кода в ВК."""
     pending = request.session.get("pending_2fa")
     if not pending:
@@ -459,19 +459,18 @@ async def two_factor_resend(request: Request):
 
     vk_admin_id = pending.get("vk_admin_id")
     if vk_admin_id:
-        async with core_db.async_session_maker() as session:
-            from core.outbox import add_outbox_message, fire_outbox_delivery
+        from core.outbox import add_outbox_message, fire_outbox_delivery
 
-            add_outbox_message(
-                session,
-                vk_id=vk_admin_id,
-                text=(
-                    f"🔐 Новый одноразовый код для входа в панель управления OSS Bot: {otp_code}\n"
-                    f"Код действителен {settings.TWO_FACTOR_CODE_TTL // 60} мин."
-                ),
-            )
-            await session.commit()
-            fire_outbox_delivery()
+        add_outbox_message(
+            session,
+            vk_id=vk_admin_id,
+            text=(
+                f"🔐 Новый одноразовый код для входа в панель управления OSS Bot:\n{otp_code}\n"
+                f"Код действителен {settings.TWO_FACTOR_CODE_TTL // 60} мин."
+            ),
+        )
+        await session.commit()
+        fire_outbox_delivery()
 
     request.session["pending_2fa"] = pending
     request.session["2fa_error"] = "Новый код успешно отправлен в ВК."

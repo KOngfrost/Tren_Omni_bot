@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}FAQ — OSS Bot{% endblock %}
-{% block meta_description %}Управление интерактивным деревом часто задаваемых вопросов и ответов бота.{% endblock %}
+{% block meta_description %}Управление часто задаваемыми вопросами и ответами бота по отделам.{% endblock %}
 {% block canonical_url %}/faq/{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
         <div class="crumb">Навигация бота</div>
-        <h1>FAQ Дерево</h1>
-        <div class="page-desc">Вопросы и ответы, по которым бот ведёт диалог</div>
+        <h1>Частые вопросы (FAQ)</h1>
+        <div class="page-desc">Вопросы и ответы по отделам, по которым бот отвечает студентам</div>
     </div>
     <div class="actions">
         <button class="btn btn-success" data-open-modal="modal">Добавить вопрос</button>
@@ -16,11 +16,10 @@
 </div>
 
 {% if db_error %}
-<div class="alert alert-error">База данных недоступна — элементы FAQ не загружены. Проверьте, что PostgreSQL запущен (docker-compose up -d).</div>
+<div class="alert alert-error">База данных недоступна — элементы FAQ не загружены.</div>
 {% endif %}
 
 <div class="card">
-    
     {% if flash_success %}
     <div class="alert alert-success">{{ flash_success }}</div>
     {% endif %}
@@ -38,17 +37,12 @@
         </select>
     </div>
     
-    <!-- FAQ Аккордеон -->
     <div class="faq-list" id="faq-accordion">
         {% for node in faq_nodes %}
         <div class="faq-item" data-dept="{{ node.department.id }}" data-node-id="{{ node.id }}">
             <div class="faq-question">
-                <span>{{ node.question[:80] }}{% if node.question|length > 80 %}...{% endif %}</span>
-                {% if node.is_final %}
-                <span class="badge badge-completed">Ответ</span>
-                {% else %}
-                <span class="badge badge-new">Вопрос</span>
-                {% endif %}
+                <span>{{ node.question }}</span>
+                <span class="badge badge-primary">{{ node.department.name }}</span>
             </div>
             {% if node.final_answer %}
             <div class="faq-answer">
@@ -59,13 +53,12 @@
         {% else %}
         <div class="faq-item">
             <div class="faq-question">
-                <span>Элементов FAQ пока нет</span>
+                <span>Вопросов FAQ пока нет</span>
             </div>
         </div>
         {% endfor %}
     </div>
     
-    <!-- Классическая таблица (для удобства админа) -->
     <div class="faq-table-section">
         <div class="card-header">
             <h2>Табличный вид</h2>
@@ -75,10 +68,9 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Отдел</th>
+                        <th>Отдел (Автор)</th>
                         <th>Вопрос</th>
                         <th>Ответ</th>
-                        <th>Тип</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -86,19 +78,12 @@
                     {% for node in faq_nodes %}
                     <tr data-dept="{{ node.department.id }}">
                         <td>{{ node.id }}</td>
-                        <td>{{ node.department.name }}</td>
-                        <td>{{ node.question[:50] }}{% if node.question|length > 50 %}...{% endif %}</td>
-                        <td>{{ node.final_answer[:50] if node.final_answer else '—' }}</td>
-                        <td>
-                            {% if node.is_final %}
-                            <span class="badge badge-completed">Ответ</span>
-                            {% else %}
-                            <span class="badge badge-new">Вопрос</span>
-                            {% endif %}
-                        </td>
+                        <td><strong>{{ node.department.name }}</strong></td>
+                        <td>{{ node.question }}</td>
+                        <td style="max-width: 360px; white-space: pre-wrap;">{{ node.final_answer or '—' }}</td>
                         <td>
                             <form method="post" action="/faq/{{ node.id }}/delete"
-                                  data-confirm="Удалить этот элемент?">
+                                  data-confirm="Удалить этот вопрос?">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <button type="submit" class="btn btn-danger btn-small">Удалить</button>
                             </form>
@@ -106,8 +91,8 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="empty-state">
-                            Элементов FAQ пока нет
+                        <td colspan="5" class="empty-state">
+                            Вопросов FAQ пока нет
                         </td>
                     </tr>
                     {% endfor %}
@@ -117,17 +102,16 @@
     </div>
 </div>
 
-<!-- Modal -->
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Добавить элемент FAQ</h3>
+            <h3>Добавить вопрос FAQ</h3>
             <button class="close-btn" data-close-modal="modal">&times;</button>
         </div>
         <form method="POST" action="/faq/">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
-                <label for="department_id">Отдел</label>
+                <label for="department_id">Отдел (Автор вопроса)</label>
                 <select id="department_id" name="department_id" required>
                     {% for dept in departments %}
                     <option value="{{ dept.id }}">{{ dept.name }}</option>
@@ -135,33 +119,15 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="parent_id">Родительский вопрос (опционально)</label>
-                <select id="parent_id" name="parent_id">
-                    <option value="">— Корневой элемент —</option>
-                    {% for node in faq_nodes %}
-                    {% if not node.is_final %}
-                    <option value="{{ node.id }}">{{ node.question[:50] }}</option>
-                    {% endif %}
-                    {% endfor %}
-                </select>
+                <label for="question">Конкретный вопрос</label>
+                <input type="text" id="question" name="question" placeholder="Например: Как получить пропуск в общежитие?" required>
             </div>
-            <div class="form-group">
-                <label for="question">Вопрос / Текст кнопки</label>
-                <input type="text" id="question" name="question" required>
+            <div class="form-group" id="answer-group">
+                <label for="final_answer">Ответ на вопрос</label>
+                <textarea id="final_answer" name="final_answer" rows="5" placeholder="Введите развёрнутый ответ для студента..." required></textarea>
             </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="is_final" name="is_final" data-toggle-answer>
-                    Это конечный элемент (с ответом)
-                </label>
-            </div>
-            <div class="form-group is-hidden" id="answer-group">
-                <label for="final_answer">Ответ</label>
-                <textarea id="final_answer" name="final_answer" rows="5"></textarea>
-            </div>
-            <button type="submit" class="btn btn-success btn-full">Добавить</button>
+            <button type="submit" class="btn btn-success btn-full">Добавить вопрос</button>
         </form>
     </div>
 </div>
-
 {% endblock %}

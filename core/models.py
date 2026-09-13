@@ -45,8 +45,8 @@ class MessageAuthorType(enum.StrEnum):
 class TicketStatus(enum.StrEnum):
     NEW = "Новое"
     IN_PROGRESS = "В обработке"
-    TRANSFERRED_ADMIN = "Передано в администрацию СГ"
-    TRANSFERRED_HOUSEKEEPING = "Передано в Хозчасть"
+    TRANSFERRED_ADMIN = "Передано в администрацию"
+    TRANSFERRED_HOUSEKEEPING = "Передано в локальный Студсовет"
     COMPLETED = "Выполнено"
     COMPLETED_AUTO = "Выполнено (авто)"
     ANONYMOUS = "Анонимное"

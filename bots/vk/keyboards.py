@@ -31,7 +31,7 @@ def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = 
     buttons.extend(
         [
             ("Задать вопрос", "secondary"),
-            ("FAQ", "secondary"),
+            ("Частые вопросы", "secondary"),
             ("Мероприятия", "primary"),
             ("База знаний", "secondary"),
         ]

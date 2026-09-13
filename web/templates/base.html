@@ -21,9 +21,9 @@
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token|default('') }}">
-    <link rel="stylesheet" href="/static/style.css?v=0.7.9.9">
-    <script src="/static/store.js?v=0.7.9.9" defer></script>
-    <script src="/static/app.js?v=0.7.9.9" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v=0.8">
+    <script src="/static/store.js?v=0.8" defer></script>
+    <script src="/static/app.js?v=0.8" defer></script>
 </head>
 <body>
     <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
@@ -37,7 +37,7 @@
                         <span class="monogram" role="img" aria-label="Логотип OSS Bot">OB</span>
                         <span>
                             <span class="brand-name">OSS Bot</span>
-                            <span class="brand-sub">Панель управления v0.7.9.9</span>
+                            <span class="brand-sub">Панель управления v0.8</span>
                         </span>
                     </a>
                     <button class="sidebar-close-btn" id="sidebar-close-btn" type="button" aria-label="Закрыть меню" title="Закрыть меню">✕</button>
@@ -62,7 +62,9 @@
                 <a class="nav-link {% if active == 'knowledge' %}active{% endif %}" href="/knowledge/"><span class="ico" aria-hidden="true">▤</span>База знаний</a>
                 <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/"><span class="ico" aria-hidden="true">?</span>FAQ</a>
                 <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico" aria-hidden="true">◷</span>События</a>
+                {% if user.role in ['SUPERADMIN', 'superadmin'] %}
                 <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico" aria-hidden="true">≡</span>Журнал</a>
+                {% endif %}
                 {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin'] %}
                 {% if request.state.user_departments or user.role in ['SUPERADMIN', 'superadmin'] %}
                 <span class="nav-label nav-label-spaced">Отделы</span>
@@ -91,7 +93,7 @@
                 </button>
                 <a href="/" class="mobile-brand" aria-label="OSS Bot главная страница">
                     <span class="monogram monogram-sm" role="img" aria-label="Логотип">OB</span>
-                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v0.7.9.9</small></span>
+                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v0.8</small></span>
                 </a>
                 <div class="top-nav-right">
                     {% block top_actions %}{% endblock %}
@@ -128,7 +130,7 @@
                 <div class="footer-container">
                     <div class="footer-copy">
                         <span>© 2026 OSS Bot</span>
-                        <span class="footer-version-badge">v0.7.9.9</span>
+                        <span class="footer-version-badge">v0.8</span>
                     </div>
                     <div class="footer-links">
                         <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
@@ -146,7 +148,7 @@
             <div class="footer-container">
                 <div class="footer-copy">
                     <span>© 2026 OSS Bot</span>
-                    <span class="footer-version-badge">v0.7.9.9</span>
+                    <span class="footer-version-badge">v0.8</span>
                 </div>
                 <div class="footer-links">
                     <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>

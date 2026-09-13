@@ -17,12 +17,15 @@ def _make_data(tickets):
     }
 
 
-def test_build_daily_report_creates_three_sheets():
+def test_build_daily_report_creates_five_sheets():
     data = _make_data([])
     report = build_daily_report(data, datetime(2026, 8, 30))
 
     workbook = load_workbook(BytesIO(report))
-    assert workbook.sheetnames == ["Сводка", "Детализация", "Анонимные обращения"]
+    assert len(workbook.sheetnames) == 5
+    assert workbook.sheetnames[0] == "Краткая информация"
+    assert "Жилбыт" in workbook.sheetnames
+    assert "Информ" in workbook.sheetnames
 
 
 def test_report_masks_anonymous_user_data():
@@ -40,11 +43,11 @@ def test_report_masks_anonymous_user_data():
     report = build_daily_report(data, datetime(2026, 8, 30))
     workbook = load_workbook(BytesIO(report))
 
-    details = workbook["Детализация"]
+    details = workbook["Жилбыт"]
     rows = list(details.iter_rows(min_row=2, values_only=True))
     assert len(rows) == 1
-    assert rows[0][1] == "Аноним"  # ФИО скрыто
-    assert rows[0][2] == "Аноним"  # Общежитие скрыто
+    assert rows[0][2] == "Аноним"
+    assert rows[0][3] == "Аноним"
     assert "Секретное Имя" not in str(rows)
 
 
@@ -63,10 +66,10 @@ def test_report_shows_regular_user_data():
     report = build_daily_report(data, datetime(2026, 8, 30))
     workbook = load_workbook(BytesIO(report))
 
-    details = workbook["Детализация"]
+    details = workbook["Информ"]
     rows = list(details.iter_rows(min_row=2, values_only=True))
-    assert rows[0][1] == "Иван Иванов"
-    assert rows[0][2] == "№2"
+    assert rows[0][2] == "Иван Иванов"
+    assert rows[0][3] == "№2"
 
 
 def test_report_summary_counts_completed():
@@ -80,7 +83,7 @@ def test_report_summary_counts_completed():
     report = build_daily_report(data, datetime(2026, 8, 30))
     workbook = load_workbook(BytesIO(report))
 
-    summary = workbook["Сводка"]
+    summary = workbook["Краткая информация"]
     rows = list(summary.iter_rows(min_row=2, values_only=True))
     total_row = next(r for r in rows if r[0] == "ИТОГО")
     assert total_row[8] == 3  # Всего

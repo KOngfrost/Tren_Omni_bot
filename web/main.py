@@ -504,13 +504,12 @@ app.include_router(api.router, prefix="/api", tags=["api"])
 app.include_router(vk_callback.router)
 
 
-# Healthcheck для мониторинга и docker healthcheck
 @app.get("/health")
 async def health():
-    """Проверка живости панели и доступности БД."""
     from sqlalchemy import text
 
     from core.database import engine
+    from core.time_utils import check_time_sync
 
     if engine is None:
         return JSONResponse(
@@ -521,7 +520,12 @@ async def health():
     try:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
-        return {"status": "ok"}
+            time_sync = await check_time_sync(conn)
+
+        return {
+            "status": "ok",
+            "time_sync": time_sync,
+        }
     except Exception:
         logger.exception("Healthcheck: БД недоступна")
         return JSONResponse(

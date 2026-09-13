@@ -97,7 +97,7 @@ STATUS_LABELS: dict[TicketStatus, str] = {
     TicketStatus.NEW: "Новое",
     TicketStatus.IN_PROGRESS: "В обработке",
     TicketStatus.TRANSFERRED_ADMIN: "Передано в администрацию",
-    TicketStatus.TRANSFERRED_HOUSEKEEPING: "Передано в хозчасть",
+    TicketStatus.TRANSFERRED_HOUSEKEEPING: "Передано в локальный Студсовет",
     TicketStatus.COMPLETED: "Выполнено",
     TicketStatus.COMPLETED_AUTO: "Выполнено (авто)",
     TicketStatus.ANONYMOUS: "Анонимное",
