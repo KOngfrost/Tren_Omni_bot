@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}FAQ — OSS Bot{% endblock %}
+{% block title %}Частые вопросы — OSS Bot{% endblock %}
 {% block meta_description %}Управление часто задаваемыми вопросами и ответами бота по отделам.{% endblock %}
 {% block canonical_url %}/faq/{% endblock %}
 
@@ -7,16 +7,18 @@
 <div class="page-header">
     <div>
         <div class="crumb">Навигация бота</div>
-        <h1>Частые вопросы (FAQ)</h1>
+        <h1>Частые вопросы</h1>
         <div class="page-desc">Вопросы и ответы по отделам, по которым бот отвечает студентам</div>
     </div>
-    <div class="actions">
+    <div class="actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="/faq/export.xlsx" class="btn btn-secondary" title="Скачать все частые вопросы в формате Excel">📊 Экспорт в Excel</a>
+        <button class="btn btn-primary" data-open-modal="import-modal">📥 Импорт / Загрузка</button>
         <button class="btn btn-success" data-open-modal="modal">Добавить вопрос</button>
     </div>
 </div>
 
 {% if db_error %}
-<div class="alert alert-error">База данных недоступна — элементы FAQ не загружены.</div>
+<div class="alert alert-error">База данных недоступна — частые вопросы не загружены.</div>
 {% endif %}
 
 <div class="card">
@@ -28,13 +30,16 @@
     <div class="alert alert-error">{{ flash_error }}</div>
     {% endif %}
     
-    <div class="filter-bar">
-        <select id="faq-dept-filter" data-filter-table>
+    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="text" id="faq-search-input" placeholder="🔍 Быстрый поиск по тексту..." 
+               class="form-control" style="max-width: 320px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color, #cbd5e1); font-size: 14px;">
+        <select id="faq-dept-filter" data-filter-table style="padding: 8px 12px; border-radius: 6px;">
             <option value="">Все отделы</option>
             {% for dept in departments %}
             <option value="{{ dept.id }}">{{ dept.name }}</option>
             {% endfor %}
         </select>
+        <span id="faq-counter" class="badge badge-secondary" style="margin-left: auto; font-size: 13px;">Всего вопросов: {{ faq_nodes|length }}</span>
     </div>
     
     <div class="faq-list" id="faq-accordion">
@@ -53,7 +58,7 @@
         {% else %}
         <div class="faq-item">
             <div class="faq-question">
-                <span>Вопросов FAQ пока нет</span>
+                <span>Частых вопросов пока нет</span>
             </div>
         </div>
         {% endfor %}
@@ -64,7 +69,7 @@
             <h2>Табличный вид</h2>
         </div>
         <div class="table-container">
-            <table>
+            <table id="faq-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -79,8 +84,8 @@
                     <tr data-dept="{{ node.department.id }}">
                         <td>{{ node.id }}</td>
                         <td><strong>{{ node.department.name }}</strong></td>
-                        <td>{{ node.question }}</td>
-                        <td style="max-width: 360px; white-space: pre-wrap;">{{ node.final_answer or '—' }}</td>
+                        <td class="faq-question-cell">{{ node.question }}</td>
+                        <td class="faq-answer-cell" style="max-width: 360px; white-space: pre-wrap;">{{ node.final_answer or '—' }}</td>
                         <td>
                             <form method="post" action="/faq/{{ node.id }}/delete"
                                   data-confirm="Удалить этот вопрос?">
@@ -92,7 +97,7 @@
                     {% else %}
                     <tr>
                         <td colspan="5" class="empty-state">
-                            Вопросов FAQ пока нет
+                            Частых вопросов пока нет
                         </td>
                     </tr>
                     {% endfor %}
@@ -102,10 +107,11 @@
     </div>
 </div>
 
+<!-- Модальное окно ручного добавления одного вопроса -->
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Добавить вопрос FAQ</h3>
+            <h3>Добавить вопрос</h3>
             <button class="close-btn" data-close-modal="modal">&times;</button>
         </div>
         <form method="POST" action="/faq/">
@@ -130,4 +136,102 @@
         </form>
     </div>
 </div>
+
+<!-- Модальное окно массовой загрузки (импорта) -->
+<div id="import-modal" class="modal">
+    <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-header">
+            <h3>Массовая загрузка частых вопросов</h3>
+            <button class="close-btn" data-close-modal="import-modal">&times;</button>
+        </div>
+        
+        <div style="background: var(--bg-subtle, #f8fafc); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border-color, #e2e8f0);">
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">Скачать готовый шаблон для заполнения:</div>
+            <div style="display: flex; gap: 8px;">
+                <a href="/faq/template.xlsx" class="btn btn-secondary btn-small">📥 Скачать Excel (.xlsx)</a>
+                <a href="/faq/template.csv" class="btn btn-secondary btn-small">📥 Скачать CSV</a>
+            </div>
+        </div>
+
+        <form method="POST" action="/faq/import" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
+            {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+            <div class="form-group">
+                <label for="import_dept_id">Отдел по умолчанию (если не указан в файле)</label>
+                <select id="import_dept_id" name="department_id">
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}">{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="faq_file">Файл Excel (.xlsx) или CSV (.csv)</label>
+                <input type="file" id="faq_file" name="file" accept=".xlsx,.csv,.txt">
+                <small style="color: #64748b; display: block; margin-top: 4px;">Колонки в файле: Вопрос, Ответ, Отдел (необязательно)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="text_data">Или вставьте строки текста (разделитель точка с запятой или запятая):</label>
+                <textarea id="text_data" name="text_data" rows="4" 
+                          placeholder="Сколько общежитий?; 16 общежитий; Жилищно-бытовой&#10;Как записаться на событие?; Через раздел Мероприятия; Культурно-массовый"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full">Загрузить вопросы</button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('faq-search-input');
+    const deptSelect = document.getElementById('faq-dept-filter');
+    const counter = document.getElementById('faq-counter');
+    const rows = document.querySelectorAll('#faq-table tbody tr:not(.empty-state)');
+    const accordionItems = document.querySelectorAll('#faq-accordion .faq-item:not(:has(.empty-state))');
+
+    function filterItems() {
+        const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+        const selectedDept = deptSelect ? deptSelect.value : '';
+        let visibleCount = 0;
+
+        rows.forEach(function(row) {
+            const rowDept = row.getAttribute('data-dept') || '';
+            const text = row.textContent.toLowerCase();
+            const matchesDept = !selectedDept || rowDept === selectedDept;
+            const matchesQuery = !query || text.includes(query);
+
+            if (matchesDept && matchesQuery) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        accordionItems.forEach(function(item) {
+            const itemDept = item.getAttribute('data-dept') || '';
+            const text = item.textContent.toLowerCase();
+            const matchesDept = !selectedDept || itemDept === selectedDept;
+            const matchesQuery = !query || text.includes(query);
+
+            if (matchesDept && matchesQuery) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        if (counter) {
+            counter.textContent = 'Показано: ' + visibleCount + ' из ' + rows.length;
+        }
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterItems);
+    if (deptSelect) deptSelect.addEventListener('change', filterItems);
+});
+</script>
 {% endblock %}
+

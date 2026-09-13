@@ -97,3 +97,38 @@ def build_tickets_keyboard(ticket_ids: list[int], max_buttons: int = 5) -> str:
     buttons = [(f"Подробнее #{ticket_id}", "secondary") for ticket_id in ticket_ids[:max_buttons]]
     buttons.append(("Меню", "primary"))
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+
+
+def build_faq_departments_keyboard(departments: list[str]) -> str:
+    """Клавиатура выбора отдела для просмотра частых вопросов."""
+    buttons: list[tuple[str, str]] = [(f"Вопросы: {dept}", "secondary") for dept in departments]
+    buttons.append(("Вопросы: Все отделы", "primary"))
+    buttons.append(("Меню", "negative"))
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+
+
+def build_faq_items_keyboard(item_ids: list[int], max_buttons: int = 6) -> str:
+    """Клавиатура номеров вопросов для быстрого открытия в один клик."""
+    buttons: list[tuple[str, str]] = [
+        (f"Вопрос {item_id}", "secondary") for item_id in item_ids[:max_buttons]
+    ]
+    buttons.append(("К разделам вопросов", "primary"))
+    buttons.append(("Меню", "negative"))
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+
+
+def build_knowledge_departments_keyboard(departments: list[str]) -> str:
+    """Клавиатура выбора отдела для просмотра материалов базы знаний."""
+    buttons: list[tuple[str, str]] = [(f"База: {dept}", "secondary") for dept in departments]
+    buttons.append(("База: Все материалы", "primary"))
+    buttons.append(("Меню", "negative"))
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+
+
+def build_back_nav_keyboard(back_label: str = "К разделам вопросов") -> str:
+    """Клавиатура возврата назад."""
+    buttons = [
+        [(back_label, "primary")],
+        [("Меню", "secondary")],
+    ]
+    return _format_keyboard(buttons, one_time=True)

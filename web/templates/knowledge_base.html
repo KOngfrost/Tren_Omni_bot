@@ -10,7 +10,9 @@
         <h1>База знаний</h1>
         <div class="page-desc">Ключевые слова и заготовленные ответы по отделам</div>
     </div>
-    <div class="actions">
+    <div class="actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="/knowledge/export.xlsx" class="btn btn-secondary" title="Скачать базу знаний в формате Excel">📊 Экспорт в Excel</a>
+        <button class="btn btn-primary" data-open-modal="import-modal">📥 Импорт / Загрузка</button>
         <button class="btn btn-success" data-open-modal="modal">Добавить запись</button>
     </div>
 </div>
@@ -20,7 +22,6 @@
 {% endif %}
 
 <div class="card">
-    
     {% if flash_success %}
     <div class="alert alert-success">{{ flash_success }}</div>
     {% endif %}
@@ -29,17 +30,20 @@
     <div class="alert alert-error">{{ flash_error }}</div>
     {% endif %}
     
-    <div class="filter-bar">
-        <select id="kb-dept-filter" data-filter-table>
+    <div class="filter-bar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <input type="text" id="kb-search-input" placeholder="🔍 Быстрый поиск по ключевым словам и тексту..." 
+               class="form-control" style="max-width: 320px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color, #cbd5e1); font-size: 14px;">
+        <select id="kb-dept-filter" data-filter-table style="padding: 8px 12px; border-radius: 6px;">
             <option value="">Все отделы</option>
             {% for dept in departments %}
             <option value="{{ dept.id }}">{{ dept.name }}</option>
             {% endfor %}
         </select>
+        <span id="kb-counter" class="badge badge-secondary" style="margin-left: auto; font-size: 13px;">Всего записей: {{ knowledge_base|length }}</span>
     </div>
     
     <div class="table-container">
-        <table>
+        <table id="kb-table">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -53,9 +57,9 @@
                 {% for kb in knowledge_base %}
                 <tr data-dept="{{ kb.department.id }}">
                     <td>{{ kb.id }}</td>
-                    <td>{{ kb.department.name }}</td>
+                    <td><strong>{{ kb.department.name }}</strong></td>
                     <td><code>{{ kb.keywords }}</code></td>
-                    <td>{{ kb.answer[:50] }}{% if kb.answer|length > 50 %}...{% endif %}</td>
+                    <td style="max-width: 380px; white-space: pre-wrap;">{{ kb.answer }}</td>
                     <td>
                         <form method="post" action="/knowledge/{{ kb.id }}/delete"
                               data-confirm="Удалить эту запись?">
@@ -76,7 +80,7 @@
     </div>
 </div>
 
-<!-- Modal -->
+<!-- Модальное окно ручного добавления одной записи -->
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -99,7 +103,7 @@
                        placeholder="сантехника, кран, вода">
             </div>
             <div class="form-group">
-                <label for="answer">Ответ</label>
+                <label for="answer">Ответ / Ссылка / Материал</label>
                 <textarea id="answer" name="answer" rows="5" required 
                           placeholder="Пожалуйста, обратитесь в Жилбыт..."></textarea>
             </div>
@@ -107,4 +111,88 @@
         </form>
     </div>
 </div>
+
+<!-- Модальное окно массовой загрузки (импорта) -->
+<div id="import-modal" class="modal">
+    <div class="modal-content" style="max-width: 580px;">
+        <div class="modal-header">
+            <h3>Массовая загрузка базы знаний</h3>
+            <button class="close-btn" data-close-modal="import-modal">&times;</button>
+        </div>
+        
+        <div style="background: var(--bg-subtle, #f8fafc); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border-color, #e2e8f0);">
+            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">Скачать готовый шаблон для заполнения:</div>
+            <div style="display: flex; gap: 8px;">
+                <a href="/knowledge/template.xlsx" class="btn btn-secondary btn-small">📥 Скачать Excel (.xlsx)</a>
+                <a href="/knowledge/template.csv" class="btn btn-secondary btn-small">📥 Скачать CSV</a>
+            </div>
+        </div>
+
+        <form method="POST" action="/knowledge/import" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
+            {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+            <div class="form-group">
+                <label for="kb_import_dept_id">Отдел по умолчанию (если не указан в файле)</label>
+                <select id="kb_import_dept_id" name="department_id">
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}">{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="kb_file">Файл Excel (.xlsx) или CSV (.csv)</label>
+                <input type="file" id="kb_file" name="file" accept=".xlsx,.csv,.txt">
+                <small style="color: #64748b; display: block; margin-top: 4px;">Колонки в файле: Ключевые слова, Материал/Ответ, Отдел (необязательно)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="kb_text_data">Или вставьте строки текста (разделитель точка с запятой или запятая):</label>
+                <textarea id="kb_text_data" name="text_data" rows="4" 
+                          placeholder="сообщество, группа вк; Мы публикуем события в ВК: https://vk.ru/...; Культурно-массовый"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full">Загрузить в базу знаний</button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('kb-search-input');
+    const deptSelect = document.getElementById('kb-dept-filter');
+    const counter = document.getElementById('kb-counter');
+    const rows = document.querySelectorAll('#kb-table tbody tr:not(.empty-state)');
+
+    function filterItems() {
+        const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+        const selectedDept = deptSelect ? deptSelect.value : '';
+        let visibleCount = 0;
+
+        rows.forEach(function(row) {
+            const rowDept = row.getAttribute('data-dept') || '';
+            const text = row.textContent.toLowerCase();
+            const matchesDept = !selectedDept || rowDept === selectedDept;
+            const matchesQuery = !query || text.includes(query);
+
+            if (matchesDept && matchesQuery) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (counter) {
+            counter.textContent = 'Показано: ' + visibleCount + ' из ' + rows.length;
+        }
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterItems);
+    if (deptSelect) deptSelect.addEventListener('change', filterItems);
+});
+</script>
 {% endblock %}
+
