@@ -28,7 +28,7 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
-DEFAULT_DEPTS = ["Жилищно-бытовой", "Учебный", "Спортивный", "Культурно-массовый"]
+DEFAULT_DEPTS = ["Жилищно-бытовой", "Информационный", "Корпоративный", "Культурно-массовый"]
 
 
 def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
@@ -52,16 +52,24 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         cell.font = Font(bold=True)
 
     tickets = data.get("tickets", [])
-    departments = data.get("departments", [])
+    departments = list(data.get("departments", []))
+    if not departments:
+        departments = [Department(id=-(i + 1), name=name) for i, name in enumerate(DEFAULT_DEPTS)]
 
     def _count(predicate) -> int:
         return sum(1 for t in tickets if predicate(t))
 
     rows = []
     for department in departments:
-        dept_tickets = [t for t in tickets if t.department_id == department.id]
-        if not dept_tickets:
-            continue
+        dept_tickets = [
+            t
+            for t in tickets
+            if (getattr(t, "department_id", None) == getattr(department, "id", None))
+            or (
+                getattr(getattr(t, "department", None), "name", None)
+                == getattr(department, "name", None)
+            )
+        ]
         total = len(dept_tickets)
         completed = sum(1 for t in dept_tickets if t.status in COMPLETED_STATUSES)
         percent = round(completed / total * 100, 1) if total else 0.0
@@ -135,8 +143,15 @@ def _build_department_sheets(workbook: Workbook, data: dict) -> None:
         "Маркер",
     ]
 
+    used_titles = {"Краткая информация"}
     for dept in final_depts:
-        title = (dept.name or f"Отдел {dept.id}")[:31]
+        base_title = (dept.name or f"Отдел {dept.id}")[:31]
+        title = base_title
+        counter = 1
+        while title in used_titles:
+            title = f"{base_title[:28]}_{counter}"
+            counter += 1
+        used_titles.add(title)
         sheet = workbook.create_sheet(title)
         sheet.append(headers)
         for cell in sheet[1]:

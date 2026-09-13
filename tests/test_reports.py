@@ -28,6 +28,27 @@ def test_build_daily_report_creates_five_sheets():
     assert "Информ" in workbook.sheetnames
 
 
+def test_build_daily_report_with_real_db_departments():
+    real_depts = [
+        Department(id=1, name="Культурно-массовый"),
+        Department(id=2, name="Корпоративный"),
+        Department(id=3, name="Жилищно-бытовой"),
+        Department(id=4, name="Информационный"),
+    ]
+    data = {"tickets": [], "departments": real_depts}
+    report = build_daily_report(data, datetime(2026, 8, 30))
+
+    workbook = load_workbook(BytesIO(report))
+    assert len(workbook.sheetnames) == 5
+    assert workbook.sheetnames[0] == "Краткая информация"
+    assert set(workbook.sheetnames[1:]) == {
+        "Культурно-массовый",
+        "Корпоративный",
+        "Жилищно-бытовой",
+        "Информационный",
+    }
+
+
 def test_report_masks_anonymous_user_data():
     ticket = Ticket(
         id=1,
