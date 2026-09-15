@@ -230,3 +230,18 @@ In-memory `RateLimiter` (словарь `requests: dict[str, list[float]]`) хр
 - **Планы развития (Android App, Telegram Bot, Telegram Mini App для администраторов)**:
   - Разработан документ [docs/PLANS.md](docs/PLANS.md) с архитектурой мобильного рабочего места оператора и суперадминистратора: нативное приложение для Android (Kotlin, Jetpack Compose, Clean Architecture, Retrofit2, Room DB, FCM/RuStore пуши, биометрия) и Telegram Mini App (React, Tailwind, Telegram UI, строгая проверка прав администратора по HMAC initData). Обычные студенты используют публичный VK-бот.
 
+### 8.11. Релиз v0.8.1: комплексный аудит безопасности, харденинг 2FA, i18n, индексы pg_trgm, отказоустойчивость и DR-скрипты
+- **Кибербезопасность и защита старта**:
+  - Внедрены `core/startup_guard.py` и `core/bootstrap_guard.py`: fail-closed валидация секретов при старте в `APP_ENV=production` (блокировка запуска со словарными/placeholder паролями и значениями короче 12 символов).
+  - Глубокий харденинг 2FA (`web/routes/auth.py`, `web/security/otp_store.py`): лимиты попыток ввода (`WEB_ADMIN_2FA_MAX_ATTEMPTS = 5`) и повторных запросов (`WEB_ADMIN_2FA_RESEND_LIMIT = 3`), хранение OTP в Redis/памяти с хешированием Argon2id, возврат честных HTTP 401 и 429 (`Retry-After`), сохранение параметра `next` при 2FA редиректах.
+- **Интернационализация (i18n)**:
+  - Создан модуль `core/i18n.py` и конфигурация `babel.cfg`, интеграция с Jinja2 (`web/templating.py` через `install_gettext_callables`).
+  - Устранена ошибка Jinja2 `UndefinedError` при рендеринге базового шаблона вне контекста запроса.
+- **Оптимизация СУБД и производительность**:
+  - Миграция `c4d5e6f7a8b9_add_pg_trgm_gin_indexes.py` с GIN-индексами расширения `pg_trgm` по тикетам и базе знаний.
+  - Миграция `b5a7c9d1e2f3_enforce_fk_ondelete.py` с каскадными политиками `ON DELETE CASCADE / SET NULL`.
+  - Фоновая очистка журнала rate-limit (`core/rate_limit_cleanup.py`).
+- **Disaster Recovery (Резервное копирование и восстановление)**:
+  - Разработаны кроссплатформенные PowerShell-скрипты `scripts/backup.ps1` и `scripts/restore.ps1` для Windows-окружения, актуализирован `scripts/restore.sh`.
+
+
