@@ -35,7 +35,7 @@ from web.dependencies import (
 )
 from web.routes.auth import require_crud_rate_limit
 from web.security.csrf import get_csrf_token
-from web.templating import templates
+from web.templating import format_datetime, templates
 
 logger = logging.getLogger(__name__)
 
@@ -43,23 +43,21 @@ router = APIRouter()
 
 
 def _build_ticket_search_filter(clean_q: str):
-    """Полнотекстовый гибкий поиск по словам, фразе, номеру, автору и отделу."""
+    """Полнотекстовый гибкий поиск по словам, фразе, номеру, автору и отделу.
+
+    Использует единую форму проверки регистра — ILIKE (case-insensitive),
+    которая поддерживается GIN-индексами pg_trgm (см. миграцию c4d5e6f7a8b9).
+    """
     terms = [t for t in clean_q.split() if t]
     term_conditions = []
     for term in terms:
-        term_lower = term.lower()
         term_clean_num = term.lstrip("#").lstrip("№").strip()
         conds: list[Any] = [
-            func.lower(Ticket.topic).like(f"%{term_lower}%"),
             Ticket.topic.ilike(f"%{term}%"),
-            func.lower(Ticket.description).like(f"%{term_lower}%"),
             Ticket.description.ilike(f"%{term}%"),
-            func.lower(Ticket.response_text).like(f"%{term_lower}%"),
             Ticket.response_text.ilike(f"%{term}%"),
-            func.lower(User.full_name).like(f"%{term_lower}%"),
             User.full_name.ilike(f"%{term}%"),
             cast(User.vk_id, String).like(f"%{term}%"),
-            func.lower(Department.name).like(f"%{term_lower}%"),
             Department.name.ilike(f"%{term}%"),
         ]
         if term_clean_num.isdigit():
@@ -67,18 +65,12 @@ def _build_ticket_search_filter(clean_q: str):
         term_conditions.append(or_(*conds))
 
     if len(terms) > 1:
-        phrase_lower = clean_q.lower()
         phrase_clean_num = clean_q.lstrip("#").lstrip("№").strip()
         phrase_conds: list[Any] = [
-            func.lower(Ticket.topic).like(f"%{phrase_lower}%"),
             Ticket.topic.ilike(f"%{clean_q}%"),
-            func.lower(Ticket.description).like(f"%{phrase_lower}%"),
             Ticket.description.ilike(f"%{clean_q}%"),
-            func.lower(Ticket.response_text).like(f"%{phrase_lower}%"),
             Ticket.response_text.ilike(f"%{clean_q}%"),
-            func.lower(User.full_name).like(f"%{phrase_lower}%"),
             User.full_name.ilike(f"%{clean_q}%"),
-            func.lower(Department.name).like(f"%{phrase_lower}%"),
             Department.name.ilike(f"%{clean_q}%"),
         ]
         if phrase_clean_num.isdigit():
@@ -248,6 +240,14 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
         "auto_closed": ticket.auto_closed,
         "response_text": ticket.response_text,
         "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
+        # Ошибка #19: дата, отрендеренная сервером в едином поясе проекта
+        # (APP_TIMEZONE, Europe/Moscow) — клиент использует её вместо
+        # локального toLocaleString() браузера.
+        "created_at_display": (
+            format_datetime(ticket.created_at, "%d.%m.%Y %H:%M") + " МСК"
+            if ticket.created_at
+            else None
+        ),
         "user": {
             "full_name": ticket.user.full_name if ticket.user else None,
             "dormitory": ticket.user.dormitory if ticket.user else None,

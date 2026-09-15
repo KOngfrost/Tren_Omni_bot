@@ -77,7 +77,7 @@
     </div>
 </div>
 
-<style>
+<style nonce="{{ csp_nonce('style') }}">
 .code-single-wrapper {
     margin: 20px 0 16px 0;
     text-align: center;
@@ -115,7 +115,7 @@
 }
 </style>
 
-<script>
+<script nonce="{{ csp_nonce('script') }}">
 (function() {
     function init2FA() {
         const input = document.getElementById('code');

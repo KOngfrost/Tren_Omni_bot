@@ -141,6 +141,18 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     CACHE_DEFAULT_TTL: int = 300
     SESSION_TTL: int = 86400
+    # TTL FSM-состояний VK-бота в Redis (core/state_dispenser.py): время
+    # жизни незавершённого диалога студента. При каждом шаге диалога TTL
+    # продлевается. Должен заметно превышать паузы между сообщениями
+    # студента; обеспечивает корректную работу при WEB_WORKERS>1 и
+    # VK_MODE=callback (состояние общее для всех воркеров Uvicorn).
+    BOT_STATE_TTL_SECONDS: int = 3600
+
+    # Распределённая координация фоновых задач: TTL-блокировки в Redis
+    # (core/task_dispatcher.py). TTL должен быть заметно больше интервала
+    # продления, чтобы замок не истекал при обычных задержках сети.
+    DISTRIBUTED_LOCK_TTL_SECONDS: int = 30
+    DISTRIBUTED_LOCK_RENEW_INTERVAL_SECONDS: float = 10.0
 
     # Sentry
     SENTRY_DSN: str | None = None
@@ -150,8 +162,19 @@ class Settings(BaseSettings):
     # 2FA & Bootstrap
     TWO_FACTOR_ENABLED: bool = True
     TWO_FACTOR_CODE_TTL: int = 300
+    # Доверенный канал доставки OTP для bootstrap-суперадмина из .env
+    # (у постоянного веб-пользователя канал берётся из привязки Admin.user.vk_id).
+    # 0 → используется VK_REPORT_ADMIN_ID; если не задан ни один — вход блокируется.
+    WEB_ADMIN_2FA_VK_ID: int = 0
+    # Максимум неверных вводов OTP на одну попытку входа (сверх — блокировка)
+    WEB_ADMIN_2FA_MAX_ATTEMPTS: int = 5
+    # Максимум повторных отправок OTP на одну попытку входа (защита от флуда VK)
+    WEB_ADMIN_2FA_RESEND_LIMIT: int = 3
     BOOTSTRAP_ALLOWED: bool = True
     FORCE_BOOTSTRAP_OVERRIDE: bool = False
+    # Разрешить запуск с placeholder-секретами (только локальная разработка).
+    # В production страж старта всё равно прервёт запуск.
+    WEB_BOOTSTRAP_ALLOW_PLACEHOLDER_SECRETS: bool = False
 
     # SMTP
     SMTP_HOST: str = ""
@@ -192,7 +215,7 @@ class Settings(BaseSettings):
             return {v}
         if isinstance(v, str):
             return {int(x.strip()) for x in v.split(",") if x.strip().isdigit()}
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             return {int(x) for x in v if str(x).isdigit()}
         return set()
 
@@ -213,7 +236,7 @@ class Settings(BaseSettings):
             return v
         if isinstance(v, str):
             return {x.strip() for x in v.split(",") if x.strip()}
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             return {str(x).strip() for x in v if str(x).strip()}
         return set()
 
@@ -249,6 +272,20 @@ class Settings(BaseSettings):
         super().__setattr__(name, value)
 
     def __getattr__(self, name: str) -> Any:
+        """Прозрачный доступ к конфигурации без фиктивных подстановок.
+
+        Ошибка #17: mock-значения удалены (VK_BOT_TOKEN -> "mock_token",
+        ADMIN_VK_IDS -> {1}). Для объявленных полей возвращается штатный
+        pydantic-дефолт — это работает и для частично инициализированных
+        экземпляров (object.__new__(Settings) в тестах production-контрактов).
+        Полноценный Settings() всегда содержит все поля из env / .env /
+        pydantic-дефолтов. При отсутствии обязательных параметров
+        validate_required() прерывает запуск на этапе инициализации
+        с понятным диагностическим сообщением.
+        """
+        # Ленивая инициализация приватных слотов pydantic — нужен корректный
+        # доступ к extra-атрибутам на неполностью инициализированных
+        # экземплярах (unpickle / edge-кейсы pydantic v2).
         if "__pydantic_fields_set__" not in self.__dict__:
             object.__setattr__(self, "__pydantic_fields_set__", set())
         if "__pydantic_extra__" not in self.__dict__:
@@ -256,20 +293,14 @@ class Settings(BaseSettings):
         if "__pydantic_private__" not in self.__dict__:
             object.__setattr__(self, "__pydantic_private__", None)
         if name in self.__class__.model_fields:
-            if name == "VK_BOT_TOKEN":
-                return os.getenv("VK_BOT_TOKEN") or "mock_token"
-            if name == "ADMIN_VK_IDS":
-                return {
-                    int(x)
-                    for x in os.getenv("ADMIN_VK_IDS", "123").split(",")
-                    if x.strip().isdigit()
-                } or {1}
             field = self.__class__.model_fields[name]
             if field.default is not PydanticUndefined:
                 return field.default
             if field.default_factory is not None:
                 return field.default_factory()
-        return super().__getattr__(name)
+        # mypy: pydantic v2 определяет BaseModel.__getattr__ условно (в
+        # рантайме он есть), статически mypy его не видит — игнорируем [misc].
+        return super().__getattr__(name)  # type: ignore[misc]
 
     def validate_required(self) -> None:
         """Проверить обязательные конфигурационные поля.

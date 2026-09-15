@@ -9,6 +9,7 @@ from vkbottle.bot import Message
 
 from core.config import settings
 from core.heartbeat import touch_heartbeat
+from core.state_dispenser import RedisStateDispenser
 
 from bots.vk.common import (
     ReportStates,
@@ -74,7 +75,15 @@ from bots.vk.handlers.student import (
     ticket_reply_handler,
 )
 
-vk_bot = Bot(token=settings.VK_BOT_TOKEN)
+vk_bot = Bot(
+    token=settings.VK_BOT_TOKEN,
+    # Ошибка #15: распределённый state dispenser. При WEB_WORKERS>1 и
+    # VK_MODE=callback FSM-состояние студента хранится в Redis (TTL
+    # BOT_STATE_TTL_SECONDS) и доступно любому воркеру Uvicorn, поэтому
+    # диалог создания заявки не теряет шаги между последовательными
+    # запросами, направленными на разные воркеры.
+    state_dispenser=RedisStateDispenser(),
+)
 
 logger = logging.getLogger(__name__)
 

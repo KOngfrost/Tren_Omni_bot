@@ -43,11 +43,37 @@ def _production_settings(**values: str) -> Settings:
     settings.DB_USER = values.get("DB_USER", "production_user")
     settings.DB_PASS = values.get("DB_PASS", "long-production-password")
     settings.SESSION_SECRET_KEY = values.get("SESSION_SECRET_KEY", "x" * 64)
+    # Ошибка #17: фиктивные подстановки ("mock_token", {1}) удалены из
+    # Settings.__getattr__, поэтому "валидная" production-конфигурация
+    # задаёт VK-параметры явно.
+    settings.VK_BOT_TOKEN = values.get("VK_BOT_TOKEN", "production_vk_token")
+    settings.ADMIN_VK_IDS = {123456789}
     return settings
 
 
 def test_production_configuration_accepts_explicit_secure_values():
     _production_settings().ensure_production_config()
+
+
+def test_production_configuration_rejects_missing_vk_token():
+    """Строгая валидация: VK_BOT_TOKEN не задан -> запуск прерывается.
+
+    Раньше Settings.__getattr__ подставлял фиктивный "mock_token" и
+    отсутствие токена оставалось незамеченным (Ошибка #17).
+    """
+    settings = object.__new__(Settings)
+    settings.APP_ENV = "production"
+    settings.DB_USER = "production_user"
+    settings.DB_PASS = "long-production-password"
+    settings.SESSION_SECRET_KEY = "x" * 64
+    # VK_BOT_TOKEN и ADMIN_VK_IDS сознательно не заданы
+
+    with pytest.raises(RuntimeError) as exc_info:
+        settings.ensure_production_config()
+
+    message = str(exc_info.value)
+    assert "VK_BOT_TOKEN" in message
+    assert "ADMIN_VK_IDS" in message
 
 
 @pytest.mark.parametrize(

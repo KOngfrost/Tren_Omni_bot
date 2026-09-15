@@ -33,7 +33,11 @@ from core.database import async_session_maker
 from core.logging_config import setup_logging
 from core.sentry import init_sentry
 from web.security.csrf import CSRFMiddleware
-from web.security.middleware import RequestSizeValidator, SecurityHeadersMiddleware
+from web.security.middleware import (
+    RequestSizeLimitMiddleware,
+    RequestSizeValidator,
+    SecurityHeadersMiddleware,
+)
 from web.security.session_store import RedisSessionMiddleware
 from web.templating import templates
 
@@ -48,23 +52,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Жизненный цикл: фоновые задачи веб-панели.
 
     Outbox-воркер запускается и в панели, чтобы доставка VK-уведомлений
+
     не останавливалась при перезапуске бота. При WEB_WORKERS>1 фактическим
-    исполнителем становится один процесс (PostgreSQL advisory lock,
+    исполнителем становится один процесс (Redis distributed lock,
     см. core/task_dispatcher.py). Отключается переменной WEB_OUTBOX_WORKER=false.
+
+    Первым делом выполняется страж старта (core.startup_guard): в production
+    он прерывает запуск при placeholder-секретах и небезопасной конфигурации.
     """
+    from core.startup_guard import enforce_startup_security
+
+    enforce_startup_security(settings, component="web-admin")
+
     worker_task: asyncio.Task[None] | None = None
+
     if settings.WEB_OUTBOX_WORKER:
         from core.outbox import outbox_worker_loop
 
         worker_task = asyncio.create_task(outbox_worker_loop())
         logger.info("Outbox-воркер веб-панели запущен")
+    cleanup_task: asyncio.Task[None] | None = None
     try:
         from core.ticket_service import sync_unassigned_ticket_departments
 
         await sync_unassigned_ticket_departments()
     except Exception as exc:
         logger.warning("Не удалось выполнить автопривязку отделов: %s", exc)
+    # Фоновая очистка устаревших записей rate-limit (crud_attempts, login_attempts)
+    # — вынесена из горячего пути DBRateLimiter (Ошибка #10).
+    from core.rate_limit_cleanup import start_rate_limit_cleanup
+
+    cleanup_task = start_rate_limit_cleanup()
+    logger.info("Фоновая очистка rate-limit журналов запущена")
     yield
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cleanup_task
+        logger.info("Фоновая очистка rate-limit журналов остановлена")
     if worker_task is not None:
         worker_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -139,9 +164,19 @@ app.add_middleware(
 # 4. Сжатие ответов GZip для оптимизации производительности (размер от 1 КБ)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# 4.1 Жёсткий лимит размера тела запроса (фактические байты потока).
+# Нужен потому, что запрос с Transfer-Encoding: chunked приходит без
+# Content-Length и обходит проверку заголовка. Выполняется раньше CSRF и
+# сессии, но внутри SecurityHeadersMiddleware — чтобы отказ 413 тоже
+# получал безопасные заголовки.
+_REQUEST_MAX_BODY_SIZE = 10 * 1024 * 1024
+app.add_middleware(RequestSizeLimitMiddleware, max_body_size=_REQUEST_MAX_BODY_SIZE)
+
+
 # 5. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
 # (outermost - выполняется первым)
 app.add_middleware(SecurityHeadersMiddleware)
+
 
 # Static
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
@@ -173,13 +208,14 @@ _SKIP_MIDDLEWARE_PREFIXES = (
 )
 
 # Валидатор размера запроса (10MB лимит)
-_request_size_validator = RequestSizeValidator(max_body_size=10 * 1024 * 1024)
+_REQUEST_MAX_BODY_SIZE = 10 * 1024 * 1024
+_request_size_validator = RequestSizeValidator(max_body_size=_REQUEST_MAX_BODY_SIZE)
 
 
 # Middleware для валидации размера запросов
 @app.middleware("http")
 async def validate_request_size(request: Request, call_next):
-    """Проверяет размер запроса до его обработки."""
+    """Проверяет объявленный размер запроса (Content-Length) до его обработки."""
     await _request_size_validator.check_form_size(request)
     response = await call_next(request)
     return response
@@ -506,8 +542,15 @@ app.include_router(vk_callback.router)
 
 @app.get("/health")
 async def health():
+    """Healthcheck: доступность БД, синхронизация времени, bootstrap-режим.
+
+    `bootstrap_mode` (раздел 5 ТЗ) — временный доступ по учётным данным из .env
+    активен, пока в базе нет постоянного суперадминистратора. Поле обязательно
+    видно мониторингу, чтобы bootstrap не остался в production незамеченным.
+    """
     from sqlalchemy import text
 
+    from core.bootstrap_guard import bootstrap_mode_status
     from core.database import engine
     from core.time_utils import check_time_sync
 
@@ -522,9 +565,20 @@ async def health():
             await conn.execute(text("SELECT 1"))
             time_sync = await check_time_sync(conn)
 
+        bootstrap: dict[str, object] | None
+        try:
+            async with async_session_maker() as session:
+                bootstrap = await bootstrap_mode_status(session, settings)
+        except Exception as exc:
+            # Fail-soft только для диагностического поля: сам healthcheck остаётся ok
+            logger.warning("Healthcheck: не удалось определить bootstrap-режим: %s", exc)
+            bootstrap = None
+
         return {
             "status": "ok",
             "time_sync": time_sync,
+            "bootstrap_mode": None if bootstrap is None else bootstrap["bootstrap_mode"],
+            "bootstrap": bootstrap,
         }
     except Exception:
         logger.exception("Healthcheck: БД недоступна")

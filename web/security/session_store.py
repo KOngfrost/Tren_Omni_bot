@@ -89,6 +89,21 @@ class RedisSessionMiddleware:
 
         return cookie_val, session_id
 
+    async def _refresh_session_ttl(self, session_id: str | None, redis: Any) -> None:
+        """Ошибка #8 — скользящее продление сессии (sliding expiration).
+
+        При каждом авторизованном входящем запросе обновляем TTL ключа сессии
+        в Redis (EXPIRE session:{id}), предотвращая принудительное разлогинивание
+        активно работающего администратора: таймаут отсчитывается от последней
+        активности, а не от момента входа.
+        """
+        if redis is None or not session_id:
+            return
+        try:
+            await redis.expire(f"session:{session_id}", self.max_age)
+        except Exception as e:
+            logger.debug("Не удалось продлить TTL сессии %s: %s", session_id, e)
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
@@ -98,6 +113,11 @@ class RedisSessionMiddleware:
         raw_cookie = connection.cookies.get(self.session_cookie)
         redis = await get_redis_client()
         session_id, data = await self._load_session(raw_cookie, redis)
+
+        # Sliding expiration: продлеваем TTL только для живых сессий
+        # (с данными) при каждом входящем запросе.
+        if session_id and data:
+            await self._refresh_session_ttl(session_id, redis)
 
         scope["session"] = data
         initial_hash = hash(json.dumps(data, sort_keys=True, default=str))

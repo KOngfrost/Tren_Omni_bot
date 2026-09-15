@@ -184,7 +184,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce('script') }}">
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('faq-search-input');
     const deptSelect = document.getElementById('faq-dept-filter');

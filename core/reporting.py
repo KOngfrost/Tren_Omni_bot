@@ -28,9 +28,25 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
-# Список реальных отделов из БД по умолчанию.
-# Гарантирует создание ровно 4 листов отделов (+ 1 лист сводки = 5 листов в Excel).
+# Dev-фоллбэк: список отделов по умолчанию. Используется ТОЛЬКО если в базе
+# ещё нет ни одного отдела, чтобы отчёт формировался в пустой системе.
+# В production отделы создаёт администратор через панель управления, и
+# книга Excel получает по вкладке на каждый отдел из БД (Ошибка #16).
 DEFAULT_DEPTS = ["Жилищно-бытовой", "Информационный", "Корпоративный", "Культурно-массовый"]
+
+
+def _get_report_departments(data: dict) -> list[Department]:
+    """Список отделов для отчёта: ВСЕ отделы, существующие в БД.
+
+    Ошибка #16: количество вкладок больше не ограничено четырьмя —
+    лист создаётся для каждого отдела на момент формирования отчёта,
+    включая добавленные администратором через панель управления.
+    Если в БД нет ни одного отдела — используется DEFAULT_DEPTS (dev-фоллбэк).
+    """
+    departments = list(data.get("departments", []))
+    if departments:
+        return departments
+    return [Department(id=-(i + 1), name=name) for i, name in enumerate(DEFAULT_DEPTS)]
 
 
 def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
@@ -61,9 +77,7 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         cell.font = Font(bold=True)
 
     tickets = data.get("tickets", [])
-    departments = list(data.get("departments", []))
-    if not departments:
-        departments = [Department(id=-(i + 1), name=name) for i, name in enumerate(DEFAULT_DEPTS)]
+    departments = _get_report_departments(data)
 
     def _count(predicate) -> int:
         return sum(1 for t in tickets if predicate(t))
@@ -129,25 +143,18 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
 
 
 def _build_department_sheets(workbook: Workbook, data: dict) -> None:
-    """Формирует Листы 2–5 с подробным реестром тикетов по каждому из 4 отделов.
+    """Формирует листы 2–N+1 с подробным реестром тикетов по каждому отделу.
 
-    Особенности:
-    - строго 4 отдела (из базы данных или дополненные до 4 из DEFAULT_DEPTS)
-    - маскирование персональных данных для анонимных обращений ('Аноним')
+    Особенности (Ошибка #16):
+    - по одному листу на КАЖДЫЙ отдел, существующий в БД на момент
+      формирования отчёта (ограничение «ровно 4 листа» снято: отдел,
+      добавленный администратором через панель управления, попадает в отчёт);
+    - если в БД нет ни одного отдела — DEFAULT_DEPTS (dev-фоллбэк);
+    - маскирование персональных данных для анонимных обращений ('Аноним');
     - маркер способа закрытия: 'авто' (по таймауту) или 'ручной' (оператором).
     """
     tickets = data.get("tickets", [])
-    raw_depts = list(data.get("departments", []))
-
-    # Гарантируем ровно 4 отдела
-    final_depts = list(raw_depts)
-    for default_name in DEFAULT_DEPTS:
-        if len(final_depts) >= 4:
-            break
-        if not any(getattr(d, "name", None) == default_name for d in final_depts):
-            final_depts.append(Department(id=-(len(final_depts) + 1), name=default_name))
-
-    final_depts = final_depts[:4]
+    final_depts = _get_report_departments(data)
 
     headers = [
         "ID",
@@ -390,7 +397,9 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> No
         return
 
     data = await get_report_for_date(report_date.date())
-    report_bytes = build_daily_report(data, report_date)
+    # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
+    # чтобы не блокировать event loop (Ошибка #11).
+    report_bytes = await asyncio.to_thread(build_daily_report, data, report_date)
     filename = f"report_{report_date:%Y-%m-%d}.xlsx"
 
     # Отправка в VK — отдельный try/except

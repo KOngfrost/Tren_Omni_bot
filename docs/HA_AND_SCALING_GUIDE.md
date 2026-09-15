@@ -22,6 +22,17 @@ DB_PORT=6432
 DB_HOST=pgbouncer
 ```
 
+### Совместимость с PgBouncer
+- **Миграции (DDL)** выполняются только разовым сервисом `oss_bot_migrate`,
+  который подключается напрямую к PostgreSQL на порт 5432
+  (`docker-compose.yml`, `command: python -m alembic upgrade head`),
+  минуя PgBouncer. Приложение миграции не запускает.
+- **Координация фоновых задач (outbox-воркер)** использует распределённые
+  блокировки Redis (`core/task_dispatcher.py`) вместо `pg_try_advisory_lock`:
+  в режиме `pool_mode=transaction` session-level advisory lock не переживает
+  возврат соединения в пул (`DISCARD ALL`). Redis-замок не держит соединений
+  к PostgreSQL и не создаёт утечек пула.
+
 ---
 
 ## 2. VK Callback API (Webhooks) против Long Poll

@@ -76,6 +76,10 @@ def client(monkeypatch):
     monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_USERNAME", "testadmin")
     monkeypatch.setattr("web.routes.auth.settings.WEB_ADMIN_PASSWORD", "test_password_123")
     monkeypatch.setattr("web.routes.auth.settings.VK_REPORT_ADMIN_ID", 0)
+    # UI-тесты проверяют разметку страниц, а не второй фактор.
+    # Как и в tests/conftest.py, 2FA отключается явно (bootstrap-вход без OTP-канала
+    # при включённой 2FA блокируется намеренно).
+    monkeypatch.setattr("web.routes.auth.settings.TWO_FACTOR_ENABLED", False)
 
     from web.main import app
 

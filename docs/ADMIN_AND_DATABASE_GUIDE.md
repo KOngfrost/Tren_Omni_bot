@@ -81,10 +81,12 @@ docker compose exec bot python scripts/init_superadmin.py --vk-id 123456789 --na
 | `crud_attempts` | Ограничение частоты изменений (DBRateLimiter) | `id`, `ip_address`, `action`, `attempted_at` |
 
 ### Миграции Alembic
-Любые изменения схемы выполняются исключительно через миграции Alembic:
+Любые изменения схемы выполняются исключительно через миграции Alembic.
+Разовые миграции применяет сервис `oss_bot_migrate` из docker-compose.yml,
+который подключается напрямую к PostgreSQL (порт 5432, минуя PgBouncer):
 ```bash
-# Применение миграций вручную (в контейнере)
-docker compose exec bot python -m alembic upgrade head
+# Применение миграций вручную (одноразовый контейнер, порт 5432)
+docker compose run --rm migrate
 
 # Создание новой ревизии миграции
 docker compose exec bot python -m alembic revision -m "add_new_feature_table"

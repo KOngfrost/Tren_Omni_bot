@@ -6,10 +6,14 @@
 #
 # Что делает:
 #   1. Останавливает bot и web-admin (чтобы не было записи во время restore).
-#   2. Пересоздаёт базу (dropdb + createdb).
-#   3. Восстанавливает данные из дампа.
-#   4. Оставляет сервисы остановленными -- запустите их вручную
-#      командой docker compose start bot web-admin.
+#   2. Принудительно завершает все сессии к базе (pg_terminate_backend)
+#      и останавливает PgBouncer, чтобы пулер не держал/не плодил
+#      соединения во время пересоздания базы.
+#   3. Пересоздаёт базу (dropdb + createdb).
+#   4. Восстанавливает данные из дампа.
+#   5. Возвращает PgBouncer в строй; bot и web-admin остаются
+#      остановленными — запустите их вручную командой
+#      docker compose start bot web-admin.
 #
 # Подтверждение вручную обязательно: операция полностью перезаписывает базу.
 #
@@ -51,6 +55,18 @@ fi
 echo "[$(date '+%F %T')] Останавливаем bot и web-admin..."
 "${COMPOSE[@]}" stop bot web-admin || true
 
+echo "[$(date '+%F %T')] Останавливаем PgBouncer (пауза пулера)..."
+"${COMPOSE[@]}" stop pgbouncer || true
+
+echo "[$(date '+%F %T')] Принудительно завершаем все сессии к базе ${POSTGRES_DB}..."
+# pg_terminate_backend отключает клиентов; pid <> pg_backend_pid() оставляет
+# текущее соединение psql к обслуживающей БД postgres нетронутым.
+"${COMPOSE[@]}" exec -T -e PGPASSWORD="${POSTGRES_PASSWORD}" db \
+    psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 \
+    -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();" \
+    >/dev/null || true
+sleep 2
+
 echo "[$(date '+%F %T')] Пересоздаём базу..."
 "${COMPOSE[@]}" exec -T -e PGPASSWORD="${POSTGRES_PASSWORD}" db \
     dropdb -U "$POSTGRES_USER" --if-exists "$POSTGRES_DB"
@@ -61,8 +77,11 @@ echo "[$(date '+%F %T')] Restore started..."
 gunzip -c "$BACKUP_FILE" | "${COMPOSE[@]}" exec -T -e PGPASSWORD="${POSTGRES_PASSWORD}" db \
     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q
 
+echo "[$(date '+%F %T')] Возвращаем PgBouncer в строй..."
+"${COMPOSE[@]}" start pgbouncer
+
 echo "[$(date '+%F %T')] Restore finished. Проверьте данные:"
 echo "  docker compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB -c 'SELECT count(*) FROM tickets;'"
 echo ""
-echo "Запуск сервисов:"
+echo "PgBouncer уже работает. Запуск сервисов:"
 echo "  docker compose start bot web-admin"

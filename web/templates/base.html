@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ current_locale() if current_locale is defined else 'ru' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}OSS Bot — Панель управления{% endblock %}</title>
-    <meta name="description" content="{% block meta_description %}Официальная система приёма и обработки обращений студентов OSS Bot. Управление тикетами, база знаний, аналитика.{% endblock %}">
+    <title>{% block title %}{{ _("OSS Bot — Панель управления") }}{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}{{ _("Официальная система приёма и обработки обращений студентов OSS Bot. Управление тикетами, база знаний, аналитика.") }}{% endblock %}">
     <meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}{{ self.meta_description() }}{% endblock %}">
     <meta property="og:type" content="website">
@@ -110,7 +110,7 @@
                 </div>
                 <button type="button" class="security-banner-close" id="close-security-banner-btn" data-dismiss="security-banner" aria-label="Закрыть предупреждение" title="Скрыть уведомление">✕</button>
             </aside>
-            <script>
+            <script nonce="{{ csp_nonce('script') }}">
                 (function() {
                     try {
                         if (sessionStorage.getItem('dismiss_bootstrap_banner') === '1') {

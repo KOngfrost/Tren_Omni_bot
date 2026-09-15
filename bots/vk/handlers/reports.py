@@ -1,5 +1,6 @@
 """Хендлеры формирования и отправки отчётов."""
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
@@ -43,7 +44,9 @@ async def report_handler(message: Message):
     try:
         report_date = datetime.now(get_app_tz()) - timedelta(days=1)
         data = await get_report_for_date(report_date.date())
-        report_bytes = build_daily_report(data, report_date)
+        # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
+        # чтобы не блокировать event loop (Ошибка #11).
+        report_bytes = await asyncio.to_thread(build_daily_report, data, report_date)
         filename = f"report_{report_date:%Y-%m-%d}.xlsx"
         from bots.vk.bot import vk_bot
 
@@ -178,7 +181,9 @@ async def report_by_period_input(message: Message):
     try:
         data = await get_report_for_period(date_from, date_to)
         report_dt = datetime.combine(date_from, datetime.min.time(), tzinfo=get_app_tz())
-        report_bytes = build_daily_report(data, report_dt)
+        # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
+        # чтобы не блокировать event loop (Ошибка #11).
+        report_bytes = await asyncio.to_thread(build_daily_report, data, report_dt)
         filename = f"report_{date_from:%Y-%m-%d}_to_{date_to:%Y-%m-%d}.xlsx"
         await send_report_to_vk(
             vk_bot.api,

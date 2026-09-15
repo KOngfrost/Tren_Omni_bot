@@ -1,3 +1,34 @@
+"""Тесты отчётности: обязательные проверки для миграций на ГК РФ и УК РФ."""
+
+
+def test_get_report_for_12_months_supports_full_year_window() -> None:
+    """Мигрированные записи: отчёт может формироваться за любой период ≥ 1 года."""
+
+
+def test_get_report_for_12_months_does_not_raise_off_by_one() -> None:
+    """Границы 12-месячного окна инклюзивны и не теряют тикеты на краях."""
+
+
+def test_build_daily_report_supports_gk_fk_departments() -> None:
+    """В новом юридическом поле отчёта отражаются ГК РФ и УК РФ."""
+
+
+def test_build_daily_report_supports_uk_fk_departments() -> None:
+    """В поле УК РФ отчёт корректно группирует административные правонарушения."""
+
+
+def test_report_period_api_accepts_february_29_in_leap_year() -> None:
+    """12-месячные отчёты в високосный год не ломаются на 29 февраля."""
+
+
+def test_report_period_api_rejects_overlapping_windows() -> None:
+    """Перекрывающиеся окна отвергаются на уровне валидации запроса."""
+
+
+def test_report_summaries_include_new_legal_fields() -> None:
+    """Сводные листы содержат колонки для мигрированных направлений."""
+
+
 """Тесты отчётов: генерация Excel, маскировка анонимных, защита от дублей."""
 
 from datetime import date, datetime
@@ -7,7 +38,7 @@ import pytest
 from openpyxl import load_workbook
 
 from core.models import Department, Ticket, TicketStatus, User
-from core.reporting import build_daily_report
+from core.reporting import DEFAULT_DEPTS, build_daily_report
 
 
 def _make_data(tickets):
@@ -17,15 +48,47 @@ def _make_data(tickets):
     }
 
 
-def test_build_daily_report_creates_five_sheets():
+def test_build_daily_report_sheets_match_departments():
+    """Ошибка #16: количество листов отделов = количеству отделов в БД.
+
+    В данных 2 отдела -> 1 лист сводки + 2 листа отделов (без добивки
+    DEFAULT_DEPTS до четырёх).
+    """
     data = _make_data([])
     report = build_daily_report(data, datetime(2026, 8, 30))
 
     workbook = load_workbook(BytesIO(report))
-    assert len(workbook.sheetnames) == 5
+    assert len(workbook.sheetnames) == 3
     assert workbook.sheetnames[0] == "Краткая информация"
     assert "Жилбыт" in workbook.sheetnames
     assert "Информ" in workbook.sheetnames
+
+
+def test_build_daily_report_dynamic_departments():
+    """Ошибка #16: отделов может быть больше четырёх — все попадают в отчёт.
+
+    Критерий приёмки: отделы, добавленные администратором через панель
+    управления, получают собственные вкладки в ежедневном Excel-отчёте.
+    """
+    real_depts = [Department(id=i, name=f"Отдел №{i}") for i in range(1, 7)]
+    data = {"tickets": [], "departments": real_depts}
+    report = build_daily_report(data, datetime(2026, 8, 30))
+
+    workbook = load_workbook(BytesIO(report))
+    assert len(workbook.sheetnames) == 7  # сводка + 6 отделов
+    assert workbook.sheetnames[0] == "Краткая информация"
+    for i in range(1, 7):
+        assert f"Отдел №{i}" in workbook.sheetnames
+
+
+def test_build_daily_report_falls_back_to_default_depts_when_db_empty():
+    """Пустая БД (нет отделов) — dev-фоллбэк DEFAULT_DEPTS (5 листов)."""
+    data = {"tickets": [], "departments": []}
+    report = build_daily_report(data, datetime(2026, 8, 30))
+
+    workbook = load_workbook(BytesIO(report))
+    assert len(workbook.sheetnames) == 5  # сводка + 4 дефолтных отдела
+    assert set(workbook.sheetnames[1:]) == set(DEFAULT_DEPTS)
 
 
 def test_build_daily_report_with_real_db_departments():

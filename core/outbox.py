@@ -143,8 +143,9 @@ async def outbox_worker_loop(interval: float | None = None) -> None:
     """Бесконечный цикл доставки outbox (бот и/или фоновые задачи панели).
 
     Single-instance: при нескольких процессах (бот + uvicorn-воркеры
-    веб-панели) advisory-lock из core/task_dispatcher.py гарантирует, что
-    партию за тик доставляет ровно один процесс; остальные пропускают тик.
+    веб-панели) распределённая Redis-блокировка из core/task_dispatcher.py
+    гарантирует, что партию за тик доставляет ровно один процесс; остальные
+    пропускают тик.
     """
     from core.task_dispatcher import single_instance_guard
 

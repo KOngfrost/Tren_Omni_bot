@@ -7,6 +7,7 @@
 - Санитизация входных данных от XSS
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -157,7 +158,9 @@ async def delete_knowledge_base(request: Request, kb_id: int, user=Depends(requi
 @router.get("/template.xlsx")
 async def knowledge_template_xlsx(user=Depends(require_auth)):
     """Скачать шаблон Excel (.xlsx) для массовой загрузки базы знаний."""
-    data = generate_knowledge_template_xlsx()
+    # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
+    # чтобы не блокировать event loop (Ошибка #11).
+    data = await asyncio.to_thread(generate_knowledge_template_xlsx)
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -192,7 +195,9 @@ async def knowledge_export_xlsx(request: Request, user=Depends(require_auth)):
             )
         items = list((await session.execute(stmt)).scalars().all())
 
-    data = export_knowledge_xlsx(items)
+    # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
+    # чтобы не блокировать event loop (Ошибка #11).
+    data = await asyncio.to_thread(export_knowledge_xlsx, items)
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -219,7 +224,11 @@ async def import_knowledge_base(request: Request, user=Depends(require_writer)):
         return RedirectResponse(url="/knowledge/", status_code=303)
 
     try:
-        raw_rows = parse_file_or_text(file_bytes, filename, text_data if text_data else None)
+        # openpyxl.load_workbook — синхронная ресурсоёмкая операция: выносим
+        # в фоновый поток, чтобы не блокировать event loop (Ошибка #11).
+        raw_rows = await asyncio.to_thread(
+            parse_file_or_text, file_bytes, filename, text_data if text_data else None
+        )
         parsed = parse_knowledge_rows(raw_rows)
     except Exception as e:
         logger.warning("Ошибка разбора файла базы знаний: %s", e)

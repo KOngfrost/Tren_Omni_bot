@@ -3,16 +3,36 @@
 """
 
 import html
+import json
 import logging
 import secrets
 import time
 from collections import defaultdict
+from contextvars import ContextVar
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import Response
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+
+# Nonce текущего запроса для inline <script>/<style>.
+# ContextVar используется потому, что шаблоны рендерятся и вне HTTP-запроса
+# (тесты, офлайн-генерация HTML), где request.state недоступен.
+_csp_nonces: ContextVar[dict[str, str] | None] = ContextVar("csp_nonces", default=None)
+
+
+def csp_nonce(kind: str = "script") -> str:
+    """Вернуть nonce ('script' или 'style') для текущего запроса.
+
+    Пустая строка, если middleware безопасности не выполнялся: тогда у
+    inline-блока просто не будет атрибута nonce (страница остаётся рабочей,
+    CSP заблокирует только этот блок).
+    """
+    nonces = _csp_nonces.get()
+    return nonces.get(kind, "") if nonces else ""
 
 
 # === Безопасные заголовки ===
@@ -62,6 +82,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Сохраняем nonce в request.state для использования в шаблонах
         request.state.script_nonce = script_nonce
         request.state.style_nonce = style_nonce
+        # и в ContextVar — шаблоны могут рендериться без Request в контексте
+        nonce_token = _csp_nonces.set({"script": script_nonce, "style": style_nonce})
 
         # Формируем CSP с nonce
         csp = CONTENT_SECURITY_POLICY_BASE.format(
@@ -69,7 +91,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             nonce_style=style_nonce,
         )
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            _csp_nonces.reset(nonce_token)
 
         for header, value in SECURITY_HEADERS.items():
             response.headers[header] = value
@@ -141,7 +166,6 @@ class DBRateLimiter:
 
         now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=self.window_seconds)
-        cleanup_cutoff = now - timedelta(hours=24)
 
         # Посчитать попытки за окно
         try:
@@ -181,11 +205,6 @@ class DBRateLimiter:
                 )
                 await session.execute(insert_stmt, {"ip": ip, "now": now})
 
-            # Очистка устаревших записей (> 24 ч) для предотвращения разрастания таблицы
-            cleanup_stmt = text(
-                f"DELETE FROM {self.table_name} WHERE attempted_at < :cleanup_cutoff"
-            )
-            await session.execute(cleanup_stmt, {"cleanup_cutoff": cleanup_cutoff})
             await session.commit()
             return True
 
@@ -288,7 +307,23 @@ def escape_for_csv(value: str) -> str:
 
 
 class RequestSizeValidator:
-    """Валидатор размера запроса."""
+    """Валидатор размера запроса (ранний контроль заголовка Content-Length).
+
+    Ошибка #4 — защита от атак через потоковую передачу данных:
+    контроль одного заголовка Content-Length недостаточен — запрос с
+    ``Transfer-Encoding: chunked`` приходит БЕЗ этого заголовка. Фактический
+    подсчёт прочитанных байтов при потоковом получении тела и принудительный
+    разрыв соединения с 413 выполняет зарегистрированный ASGI-слой
+    ``RequestSizeLimitMiddleware`` (см. ниже): он обёртывает receive, буферизует
+    ограниченным окном и прерывает запрос ответом 413, как только суммарный
+    размер потока превысит лимит (10 МБ).
+
+    Настоящий класс сохранён как первый (оборонительный) рубеж в
+    ``@app.middleware("http") validate_request_size`` (web/main.py):
+    - ранний отказ 413 по объявленному Content-Length, ещё до входа
+      во внутренние слои сессии/CSRF;
+    - совместимость с прямыми unit-тестами (mock request).
+    """
 
     def __init__(self, max_body_size: int = 10 * 1024 * 1024):  # 10MB по умолчанию
         self.max_body_size = max_body_size
@@ -310,3 +345,110 @@ class RequestSizeValidator:
     async def check_form_size(self, request: Request) -> None:
         """Проверить размер запроса, не потребляя body до обработчика."""
         self.check_content_length(request)
+
+
+class RequestSizeLimitMiddleware:
+    """ASGI-middleware: жёсткий лимит размера тела запроса.
+
+    Проверки заголовка ``Content-Length`` недостаточно: запрос с
+    ``Transfer-Encoding: chunked`` приходит без этого заголовка и полностью
+    обходит ограничение. Поэтому middleware считает ФАКТИЧЕСКИЕ байты тела:
+
+    - ``Content-Length`` объявлен и больше лимита — отказ 413 без чтения тела;
+    - ``Content-Length`` отсутствует (chunked/HTTP/2) — тело читается
+      ограниченным буфером: как только суммарный размер превышает лимит,
+      запрос прерывается ответом 413; иначе буфер передаётся дальше
+      через «воспроизводящий» receive, и обработчик видит тело целиком.
+    """
+
+    def __init__(self, app: ASGIApp, max_body_size: int = 10 * 1024 * 1024) -> None:
+        self.app = app
+        self.max_body_size = max_body_size
+
+    async def _reject(self, send: Send) -> None:
+        """Ответить 413 без раскрытия деталей запроса."""
+        payload = json.dumps(
+            {"detail": f"Размер запроса превышает лимит {self.max_body_size} байт"},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                "headers": [
+                    (b"content-type", b"application/json; charset=utf-8"),
+                    (b"content-length", str(len(payload)).encode("latin-1")),
+                    (b"connection", b"close"),
+                    (b"cache-control", b"no-store"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": payload, "more_body": False})
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+
+        declared = headers.get("content-length")
+        if declared:
+            try:
+                if int(declared) > self.max_body_size:
+                    logger.warning(
+                        "413: объявлен размер тела %s байт (лимит %s)",
+                        declared,
+                        self.max_body_size,
+                    )
+                    await self._reject(send)
+                    return
+            except ValueError:
+                pass
+            await self.app(scope, receive, send)
+            return
+
+        if headers.get("transfer-encoding") is None and scope.get("method") in {
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "TRACE",
+        }:
+            # Тела нет и оно не заявлено — проверять нечего.
+            await self.app(scope, receive, send)
+            return
+
+        buffer = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":
+                # Клиент отключился до завершения передачи
+                await self.app(scope, _drained_receive, send)
+                return
+            buffer.extend(message.get("body", b""))
+            if len(buffer) > self.max_body_size:
+                logger.warning(
+                    "413: фактический размер тела превысил лимит %s байт (chunked)",
+                    self.max_body_size,
+                )
+                await self._reject(send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        body = bytes(buffer)
+        delivered = False
+
+        async def replay_receive() -> Message:
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.disconnect"}
+            delivered = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+
+async def _drained_receive() -> Message:
+    """Receive для случая «клиент уже отключился»."""
+    return {"type": "http.disconnect"}

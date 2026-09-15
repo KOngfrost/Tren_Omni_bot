@@ -160,6 +160,10 @@
     }
     window.openModal = openModal;
     window.closeModal = closeModal;
+    // Экспорт тостов дизайн-системы: замена нативного alert() в модулях,
+    // у которых нет доступа к локальным функциям (tickets.html и др.)
+    window.showError = showError;
+    window.showSuccess = showSuccess;
 
     document.addEventListener('click', function (event) {
         var opener = event.target.closest('[data-open-modal]');

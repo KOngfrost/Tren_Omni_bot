@@ -1,14 +1,16 @@
-"""
-Главная точка входа сервиса бота (OSS Bot).
+"""Главная точка входа сервиса бота (OSS Bot).
 
 Основные обязанности модуля:
 1. Инициализация логирования и мониторинга ошибок (Sentry).
-2. Запуск миграций базы данных Alembic (схему СУБД обновляет только Alembic).
-3. Запуск фоновых сервисов:
-   - Планировщик ежедневных 5-страничных Excel-отчётов
+2. Запуск фоновых сервисов:
+   - Планировщик ежедневных Excel-отчётов (лист сводки + лист на каждый отдел из БД)
    - Transactional Outbox воркер для надёжной отправки сообщений в VK
    - Фоновый Heartbeat для проверки живучести в Docker Healthcheck.
-4. Запуск Long Poll клиента VK с автоматическим переподключением при сбоях сети.
+3. Запуск Long Poll клиента VK с автоматическим переподключением при сбоях сети.
+
+Миграции Alembic приложение НЕ запускает: схему обновляет только разовый
+сервис oss_bot_migrate в docker-compose.yml, который подключается напрямую
+к PostgreSQL (порт 5432, минуя PgBouncer). Подробности — в docker-compose.yml.
 """
 
 import asyncio
@@ -21,9 +23,9 @@ from vkbottle.exception_factory.base_exceptions import VKAPIError
 
 from bots.vk.bot import vk_bot
 from core.config import settings
-from core.database import run_migrations
 from core.heartbeat import touch_heartbeat
 from core.logging_config import setup_logging
+from core.rate_limit_cleanup import start_rate_limit_cleanup
 from core.reporting import start_report_scheduler
 from core.sentry import init_sentry
 
@@ -51,20 +53,6 @@ def _track_background_task(task: asyncio.Task) -> asyncio.Task:
 def _spawn_background_task(coro) -> asyncio.Task:
     """Создать фоновую задачу и удерживать ссылку на неё до завершения."""
     return _track_background_task(asyncio.create_task(coro))
-
-
-def initialize_database() -> None:
-    """Применяет Alembic-миграции.
-
-    В production схему создаёт только Alembic; базу создаёт PostgreSQL-
-    контейнер (POSTGRES_DB). Автосоздание базы приложением (ensure_database_exists)
-    включается только в dev через ALLOW_DB_CREATE=true.
-    """
-    if settings.ALLOW_DB_CREATE:
-        from core.database import ensure_database_exists
-
-        asyncio.run(ensure_database_exists())
-    run_migrations()
 
 
 async def _start_scheduler() -> None:
@@ -103,6 +91,11 @@ async def _start_scheduler() -> None:
             await asyncio.sleep(60)
 
     _spawn_background_task(_heartbeat_loop())
+
+    # Фоновая очистка устаревших записей rate-limit (crud_attempts, login_attempts)
+    # — вынесена из горячего пути DBRateLimiter (Ошибка #10).
+    _track_background_task(start_rate_limit_cleanup())
+    logger.info("Фоновая очистка rate-limit журналов запущена")
 
 
 async def run_vk_polling() -> None:
@@ -148,9 +141,12 @@ async def run_bot_service() -> None:
 
 def run() -> None:
     try:
-        settings.ensure_production_config()
-        initialize_database()
+        # Страж старта: жёсткие проверки конфигурации + bootstrap/placeholder (раздел 5 ТЗ)
+        from core.startup_guard import enforce_startup_security
+
+        enforce_startup_security(settings, component="bot")
         asyncio.run(run_bot_service())
+
     except RuntimeError as error:
         logger.error("Ошибка конфигурации: %s", error)
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)

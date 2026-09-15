@@ -8,11 +8,16 @@ from core.models import TicketStatus
 
 # Человекочитаемые названия статусов для форм смены статуса заявки.
 # Используется в tickets.py и dept_frame.py.
+# Включает полный перечень допустимых статусов: модальное окно тикета
+# сопоставляет текущий статус с пунктами списка и выставляет selected
+# строго для текущего статуса (предотвращение сброса в первый пункт).
 STATUS_CHOICES = [
+    (TicketStatus.NEW.value, "Новое"),
     (TicketStatus.IN_PROGRESS.value, "В обработке"),
     (TicketStatus.TRANSFERRED_ADMIN.value, "Передать в администрацию"),
     (TicketStatus.TRANSFERRED_HOUSEKEEPING.value, "Передать в локальный Студсовет"),
     (TicketStatus.COMPLETED.value, "Выполнено"),
+    (TicketStatus.COMPLETED_AUTO.value, "Выполнено (авто)"),
 ]
 
 # Полный список статусов для фильтрации в реестре заявок
