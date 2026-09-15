@@ -93,7 +93,7 @@ def _store_in_session(request: Any, state: dict[str, Any], *, full: bool) -> Non
 
 
 async def _persist(request: Any, state: dict[str, Any], redis: Any) -> None:
-    """Записать состояние: сначала в Redis, при сбое — в сессию (хеш)."""
+    """Записать состояние: в Redis (при наличии) и одновременно в сессию."""
     if redis is not None:
         try:
             await redis.set(
@@ -101,12 +101,11 @@ async def _persist(request: Any, state: dict[str, Any], redis: Any) -> None:
                 json.dumps(state, ensure_ascii=False),
                 ex=_remaining_ttl(state),
             )
-            _store_in_session(request, state, full=False)
-            return
         except Exception as exc:
             logger.warning(
                 "2FA: не удалось записать состояние в Redis (%s), fallback в сессию", exc
             )
+    # В подписанную сессию всегда пишем безопасное состояние (хеш кода, без plaintext)
     _store_in_session(request, state, full=True)
 
 
@@ -132,25 +131,17 @@ async def _load(request: Any) -> tuple[dict[str, Any] | None, Any]:
     if redis is not None and token:
         try:
             payload = await redis.get(_redis_key(token))
-        except Exception as exc:
-            # Fail-Closed: без серверного хранилища состояние попытки не подтверждаем
-            logger.warning("2FA: хранилище недоступно (%s), попытка отклонена", exc)
-            request.session.pop(SESSION_KEY, None)
-            return None, redis
-        if payload:
-            try:
+            if payload:
                 state = json.loads(payload)
-            except (TypeError, ValueError):
-                logger.warning("2FA: повреждённое состояние в Redis, попытка отклонена")
-                await _destroy(request, {"token": token}, redis)
-                return None, redis
-            if isinstance(state, dict):
-                state.setdefault("token", token)
-                return state, redis
+                if isinstance(state, dict):
+                    state.setdefault("token", token)
+                    return state, redis
+        except Exception as exc:
+            logger.warning("2FA: ошибка чтения из Redis (%s), fallback на сессию", exc)
 
     # Fallback-режим: состояние (без открытого кода) лежит в подписанной сессии
-    if "code_hash" in raw:
-        return raw, redis
+    if "code_hash" in raw and raw.get("token"):
+        return dict(raw), redis
 
     if token:
         await _destroy(request, {"token": token}, redis)

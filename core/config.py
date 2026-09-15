@@ -131,6 +131,7 @@ class Settings(BaseSettings):
         return _load_or_create_dev_secret()
 
     SESSION_HTTPS_ONLY: bool = False
+    SESSION_SAME_SITE: str = "lax"
     TRUSTED_PROXIES: set[str] = Field(default_factory=set)
     WEB_ADMIN_USERNAME: str = ""
     WEB_ADMIN_PASSWORD: str = ""

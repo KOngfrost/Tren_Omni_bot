@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Настройки — OSS Bot{% endblock %}
+{% block meta_description %}Настройки оформления, выбор темы интерфейса и эффектов панели управления OSS Bot.{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="page-header" style="margin-bottom: 24px;">
+        <h1 style="font-size: 24px; font-weight: 800;">⚙️ Настройки интерфейса</h1>
+        <p style="color: var(--text-secondary); margin-top: 6px;">
+            Персонализация темы оформления, эффектов стекла и параметры рабочей сессии.
+        </p>
+    </div>
+
+    {% if request.session.get("flash_success") %}
+    <div class="alert alert-success" style="margin-bottom: 20px;">
+        {{ request.session.pop("flash_success") }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/settings/theme" id="settingsForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <!-- Раздел выбора темы -->
+        <div class="card settings-section-card">
+            <div class="card-header">
+                <h2>🎨 Тема оформления</h2>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 13.5px; margin-bottom: 18px;">
+                Выберите предпочтительную цветовую схему для работы в веб-панели:
+            </p>
+
+            <div class="theme-picker-grid">
+                <!-- Тёмная тема -->
+                <label class="theme-option-card" for="theme_dark">
+                    <input type="radio" name="theme" id="theme_dark" value="dark" {% if current_theme == 'dark' %}checked{% endif %}>
+                    <div class="theme-card-body">
+                        <div class="theme-preview preview-dark">
+                            <div class="preview-sidebar"></div>
+                            <div class="preview-content">
+                                <div class="preview-bar"></div>
+                                <div class="preview-glass-box"></div>
+                            </div>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-title">
+                                <span>🌙 Тёмная тема</span>
+                                <span class="theme-badge">По умолчанию</span>
+                            </div>
+                            <div class="theme-desc">Глубокий тёмный фон, розовые акценты и минимальная нагрузка на глаза в темноте.</div>
+                        </div>
+                    </div>
+                </label>
+
+                <!-- Светлая тема -->
+                <label class="theme-option-card" for="theme_light">
+                    <input type="radio" name="theme" id="theme_light" value="light" {% if current_theme == 'light' %}checked{% endif %}>
+                    <div class="theme-card-body">
+                        <div class="theme-preview preview-light">
+                            <div class="preview-sidebar"></div>
+                            <div class="preview-content">
+                                <div class="preview-bar"></div>
+                                <div class="preview-glass-box"></div>
+                            </div>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-title">
+                                <span>☀️ Светлая тема</span>
+                            </div>
+                            <div class="theme-desc">Чистый светлый фон с высокой чёткостью шрифтов для комфортной работы при дневном свете.</div>
+                        </div>
+                    </div>
+                </label>
+
+                <!-- Системная тема -->
+                <label class="theme-option-card" for="theme_system">
+                    <input type="radio" name="theme" id="theme_system" value="system" {% if current_theme == 'system' %}checked{% endif %}>
+                    <div class="theme-card-body">
+                        <div class="theme-preview preview-system">
+                            <div class="preview-split-dark"></div>
+                            <div class="preview-split-light"></div>
+                        </div>
+                        <div class="theme-info">
+                            <div class="theme-title">
+                                <span>💻 Как в системе</span>
+                            </div>
+                            <div class="theme-desc">Автоматическое переключение между тёмной и светлой темами по настройкам вашей ОС.</div>
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Раздел визуальных эффектов (Стекло) -->
+        <div class="card settings-section-card">
+            <div class="card-header">
+                <h2>✨ Визуальные эффекты (Glassmorphism)</h2>
+            </div>
+            <div class="settings-toggle-row">
+                <div class="settings-toggle-info">
+                    <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">Полустеклянные карточки (Frosted Glass)</div>
+                    <div style="color: var(--text-secondary); font-size: 13.5px;">
+                        Включает полупрозрачные карточки с эффектом матового стекла и аппаратным размытием фона (backdrop-filter blur).
+                    </div>
+                </div>
+                <label class="switch" for="glass_effect">
+                    <input type="checkbox" id="glass_effect" name="glass_effect" value="true" {% if glass_effect %}checked{% endif %}>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Кнопка сохранения -->
+        <div class="settings-actions-bar" style="margin-bottom: 30px;">
+            <button type="submit" class="btn btn-primary" id="btnSaveSettings" style="min-width: 180px;">
+                Сохранить настройки
+            </button>
+            <span id="saveStatus" style="margin-left: 12px; color: var(--success); display: none; font-weight: 600;">
+                ✓ Настройки применены
+            </span>
+        </div>
+    </form>
+
+    <!-- Информация о профиле и системе -->
+    <div class="card settings-section-card">
+        <div class="card-header">
+            <h2>🛡️ Профиль и безопасность</h2>
+        </div>
+        <div class="settings-info-grid">
+            <div class="settings-info-item">
+                <div class="settings-info-label">Текущий пользователь</div>
+                <div class="settings-info-value"><strong>{{ user.username }}</strong></div>
+            </div>
+            <div class="settings-info-item">
+                <div class="settings-info-label">Роль доступа</div>
+                <div class="settings-info-value">
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                    <span class="badge" style="background: rgba(255, 77, 157, 0.2); color: var(--primary);">Суперадминистратор</span>
+                    {% else %}
+                    <span class="badge" style="background: rgba(184, 50, 128, 0.2); color: var(--primary-hover);">Администратор отдела</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="settings-info-item">
+                <div class="settings-info-label">Двухфакторная аутентификация (2FA)</div>
+                <div class="settings-info-value">
+                    {% if two_factor_enabled %}
+                    <span style="color: var(--success); font-weight: 600;">● Активна (через VK)</span>
+                    {% else %}
+                    <span style="color: var(--text-tertiary);">Отключена в конфигурации</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="settings-info-item">
+                <div class="settings-info-label">Версия системы</div>
+                <div class="settings-info-value">OSS Bot v{{ version }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce('script') }}">
+(function() {
+    function initSettings() {
+        const themeRadios = document.querySelectorAll('input[name="theme"]');
+        const glassToggle = document.getElementById('glass_effect');
+        const saveStatus = document.getElementById('saveStatus');
+
+        function applyPreview() {
+            let selected = 'dark';
+            themeRadios.forEach(r => {
+                if (r.checked) selected = r.value;
+            });
+
+            if (selected === 'system') {
+                const sysPrefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+                window.setTheme ? window.setTheme(sysPrefersLight ? 'light' : 'dark') : null;
+                try { localStorage.setItem('app_theme', 'system'); } catch(e){}
+            } else {
+                window.setTheme ? window.setTheme(selected) : null;
+            }
+
+            if (glassToggle && window.setGlassEffect) {
+                window.setGlassEffect(glassToggle.checked);
+            }
+        }
+
+        themeRadios.forEach(r => {
+            r.addEventListener('change', () => {
+                applyPreview();
+                showNotice();
+            });
+        });
+
+        if (glassToggle) {
+            glassToggle.addEventListener('change', () => {
+                applyPreview();
+                showNotice();
+            });
+        }
+
+        function showNotice() {
+            if (saveStatus) {
+                saveStatus.style.display = 'inline-block';
+                saveStatus.textContent = '✓ Настройки применены';
+                setTimeout(() => {
+                    saveStatus.style.display = 'none';
+                }, 2500);
+            }
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSettings);
+    } else {
+        initSettings();
+    }
+})();
+</script>
+{% endblock %}

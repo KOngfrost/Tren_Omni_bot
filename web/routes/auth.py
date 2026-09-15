@@ -530,6 +530,9 @@ async def login(request: Request):
 @router.get("/2fa", response_class=HTMLResponse)
 async def two_factor_page(request: Request):
     """Страница ввода 2FA-кода из ВК."""
+    if request.session.get("user"):
+        return RedirectResponse(url=take_next(request), status_code=302)
+
     pending = await otp_store.peek(request)
     if not pending:
         await otp_store.cancel(request)
@@ -563,6 +566,9 @@ async def two_factor_verify(
     учётки перечитываются из базы, а bootstrap-сессия повторно проверяется
     на то, что резервный вход всё ещё разрешён и канал 2FA не был снят.
     """
+    if request.session.get("user"):
+        return RedirectResponse(url=take_next(request), status_code=303)
+
     form = await request.form()
     # Допускается вставка пробелов/дефисов (автозаполнение менеджеров паролей)
     submitted_code = re.sub(r"\D", "", str(form.get("code", "")))[:6]

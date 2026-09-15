@@ -48,17 +48,36 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             token_from_session: str | None = request.session.get(CSRF_SESSION_KEY)
             submitted = await self._extract_token(request)
 
+            error_msg: str | None = None
             if not token_from_session or not submitted:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Отсутствует CSRF-токен. Обновите страницу и повторите."},
-                )
+                error_msg = "Отсутствует CSRF-токен. Обновите страницу и повторите."
+            elif not secrets.compare_digest(submitted, token_from_session):
+                error_msg = "Недействительный CSRF-токен. Обновите страницу и повторите действие."
 
-            if not secrets.compare_digest(submitted, token_from_session):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Недействительный CSRF-токен"},
+            if error_msg:
+                accept = request.headers.get("accept", "")
+                if "application/json" in accept or "text/html" not in accept:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": error_msg},
+                    )
+                from starlette.responses import HTMLResponse
+
+                html_content = (
+                    "<!DOCTYPE html>"
+                    '<html lang="ru"><head><meta charset="UTF-8"><title>Ошибка безопасности — OSS Bot</title>'
+                    '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+                    '<link rel="stylesheet" href="/static/style.css?v=0.8.1">'
+                    '</head><body>'
+                    '<div class="auth-page-wrapper"><div class="login-card" style="max-width:480px; text-align:center;">'
+                    '<div style="font-size:48px; margin-bottom:12px;">🛡️</div>'
+                    '<h1 style="font-size:20px; font-weight:800; margin-bottom:8px;">Ошибка проверки безопасности</h1>'
+                    f'<p style="color:var(--text-secondary); font-size:14px; margin-bottom:20px;">{error_msg}</p>'
+                    '<a href="javascript:history.back()" class="btn btn-primary btn-full">Вернуться назад и обновить</a>'
+                    '<a href="/auth/login" class="btn btn-secondary btn-full" style="margin-top:8px;">Перейти на страницу входа</a>'
+                    '</div></div></body></html>'
                 )
+                return HTMLResponse(content=html_content, status_code=403)
 
             response = await call_next(request)
             return response
@@ -147,8 +166,10 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return None
 
 
-def get_csrf_token(request: Request) -> str:
+def get_csrf_token(request: Request | None) -> str:
     """Получить текущий CSRF-токен из сессии."""
+    if not request or not hasattr(request, "session"):
+        return ""
     return request.session.get(CSRF_SESSION_KEY, "")
 
 

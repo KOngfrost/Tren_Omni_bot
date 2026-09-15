@@ -124,7 +124,32 @@
         const resendLabel = document.getElementById('resendLabel');
         const resendForm = document.getElementById('resendForm');
 
-        if (!input || !form) return;
+        let isSubmitting = false;
+        const btnSubmit = document.getElementById('btnSubmit');
+
+        function triggerSubmit() {
+            if (isSubmitting) return;
+            if (input.value.length === 6) {
+                isSubmitting = true;
+                if (btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.textContent = 'Проверка...';
+                }
+                form.requestSubmit ? form.requestSubmit() : form.submit();
+            }
+        }
+
+        form.addEventListener('submit', function(e) {
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+            isSubmitting = true;
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.textContent = 'Проверка...';
+            }
+        });
 
         function extractCode(text) {
             if (!text) return '';
@@ -141,11 +166,7 @@
                     e.preventDefault();
                     input.value = code;
                     if (code.length === 6) {
-                        setTimeout(() => {
-                            if (input.value.length === 6) {
-                                form.requestSubmit ? form.requestSubmit() : form.submit();
-                            }
-                        }, 120);
+                        setTimeout(triggerSubmit, 120);
                     }
                 }
             }
@@ -158,11 +179,7 @@
                 input.value = clean;
             }
             if (clean.length === 6) {
-                setTimeout(() => {
-                    if (input.value.length === 6) {
-                        form.requestSubmit ? form.requestSubmit() : form.submit();
-                    }
-                }, 120);
+                setTimeout(triggerSubmit, 120);
             }
         });
 

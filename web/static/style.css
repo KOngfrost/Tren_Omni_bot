@@ -42,8 +42,9 @@
     100% { background-position: 200% 0; }
 }
 
-/* ---------- Design tokens ---------- */
-:root {
+/* ---------- Design tokens (Dark / Default) ---------- */
+:root,
+html[data-theme="dark"] {
     --bg-page: #08080b;
     --bg-surface: #121217;
     --bg-surface-2: #1a1a23;
@@ -83,11 +84,67 @@
     --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.65);
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.75);
 
+    /* Полустеклянные карточки (Frosted Glass / Glassmorphism) */
+    --bg-glass: rgba(18, 18, 23, 0.75);
+    --bg-glass-card: rgba(22, 22, 30, 0.65);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --border-glass-hover: rgba(255, 77, 157, 0.32);
+    --glass-blur: blur(14px) saturate(180%);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
     --r-xs: 4px;
     --r-sm: 8px;
     --r-md: 12px;
     --r-lg: 16px;
     --r-full: 9999px;
+}
+
+/* ---------- Светлая тема (Light Mode) ---------- */
+html[data-theme="light"] {
+    --bg-page: #f6f8fc;
+    --bg-surface: #ffffff;
+    --bg-surface-2: #eef2f8;
+    --bg-surface-3: #e2e7f2;
+
+    --text-primary: #151824;
+    --text-secondary: #4b5267;
+    --text-tertiary: #788099;
+    --text-inverse: #ffffff;
+
+    --primary: #e02475;
+    --primary-hover: #c91864;
+    --primary-soft: rgba(224, 36, 117, 0.10);
+    --primary-glow: 0 0 16px rgba(224, 36, 117, 0.22);
+
+    --status-new: #e02475;
+    --status-new-bg: rgba(224, 36, 117, 0.12);
+    --status-progress: #b83280;
+    --status-progress-bg: rgba(184, 50, 128, 0.12);
+    --status-done: #d9468e;
+    --status-done-bg: rgba(217, 70, 142, 0.12);
+    --status-transferred: #9333ea;
+    --status-transferred-bg: rgba(147, 51, 234, 0.12);
+    --status-anon: #64748b;
+    --status-anon-bg: rgba(100, 116, 139, 0.12);
+
+    --danger: #dc2626;
+    --danger-bg: rgba(220, 38, 38, 0.10);
+    --success: #059669;
+    --success-bg: rgba(5, 150, 105, 0.10);
+
+    --line: #e2e8f0;
+    --line-strong: #cbd5e1;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+
+    /* Полустеклянные карточки для светлой темы */
+    --bg-glass: rgba(255, 255, 255, 0.85);
+    --bg-glass-card: rgba(255, 255, 255, 0.76);
+    --border-glass: rgba(0, 0, 0, 0.08);
+    --border-glass-hover: rgba(224, 36, 117, 0.35);
+    --glass-blur: blur(14px) saturate(180%);
+    --glass-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.07);
 }
 
 /* ---------- Reset & base ---------- */
@@ -635,19 +692,22 @@ body.no-scroll {
 
 /* ---------- Cards ---------- */
 .card {
-    background: var(--bg-surface);
-    border: 1px solid var(--line);
+    background: var(--bg-glass-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--glass-shadow);
     padding: 20px;
     margin-bottom: 22px;
     overflow: hidden;
     animation: fadeIn 0.6s ease-out 0.15s both;
-    transition: box-shadow 0.25s ease, border-color 0.25s ease;
+    transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
 }
 
 .card:hover {
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-md), 0 0 20px rgba(255, 77, 157, 0.08);
+    border-color: var(--border-glass-hover);
 }
 
 .card-header {
@@ -673,12 +733,14 @@ body.no-scroll {
 }
 
 .stat-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--line);
+    background: var(--bg-glass-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
     padding: 18px 20px;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    box-shadow: var(--glass-shadow);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
     animation: scaleIn 0.5s ease-out both;
 }
 
@@ -965,9 +1027,12 @@ textarea::placeholder {
 }
 
 .modal-content {
-    background: var(--bg-surface);
+    background: var(--bg-glass-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-lg), var(--glass-shadow);
     width: 100%;
     max-width: 560px;
     padding: 22px;
@@ -1245,10 +1310,12 @@ textarea::placeholder {
 }
 
 .login-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--line);
+    background: var(--bg-glass-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
-    box-shadow: var(--shadow-lg), 0 0 32px rgba(255, 77, 157, 0.08);
+    box-shadow: var(--shadow-lg), var(--glass-shadow), 0 0 32px rgba(255, 77, 157, 0.08);
     width: 100%;
     padding: 34px 30px;
     animation: fadeIn 0.5s ease-out 0.1s both;
@@ -2566,5 +2633,327 @@ textarea::placeholder {
     }
     .legal-header h1 {
         font-size: 20px;
+    }
+}
+
+/* ============================================================
+   Theme Switcher, Settings Page & Frosted Glass Enhancements
+   ============================================================ */
+
+/* Disable glassmorphism utility class */
+html.disable-glass .card,
+html.disable-glass .stat-card,
+html.disable-glass .modal-content,
+html.disable-glass .login-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--bg-surface) !important;
+    border-color: var(--line) !important;
+}
+
+/* Quick theme toggle button */
+.btn-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-sm);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-theme-toggle:hover {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.btn-settings-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-sm);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+    font-size: 16px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-settings-nav:hover {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+.auth-theme-bar {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.auth-theme-toggle {
+    box-shadow: var(--shadow-md);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* Settings page styles */
+.settings-container {
+    max-width: 960px;
+    margin: 0 auto;
+    animation: fadeIn 0.4s ease-out;
+}
+
+.settings-section-card {
+    margin-bottom: 24px;
+    padding: 24px;
+}
+
+.theme-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.theme-option-card {
+    position: relative;
+    cursor: pointer;
+    display: block;
+}
+
+.theme-option-card input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.theme-card-body {
+    border: 2px solid var(--border-glass);
+    border-radius: var(--r-md);
+    background: var(--bg-surface-2);
+    padding: 16px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.22s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.theme-option-card:hover .theme-card-body {
+    border-color: var(--border-glass-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.theme-option-card input[type="radio"]:checked + .theme-card-body {
+    border-color: var(--primary);
+    background: var(--bg-surface);
+    box-shadow: 0 0 0 1px var(--primary), var(--primary-glow);
+}
+
+/* Mini theme previews */
+.theme-preview {
+    height: 80px;
+    border-radius: var(--r-sm);
+    margin-bottom: 14px;
+    display: flex;
+    overflow: hidden;
+    border: 1px solid var(--border-glass);
+}
+
+.preview-dark {
+    background: #08080b;
+}
+.preview-dark .preview-sidebar {
+    width: 28%;
+    background: #121217;
+    border-right: 1px solid #22222c;
+}
+.preview-dark .preview-content {
+    flex: 1;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.preview-dark .preview-bar {
+    height: 8px;
+    width: 60%;
+    background: #ff4d9d;
+    border-radius: 4px;
+}
+.preview-dark .preview-glass-box {
+    flex: 1;
+    background: rgba(26, 26, 35, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+.preview-light {
+    background: #f6f8fc;
+}
+.preview-light .preview-sidebar {
+    width: 28%;
+    background: #ffffff;
+    border-right: 1px solid #e2e8f0;
+}
+.preview-light .preview-content {
+    flex: 1;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.preview-light .preview-bar {
+    height: 8px;
+    width: 60%;
+    background: #e02475;
+    border-radius: 4px;
+}
+.preview-light .preview-glass-box {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+}
+
+.preview-system {
+    display: flex;
+}
+.preview-split-dark {
+    flex: 1;
+    background: #121217;
+    border-right: 1px dashed var(--border-glass);
+}
+.preview-split-light {
+    flex: 1;
+    background: #f6f8fc;
+}
+
+.theme-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 14.5px;
+    margin-bottom: 6px;
+}
+
+.theme-badge {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.theme-desc {
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+/* Switch toggle */
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 8px 0;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-surface-3);
+    border: 1px solid var(--border-glass);
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #ffffff;
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input:checked + .slider {
+    background-color: var(--primary);
+    box-shadow: var(--primary-glow);
+}
+
+input:checked + .slider:before {
+    transform: translateX(24px);
+}
+
+/* Settings info grid */
+.settings-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.settings-info-item {
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+}
+
+.settings-info-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.settings-info-value {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .theme-picker-grid {
+        grid-template-columns: 1fr;
     }
 }

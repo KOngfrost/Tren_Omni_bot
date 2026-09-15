@@ -157,7 +157,7 @@ app.add_middleware(
     secret_key=_session_secret,
     max_age=settings.SESSION_TTL,
     https_only=settings.SESSION_HTTPS_ONLY,
-    same_site="strict",
+    same_site=settings.SESSION_SAME_SITE,
     path="/",
 )
 
@@ -523,6 +523,7 @@ from web.routes import (
     tickets,
     vk_callback,
 )
+from web.routes import settings as settings_route
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(legal.router, prefix="/legal", tags=["legal"])
@@ -532,6 +533,7 @@ app.include_router(knowledge_base.router, prefix="/knowledge", tags=["knowledge_
 app.include_router(faq.router, prefix="/faq", tags=["faq"])
 app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(logs.router, prefix="/logs", tags=["logs"])
+app.include_router(settings_route.router, prefix="/settings", tags=["settings"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(dept_frame.router, prefix="/dept", tags=["dept_frame"])
 app.include_router(departments.router, prefix="/departments", tags=["departments"])

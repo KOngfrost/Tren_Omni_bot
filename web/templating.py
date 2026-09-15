@@ -20,6 +20,7 @@ from core.i18n import (
 )
 from core.ticket_service import status_label
 from web.constants import status_badge_class
+from web.security.csrf import get_csrf_token
 from web.security.middleware import csp_nonce
 
 # Вынесено в отдельный модуль, чтобы избежать циклического импорта:
@@ -49,6 +50,7 @@ templates.env.install_gettext_callables(
 # nonce для inline <script>/<style> (CSP). Функция, а не переменная контекста,
 # потому что шаблоны рендерятся и вне HTTP-запроса (тесты, офлайн-генерация).
 templates.env.globals["csp_nonce"] = csp_nonce
+templates.env.globals["get_csrf_token"] = get_csrf_token
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
@@ -88,7 +90,7 @@ def render_admin_template(
     template_name: str,
     context: dict,
 ) -> Response:
-    """Рендерить шаблон админки с автоматическим department_name из request.state."""
+    """Рендерить шаблон админки с автоматическим department_name и csrf_token из request."""
     # Устанавливаем локаль для текущего запроса
     locale_code = getattr(request.state, "locale", None) or current_locale()
     if locale_code:
@@ -96,8 +98,10 @@ def render_admin_template(
 
         set_current_locale(locale_code)
 
+    csrf_val = context.get("csrf_token") or get_csrf_token(request)
     merged = {
         "request": request,
+        "csrf_token": csrf_val,
         "department_name": getattr(request.state, "department_name", None),
         **context,
     }
