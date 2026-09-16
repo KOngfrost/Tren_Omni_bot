@@ -186,15 +186,15 @@ async def main():
 
     print(f"\nИсправлено: {result['total_fixed']}")
     for fix in result["fixed"]:
-        print(f"  ✅ {fix['username']} ({fix['role']}) -> admin_id={fix['new_admin_id']}")
+        print(f"  [OK] {fix['username']} ({fix['role']}) -> admin_id={fix['new_admin_id']}")
 
     if result["skipped"]:
         print(f"\nПропущено: {result['total_skipped']}")
         for skip in result["skipped"]:
-            print(f"  ⚠️  {skip['username']}: {skip['reason']}")
+            print(f"  [ВНИМАНИЕ] {skip['username']}: {skip['reason']}")
 
     print("\n" + "=" * 60)
-    print("✅ Готово!")
+    print("[OK] Готово!")
     print("=" * 60)
 
 

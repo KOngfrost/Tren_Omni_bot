@@ -72,7 +72,7 @@ async def create_or_update(
                 select(Department).where(Department.name == department_name)
             )
             if department is None:
-                print(f"❌ Отдел «{department_name}» не найден в departments")
+                print(f"[ОШИБКА] Отдел «{department_name}» не найден в departments")
                 sys.exit(1)
             department_id = department.id
 
@@ -80,7 +80,7 @@ async def create_or_update(
 
         if web_user is None:
             if not password:
-                print("❌ Для нового пользователя нужен --password")
+                print("[ОШИБКА] Для нового пользователя нужен --password")
                 sys.exit(1)
             web_user = WebUser(
                 username=username,
@@ -105,13 +105,13 @@ async def create_or_update(
 
         await session.commit()
         print(
-            f"✅ Пользователь {username} {action}: роль {role.value}, активен: {web_user.is_active}"
+            f"[OK] Пользователь {username} {action}: роль {role.value}, активен: {web_user.is_active}"
         )
         if vk_id:
-            print(f"🔒 2FA привязан к VK ID: {vk_id}")
+            print(f"[2FA] 2FA привязан к VK ID: {vk_id}")
         elif not web_user.admin_id:
             print(
-                "⚠️ Внимание: --vk-id не указан. Двухфакторная аутентификация (2FA через VK) "
+                "[ВНИМАНИЕ] --vk-id не указан. Двухфакторная аутентификация (2FA через VK) "
                 "для этого пользователя будет отключена."
             )
 
@@ -135,7 +135,7 @@ def main() -> None:
 
     password = args.password or getpass.getpass("Пароль: ")
     if len(password) < 8:
-        print("❌ Пароль должен быть не короче 8 символов")
+        print("[ОШИБКА] Пароль должен быть не короче 8 символов")
         sys.exit(1)
 
     try:
@@ -150,7 +150,7 @@ def main() -> None:
             )
         )
     except Exception as error:
-        print(f"❌ Ошибка: {error}")
+        print(f"[ОШИБКА] Ошибка: {error}")
         sys.exit(1)
 
 

@@ -32,25 +32,25 @@ async def init_superadmin(vk_id: int, full_name: str = "") -> None:
             user = User(vk_id=vk_id, full_name=full_name or None)
             session.add(user)
             await session.flush()
-            print(f"✅ Создан пользователь: {full_name or f'VK:{vk_id}'}")
+            print(f"[OK] Создан пользователь: {full_name or f'VK:{vk_id}'}")
         else:
             if full_name and not user.full_name:
                 user.full_name = full_name
-                print(f"✅ Обновлено имя: {full_name}")
+                print(f"[OK] Обновлено имя: {full_name}")
             else:
-                print(f"ℹ️  Пользователь уже существует: {user.full_name or vk_id}")
+                print(f"[ИНФО] Пользователь уже существует: {user.full_name or vk_id}")
 
         existing_admin: Admin | None = await session.scalar(
             select(Admin).where(Admin.user_id == user.id)
         )
         if existing_admin is not None:
             if existing_admin.role == UserRole.SUPERADMIN:
-                print(f"ℹ️  Пользователь уже является суперадмином: VK {vk_id}")
+                print(f"[ИНФО] Пользователь уже является суперадмином: VK {vk_id}")
                 return
             existing_admin.role = UserRole.SUPERADMIN
             existing_admin.department_id = None
             await session.commit()
-            print(f"✅ Администратор повышен до суперадмина: VK {vk_id}")
+            print(f"[OK] Администратор повышен до суперадмина: VK {vk_id}")
             return
 
         # Создаём очередного суперадмина
@@ -62,10 +62,10 @@ async def init_superadmin(vk_id: int, full_name: str = "") -> None:
         session.add(admin)
         await session.commit()
 
-        print("\n🎉 Суперадмин успешно создан!")
+        print("\n[OK] Суперадмин успешно создан!")
         print(f"   Имя: {full_name or 'Не указано'}")
         print(f"   VK ID: {vk_id}")
-        print("\n📝 Для входа в веб-админку задайте в .env:")
+        print("\nДля входа в веб-админку задайте в .env:")
         print("   WEB_ADMIN_USERNAME=<ваш логин>")
         print("   WEB_ADMIN_PASSWORD=<ваш пароль>")
 
@@ -79,7 +79,7 @@ def main() -> None:
     try:
         asyncio.run(init_superadmin(args.vk_id, args.name))
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"[ОШИБКА] Ошибка: {e}")
         sys.exit(1)
 
 

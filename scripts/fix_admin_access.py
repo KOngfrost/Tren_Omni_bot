@@ -40,10 +40,10 @@ async def check_db_connection():
     try:
         async with async_session_maker() as session:
             await session.execute(select(1))
-        print("  ✅ Подключение к БД успешно!")
+        print("  [OK] Подключение к БД успешно!")
         return True
     except Exception as e:
-        print(f"  ❌ Ошибка подключения к БД: {e}")
+        print(f"  [ОШИБКА] Ошибка подключения к БД: {e}")
         print()
         print("  Возможные причины:")
         print("    1. PostgreSQL не запущен")
@@ -69,14 +69,14 @@ async def check_users():
             result = users.scalars().all()
 
             if not result:
-                print("  ❌ Пользователи не найдены!")
+                print("  [ОШИБКА] Пользователи не найдены!")
                 return []
 
             print(f"  Найдено пользователей: {len(result)}")
             print()
             for u in result:
-                status = "✅ АКТИВЕН" if u.is_active else "❌ ОТКЛЮЧЁН"
-                print(f"  👤 {u.username}")
+                status = "[АКТИВЕН]" if u.is_active else "[ОТКЛЮЧЁН]"
+                print(f"  {u.username}")
                 print(f"      Роль: {u.role.value}")
                 print(f"      Статус: {status}")
                 print(f"      Хеш пароля: {u.password_hash[:50]}...")
@@ -85,7 +85,7 @@ async def check_users():
             return result
 
     except Exception as e:
-        print(f"  ❌ Ошибка при проверке пользователей: {e}")
+        print(f"  [ОШИБКА] Ошибка при проверке пользователей: {e}")
         return []
 
 
@@ -110,7 +110,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 users = list(users_query.scalars().all())
 
             if not users:
-                print(f"  ⚠️ Пользователь '{username}' не найден. Создаю нового...")
+                print(f"  [ВНИМАНИЕ] Пользователь '{username}' не найден. Создаю нового...")
                 # Создаём нового пользователя
                 new_user = WebUser(
                     username=username or "admin",
@@ -120,7 +120,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 )
                 session.add(new_user)
                 await session.commit()
-                print(f"  ✅ Создан новый пользователь: {new_user.username}")
+                print(f"  [OK] Создан новый пользователь: {new_user.username}")
                 print(f"      Роль: {role}")
                 print(f"      Пароль: {password}")
                 return
@@ -130,18 +130,18 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 user.is_active = True
                 user.password_hash = hash_password(password)
                 user.role = WebRole[role]
-                print(f"  👤 {user.username}")
+                print(f"  {user.username}")
                 print(f"      Старый статус: {old_status}")
-                print("      Новый статус: АКТИВЕН ✅")
+                print("      Новый статус: АКТИВЕН [OK]")
                 print(f"      Новая роль: {role}")
                 print(f"      Пароль установлен: {'*' * len(password)}")
                 print()
 
             await session.commit()
-            print("  ✅ Все изменения сохранены!")
+            print("  [OK] Все изменения сохранены!")
 
     except Exception as e:
-        print(f"  ❌ Ошибка при сбросе паролей: {e}")
+        print(f"  [ОШИБКА] Ошибка при сбросе паролей: {e}")
         import traceback
 
         traceback.print_exc()
@@ -160,7 +160,7 @@ async def test_password(username: str, password: str):
     print(f"  Пользователь: {username}")
     print(f"  Пароль: {'*' * len(password)}")
     print(f"  Хеш: {hashed[:60]}...")
-    print(f"  Проверка: {'✅ Успешно' if is_valid else '❌ Ошибка'}")
+    print(f"  Проверка: {'[OK] Успешно' if is_valid else '[ОШИБКА] Ошибка'}")
 
 
 async def main():
@@ -186,7 +186,7 @@ async def main():
     db_ok = await check_db_connection()
     if not db_ok:
         print()
-        print("⚠️  База данных недоступна. Не могу выполнить сброс паролей.")
+        print("[ВНИМАНИЕ] База данных недоступна. Не могу выполнить сброс паролей.")
         print("   Сначала решите проблему с подключением к БД.")
         sys.exit(1)
 
@@ -198,10 +198,10 @@ async def main():
         password = getpass.getpass("\nВведите новый пароль: ")
         confirm = getpass.getpass("Подтвердите пароль: ")
         if password != confirm:
-            print("  ❌ Пароли не совпадают!")
+            print("  [ОШИБКА] Пароли не совпадают!")
             sys.exit(1)
         if len(password) < 8:
-            print("  ❌ Пароль должен быть не короче 8 символов!")
+            print("  [ОШИБКА] Пароль должен быть не короче 8 символов!")
             sys.exit(1)
     else:
         password = args.password
@@ -215,7 +215,7 @@ async def main():
 
     print()
     print("=" * 60)
-    print("✅ Готово! Теперь можете войти в веб-админку:")
+    print("[OK] Готово! Теперь можете войти в веб-админку:")
     print(f"   Логин: {username}")
     print(f"   Пароль: {'*' * len(password)}")
     print("=" * 60)

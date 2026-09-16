@@ -18,7 +18,7 @@ async def main():
         users = await session.execute(select(WebUser))
         result = users.scalars().all()
         if not result:
-            print("❌ Пользователи не найдены!")
+            print("[ОШИБКА] Пользователи не найдены!")
             return
         for u in result:
             print(f"Пользователь: {u.username}")

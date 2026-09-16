@@ -70,7 +70,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     '<link rel="stylesheet" href="/static/style.css?v=0.8.1">'
                     '</head><body>'
                     '<div class="auth-page-wrapper"><div class="login-card" style="max-width:480px; text-align:center;">'
-                    '<div style="font-size:48px; margin-bottom:12px;">🛡️</div>'
+                    '<div style="margin-bottom:12px;"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger, #ef4444);"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'
                     '<h1 style="font-size:20px; font-weight:800; margin-bottom:8px;">Ошибка проверки безопасности</h1>'
                     f'<p style="color:var(--text-secondary); font-size:14px; margin-bottom:20px;">{error_msg}</p>'
                     '<a href="javascript:history.back()" class="btn btn-primary btn-full">Вернуться назад и обновить</a>'
