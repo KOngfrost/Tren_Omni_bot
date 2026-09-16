@@ -88,10 +88,10 @@
     height: 56px;
     margin: 0 auto;
     display: block;
-    background: rgba(18, 20, 29, 0.85);
-    border: 2px solid rgba(255, 255, 255, 0.12);
+    background: var(--bg-surface-2);
+    border: 2px solid var(--line-strong);
     border-radius: 12px;
-    color: #ffffff;
+    color: var(--text-primary);
     font-size: 28px;
     font-weight: 700;
     letter-spacing: 10px;
@@ -103,12 +103,13 @@
     box-sizing: border-box;
 }
 .code-single-input:focus {
-    border-color: #ff3385 !important;
-    background: rgba(26, 29, 41, 0.95);
-    box-shadow: 0 0 0 4px rgba(255, 51, 133, 0.25), 0 0 20px rgba(255, 51, 133, 0.15);
+    border-color: var(--primary) !important;
+    background: var(--bg-surface);
+    box-shadow: 0 0 0 4px var(--primary-soft), 0 0 20px var(--primary-soft);
 }
 .code-single-input::placeholder {
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-tertiary);
+    opacity: 0.5;
     letter-spacing: 6px;
     text-indent: 6px;
     font-size: 22px;
@@ -129,13 +130,13 @@
 
         function triggerSubmit() {
             if (isSubmitting) return;
-            if (input.value.length === 6) {
-                isSubmitting = true;
-                if (btnSubmit) {
-                    btnSubmit.disabled = true;
-                    btnSubmit.textContent = 'Проверка...';
+            const val = input.value.trim();
+            if (val.length === 6) {
+                if (form.requestSubmit) {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
                 }
-                form.requestSubmit ? form.requestSubmit() : form.submit();
             }
         }
 
@@ -144,10 +145,18 @@
                 e.preventDefault();
                 return false;
             }
+            const val = input.value.trim();
+            if (val.length !== 6) {
+                e.preventDefault();
+                return false;
+            }
             isSubmitting = true;
             if (btnSubmit) {
-                btnSubmit.disabled = true;
                 btnSubmit.textContent = 'Проверка...';
+                btnSubmit.style.pointerEvents = 'none';
+                setTimeout(function() {
+                    btnSubmit.disabled = true;
+                }, 0);
             }
         });
 
@@ -166,7 +175,7 @@
                     e.preventDefault();
                     input.value = code;
                     if (code.length === 6) {
-                        setTimeout(triggerSubmit, 120);
+                        setTimeout(triggerSubmit, 60);
                     }
                 }
             }
@@ -179,7 +188,7 @@
                 input.value = clean;
             }
             if (clean.length === 6) {
-                setTimeout(triggerSubmit, 120);
+                setTimeout(triggerSubmit, 60);
             }
         });
 
