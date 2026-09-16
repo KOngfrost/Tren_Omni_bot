@@ -77,9 +77,11 @@ async def register_event_handler(message: Message):
                 keyboard=await _main_keyboard_for(message.from_id),
             )
             return
+        event_title = event.title
+        event_date = event.event_date
         now = datetime.now(UTC)
         event_dt = (
-            event.event_date if event.event_date.tzinfo else event.event_date.replace(tzinfo=UTC)
+            event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
         )
         if event_dt < now:
             await message.answer(
@@ -93,16 +95,16 @@ async def register_event_handler(message: Message):
         except IntegrityError:
             await session.rollback()
             await message.answer(
-                f"Вы уже зарегистрированы на «{event.title}».\n\nЖдём вас на мероприятии!",
+                f"Вы уже зарегистрированы на «{event_title}».\n\nЖдём вас на мероприятии!",
                 keyboard=await _main_keyboard_for(message.from_id),
             )
             return
 
     date_str = (
-        f" ({event.event_date.strftime('%d.%m.%Y %H:%M')})" if event.event_date else ""
+        f" ({event_date.strftime('%d.%m.%Y %H:%M')})" if event_date else ""
     )
     await message.answer(
-        f"Вы зарегистрированы на «{event.title}»{date_str}!\n\nЖдём вас на мероприятии.",
+        f"Вы зарегистрированы на «{event_title}»{date_str}!\n\nЖдём вас на мероприятии.",
         keyboard=await _main_keyboard_for(message.from_id),
     )
 
