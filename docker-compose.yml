@@ -185,6 +185,22 @@ services:
       web-admin:
         condition: service_healthy
 
+  # Telegram-бот мониторинга и алертов для главного администратора
+  tg-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oss_bot_tg_monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: python scripts/run_tg_monitor.py
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   tailscale_state:

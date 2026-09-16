@@ -29,3 +29,8 @@ prometheus-client>=0.20.0
 prometheus-fastapi-instrumentator==7.0.0
 # Настройки приложения через Pydantic BaseSettings
 pydantic-settings>=2.0.0
+
+# Telegram-бот мониторинга сервера и алертинга для суперадмина
+aiogram>=3.17.0
+psutil>=6.0.0
+

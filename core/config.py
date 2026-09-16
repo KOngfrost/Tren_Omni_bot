@@ -185,6 +185,12 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     REPORT_EMAILS: list[str] = Field(default_factory=list)
 
+    # Telegram Monitoring Bot (для оповещения и управления главным администратором)
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_ADMIN_ID: int = 0
+    TELEGRAM_ALERTS_ENABLED: bool = True
+    TELEGRAM_CHECK_INTERVAL_SECONDS: int = 30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -228,6 +234,16 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             digits = [x.strip() for x in v.split(",") if x.strip().isdigit()]
             return int(digits[0]) if digits else 0
+        return 0
+
+    @field_validator("TELEGRAM_ADMIN_ID", mode="before")
+    @classmethod
+    def _parse_telegram_admin_id(cls, v: Any) -> int:
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            val = v.strip()
+            return int(val) if val.isdigit() or (val.startswith("-") and val[1:].isdigit()) else 0
         return 0
 
     @field_validator("TRUSTED_PROXIES", mode="before")
