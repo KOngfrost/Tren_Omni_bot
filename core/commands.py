@@ -46,12 +46,15 @@ COMMANDS_EVENTS = (
     "событие",
     "Афиша",
     "афиша",
+    "Анонсы",
+    "анонсы",
     "/events",
     "/event",
     "/мероприятия",
     "/события",
+    "/афиша",
 )
-COMMAND_REGISTER_EVENT_PATTERN = r"(?i)^Записаться\s*#?(\d+)$"
+COMMAND_REGISTER_EVENT_PATTERN = r"(?i)^Записаться(?:\s+на(?:\s+мероприятие)?)?\s*#?\s*(\d+)$"
 
 # Команда «Подробнее» (с номером заявки)
 COMMAND_TICKET_DETAILS = "Подробнее"

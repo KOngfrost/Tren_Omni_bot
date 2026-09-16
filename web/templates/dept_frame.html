@@ -36,7 +36,7 @@
         <button class="tab-link active" data-tab="overview" type="button">Обзор</button>
         <button class="tab-link" data-tab="kb" type="button">База знаний ({{ kb_items|length }})</button>
         <button class="tab-link" data-tab="faq" type="button">FAQ ({{ faq_items|length }})</button>
-        <button class="tab-link" data-tab="events" type="button">События ({{ events|length }})</button>
+        <button class="tab-link" data-tab="events" type="button">Мероприятия ({{ events|length }})</button>
     </div>
 
             <!-- Вкладка: Обзор -->
@@ -153,15 +153,15 @@
         </div>
     </section>
 
-    <!-- Вкладка: События отдела -->
+    <!-- Вкладка: Мероприятия отдела -->
     <section class="tab-panel" data-tab-panel="events">
         <div class="card">
             <div class="card-header">
                 <div>
-                    <h2>События отдела</h2>
+                    <h2>Мероприятия отдела</h2>
                     <div class="page-desc">Мероприятия и записи на них в рамках отдела</div>
                 </div>
-                <a href="/events/" class="btn btn-secondary btn-small">Управлять событиями →</a>
+                <a href="/events/" class="btn btn-secondary btn-small">Управлять мероприятиями →</a>
             </div>
             <div class="table-container">
                 <table>
@@ -174,7 +174,7 @@
                             <td data-label="Регистраций">{{ event.registrations|length }}</td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="3" class="empty-state">Событий в отделе пока нет</td></tr>
+                        <tr><td colspan="3" class="empty-state">Мероприятий в отделе пока нет</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

@@ -123,6 +123,41 @@ async def test_events_handler_empty_and_populated(db_session_maker):
 
 
 @pytest.mark.asyncio
+async def test_event_registration_syntax_variations_and_keyboard(db_session_maker):
+    import json
+    from bots.vk.keyboards import build_events_keyboard
+
+    kb_data = json.loads(build_events_keyboard([10, 20]))
+    assert kb_data["buttons"][0][0]["action"]["label"] == "Записаться #10"
+    assert kb_data["buttons"][0][1]["action"]["label"] == "Записаться #20"
+    assert kb_data["buttons"][1][0]["action"]["label"] == "Меню"
+
+    now = datetime.now(UTC)
+    async with db_session_maker() as session:
+        dept = Department(name="Профком")
+        session.add(dept)
+        await session.flush()
+        event = Event(
+            department_id=dept.id,
+            title="Интеллектуальная игра",
+            event_date=now + timedelta(days=5),
+        )
+        session.add(event)
+        await session.commit()
+        ev_id = event.id
+
+    # Проверяем синтаксис "Записаться на 10" (без решетки)
+    msg = MagicMock()
+    msg.from_id = 999111
+    msg.text = f"Записаться {ev_id}"
+    msg.answer = AsyncMock()
+
+    await register_event_handler(msg)
+    msg.answer.assert_called_once()
+    assert "Вы зарегистрированы" in msg.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
 async def test_delete_web_user_button_and_endpoint(web_client):
     import sqlite3
 

@@ -85,7 +85,7 @@ async def add_event(request: Request, user=Depends(require_writer)):
     event_date_str: str = str(form.get("event_date", ""))
 
     if not title.strip():
-        request.session["flash_error"] = "Название события обязательно"
+        request.session["flash_error"] = "Название мероприятия обязательно"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
@@ -93,7 +93,7 @@ async def add_event(request: Request, user=Depends(require_writer)):
         if event_date.tzinfo is None:
             event_date = event_date.replace(tzinfo=UTC)
     except ValueError:
-        request.session["flash_error"] = "Некорректная дата события"
+        request.session["flash_error"] = "Некорректная дата мероприятия"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
@@ -118,36 +118,36 @@ async def add_event(request: Request, user=Depends(require_writer)):
             )
             await session.commit()
     except Exception:
-        logger.exception("Не удалось создать событие")
-        request.session["flash_error"] = "Не удалось сохранить событие. Попробуйте позже."
+        logger.exception("Не удалось создать мероприятие")
+        request.session["flash_error"] = "Не удалось сохранить мероприятие. Попробуйте позже."
         return RedirectResponse(url="/events/", status_code=303)
 
-    request.session["flash_success"] = "Событие создано"
+    request.session["flash_success"] = "Мероприятие создано"
     return RedirectResponse(url="/events/", status_code=303)
 
 
 @router.post("/{event_id}/delete")
 async def delete_event(request: Request, event_id: int, user=Depends(require_writer)):
-    """Удаление события (POST с CSRF-токеном) с проверкой прав."""
+    """Удаление мероприятия (POST с CSRF-токеном) с проверкой прав."""
     try:
         async with async_session_maker() as session:
             event = await session.get(Event, event_id)
             if not event:
-                request.session["flash_error"] = "Событие не найдено"
+                request.session["flash_error"] = "Мероприятие не найдено"
                 return RedirectResponse(url="/events/", status_code=303)
 
             # IDOR: админ отдела может удалять только события своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
             if not is_super and event.department_id != dept_id:
-                request.session["flash_error"] = "Нет прав для удаления этого события"
+                request.session["flash_error"] = "Нет прав для удаления этого мероприятия"
                 return RedirectResponse(url="/events/", status_code=303)
 
             await session.delete(event)
             await session.commit()
     except Exception:
-        logger.exception("Не удалось удалить событие")
-        request.session["flash_error"] = "Не удалось удалить событие. Попробуйте позже."
+        logger.exception("Не удалось удалить мероприятие")
+        request.session["flash_error"] = "Не удалось удалить мероприятие. Попробуйте позже."
         return RedirectResponse(url="/events/", status_code=303)
 
-    request.session["flash_success"] = "Событие удалено"
+    request.session["flash_success"] = "Мероприятие удалено"
     return RedirectResponse(url="/events/", status_code=303)

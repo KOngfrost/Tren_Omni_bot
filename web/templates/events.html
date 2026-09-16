@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}События — OSS Bot{% endblock %}
+{% block title %}Мероприятия — OSS Bot{% endblock %}
 {% block meta_description %}Анонсы студенческих мероприятий, афиша событий и управление регистрациями.{% endblock %}
 {% block canonical_url %}/events/{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
-        <div class="crumb">Афиша</div>
-        <h1>События</h1>
-        <div class="page-desc">Мероприятия и регистрации на них</div>
+        <div class="crumb">Мероприятия</div>
+        <h1>Мероприятия</h1>
+        <div class="page-desc">Анонсы мероприятий и регистрации на них</div>
     </div>
     <div class="actions">
-        <button class="btn btn-success" data-open-modal="modal">Создать событие</button>
+        <button class="btn btn-success" data-open-modal="modal">Создать мероприятие</button>
     </div>
 </div>
 
 {% if db_error %}
-<div class="alert alert-error">База данных недоступна — события не загружены. Проверьте, что PostgreSQL запущен (docker-compose up -d).</div>
+<div class="alert alert-error">База данных недоступна — мероприятия не загружены. Проверьте, что PostgreSQL запущен (docker-compose up -d).</div>
 {% endif %}
 
 <div class="card">
@@ -60,7 +60,7 @@
                     <td>{{ event.registrations|length }}</td>
                     <td>
                         <form method="post" action="/events/{{ event.id }}/delete"
-                              data-confirm="Удалить это событие?">
+                              data-confirm="Удалить это мероприятие?">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn btn-danger btn-small">Удалить</button>
                         </form>
@@ -69,7 +69,7 @@
                 {% else %}
                 <tr>
                     <td colspan="6" class="empty-state">
-                        Событий пока нет
+                        Мероприятий пока нет
                     </td>
                 </tr>
                 {% endfor %}
@@ -82,7 +82,7 @@
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Создать событие</h3>
+            <h3>Создать мероприятие</h3>
             <button class="close-btn" data-close-modal="modal">&times;</button>
         </div>
         <form method="POST" action="/events/">
@@ -107,7 +107,7 @@
                 <label for="event_date">Дата и время</label>
                 <input type="datetime-local" id="event_date" name="event_date" required>
             </div>
-            <button type="submit" class="btn btn-success btn-full">Создать</button>
+            <button type="submit" class="btn btn-success btn-full">Создать мероприятие</button>
         </form>
     </div>
 </div>
