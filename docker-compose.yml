@@ -192,6 +192,7 @@ services:
       dockerfile: Dockerfile
     container_name: oss_bot_tg_monitor
     restart: unless-stopped
+    user: root
     env_file:
       - .env
     volumes:
