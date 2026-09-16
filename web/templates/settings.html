@@ -109,53 +109,53 @@
             </div>
         </div>
 
-        <!-- Кнопка сохранения -->
-        <div class="settings-actions-bar" style="margin-bottom: 30px;">
-            <button type="submit" class="btn btn-primary" id="btnSaveSettings" style="min-width: 180px;">
+        <!-- Информация о профиле и системе -->
+        <div class="card settings-section-card">
+            <div class="card-header">
+                <h2>Профиль и безопасность</h2>
+            </div>
+            <div class="settings-info-grid">
+                <div class="settings-info-item">
+                    <div class="settings-info-label">Текущий пользователь</div>
+                    <div class="settings-info-value"><strong>{{ user.username }}</strong></div>
+                </div>
+                <div class="settings-info-item">
+                    <div class="settings-info-label">Роль доступа</div>
+                    <div class="settings-info-value">
+                        {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                        <span class="badge" style="background: rgba(255, 77, 157, 0.2); color: var(--primary);">Суперадминистратор</span>
+                        {% else %}
+                        <span class="badge" style="background: rgba(184, 50, 128, 0.2); color: var(--primary-hover);">Администратор отдела</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="settings-info-item">
+                    <div class="settings-info-label">Двухфакторная аутентификация (2FA)</div>
+                    <div class="settings-info-value">
+                        {% if two_factor_enabled %}
+                        <span style="color: var(--success); font-weight: 600;">● Активна (через VK)</span>
+                        {% else %}
+                        <span style="color: var(--text-tertiary);">Отключена в конфигурации</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="settings-info-item">
+                    <div class="settings-info-label">Версия системы</div>
+                    <div class="settings-info-value">OSS Bot v{{ version }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Кнопка сохранения в самом низу и по центру -->
+        <div class="settings-actions-bar">
+            <button type="submit" class="btn btn-primary" id="btnSaveSettings">
                 Сохранить настройки
             </button>
-            <span id="saveStatus" style="margin-left: 12px; color: var(--success); display: none; font-weight: 600;">
+            <span id="saveStatus" class="settings-save-status">
                 ✓ Настройки применены
             </span>
         </div>
     </form>
-
-    <!-- Информация о профиле и системе -->
-    <div class="card settings-section-card">
-        <div class="card-header">
-            <h2>Профиль и безопасность</h2>
-        </div>
-        <div class="settings-info-grid">
-            <div class="settings-info-item">
-                <div class="settings-info-label">Текущий пользователь</div>
-                <div class="settings-info-value"><strong>{{ user.username }}</strong></div>
-            </div>
-            <div class="settings-info-item">
-                <div class="settings-info-label">Роль доступа</div>
-                <div class="settings-info-value">
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
-                    <span class="badge" style="background: rgba(255, 77, 157, 0.2); color: var(--primary);">Суперадминистратор</span>
-                    {% else %}
-                    <span class="badge" style="background: rgba(184, 50, 128, 0.2); color: var(--primary-hover);">Администратор отдела</span>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="settings-info-item">
-                <div class="settings-info-label">Двухфакторная аутентификация (2FA)</div>
-                <div class="settings-info-value">
-                    {% if two_factor_enabled %}
-                    <span style="color: var(--success); font-weight: 600;">● Активна (через VK)</span>
-                    {% else %}
-                    <span style="color: var(--text-tertiary);">Отключена в конфигурации</span>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="settings-info-item">
-                <div class="settings-info-label">Версия системы</div>
-                <div class="settings-info-value">OSS Bot v{{ version }}</div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <script nonce="{{ csp_nonce('script') }}">

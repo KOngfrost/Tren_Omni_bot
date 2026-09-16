@@ -650,7 +650,7 @@ body.no-scroll {
     color: var(--danger);
     font-weight: 600;
     font-size: 12px;
-    padding: 6px 12px;
+    padding: 6px 8px;
     border-radius: var(--r-sm);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -3189,6 +3189,32 @@ input:checked + .slider:before {
 .settings-info-value {
     font-size: 14px;
     color: var(--text-primary);
+}
+
+/* Settings action bar (в самом низу и по центру) */
+.settings-actions-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 36px auto 44px auto;
+    text-align: center;
+    gap: 12px;
+}
+
+.settings-actions-bar .btn {
+    min-width: 220px;
+    padding: 13px 36px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.settings-save-status {
+    color: var(--success);
+    font-weight: 600;
+    font-size: 14px;
+    display: none;
+    transition: opacity 0.2s ease;
 }
 
 @media (max-width: 768px) {
