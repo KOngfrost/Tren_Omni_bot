@@ -94,12 +94,18 @@ _error_handler = ErrorHandler(redirect_arguments=True)
 
 
 @_error_handler.register_undefined_error_handler
-async def _handle_bot_error(error: Exception, message: Message | None = None):
+async def _handle_bot_error(error: Exception, *args, **kwargs):
     logger.exception("Необработанная ошибка в боте", exc_info=error)
     # Пользователю — безопасное сообщение с просьбой сфотографировать и отправить техадмину
-    if message is not None:
+    msg = kwargs.get("message") or kwargs.get("event")
+    if msg is None and args:
+        for arg in args:
+            if hasattr(arg, "answer"):
+                msg = arg
+                break
+    if msg is not None and hasattr(msg, "answer"):
         try:
-            await message.answer(
+            await msg.answer(
                 "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору."
             )
         except Exception:

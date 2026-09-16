@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bots.vk.bot import register_event_handler
+from bots.vk.bot import events_handler, register_event_handler
 from core.models import Department, Event
 
 
@@ -76,6 +76,50 @@ async def test_event_registration_past_event_check(db_session_maker):
     await register_event_handler(msg2)
     msg2.answer.assert_called_once()
     assert "Вы зарегистрированы" in msg2.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_events_handler_empty_and_populated(db_session_maker):
+    now = datetime.now(UTC)
+
+    # 1. Проверяем, когда мероприятий нет
+    msg = MagicMock()
+    msg.from_id = 555002
+    msg.text = "события"
+    msg.answer = AsyncMock()
+
+    await events_handler(msg)
+    msg.answer.assert_called_once()
+    assert "Ближайших мероприятий нет" in msg.answer.call_args[0][0]
+
+    # 2. Создаём мероприятие и проверяем вывод
+    async with db_session_maker() as session:
+        dept = Department(name="Культура")
+        session.add(dept)
+        await session.flush()
+        event = Event(
+            department_id=dept.id,
+            title="Студенческий вечер",
+            description="Праздничный концерт в актовом зале",
+            event_date=now + timedelta(days=3),
+        )
+        session.add(event)
+        await session.commit()
+        event_id = event.id
+
+    msg2 = MagicMock()
+    msg2.from_id = 555002
+    msg2.text = "события"
+    msg2.answer = AsyncMock()
+
+    await events_handler(msg2)
+    msg2.answer.assert_called_once()
+    response_text = msg2.answer.call_args[0][0]
+    assert "Ближайшие мероприятия:" in response_text
+    assert "Студенческий вечер" in response_text
+    assert f"#{event_id}" in response_text
+    assert f"Записаться #{event_id}" in response_text
+    assert "Праздничный концерт" in response_text
 
 
 @pytest.mark.asyncio

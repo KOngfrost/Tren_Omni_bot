@@ -1,7 +1,7 @@
 """Хендлеры мероприятий и записи на события."""
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +12,7 @@ from bots.vk.common import _main_keyboard_for
 from core.bot_core import BotCore
 from core.commands import COMMAND_REGISTER_EVENT_PATTERN, COMMANDS_EVENTS
 from core.database import async_session_maker
+from core.heartbeat import touch_heartbeat
 from core.models import Event, Registration
 
 events_labeler = BotLabeler()
@@ -19,11 +20,13 @@ events_labeler = BotLabeler()
 
 @events_labeler.private_message(text=COMMANDS_EVENTS)
 async def events_handler(message: Message):
+    touch_heartbeat()
+    now = datetime.now(UTC)
     async with async_session_maker() as session:
         events = list(
             await session.scalars(
                 select(Event)
-                .where(Event.is_active.is_(True))
+                .where(Event.event_date >= now - timedelta(hours=3))
                 .order_by(Event.event_date.asc())
                 .limit(20)
             )
@@ -38,12 +41,16 @@ async def events_handler(message: Message):
         date = (
             event.event_date.strftime("%d.%m.%Y %H:%M") if event.event_date else "дата уточняется"
         )
-        lines.append(f"\n#{event.id} {event.title} ({date})\nЗапись: Записаться #{event.id}")
+        lines.append(f"\n\n#{event.id} {event.title} ({date})")
+        if event.description:
+            lines.append(f"\n{event.description}")
+        lines.append(f"\nЗапись: Записаться #{event.id}")
     await message.answer("".join(lines), keyboard=await _main_keyboard_for(message.from_id))
 
 
 @events_labeler.private_message(RegexRule(COMMAND_REGISTER_EVENT_PATTERN))
 async def register_event_handler(message: Message):
+    touch_heartbeat()
     match = re.search(r"#(\d+)", message.text or "")
     if match is None:
         return
