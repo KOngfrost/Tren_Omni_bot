@@ -372,3 +372,8 @@ class Settings(BaseSettings):
 
 
 settings: Settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Получить глобальный экземпляр настроек."""
+    return settings
