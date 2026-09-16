@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from core import PROJECT_VERSION
 from core.config import settings
 from web.dependencies import require_auth
 from web.security.csrf import get_csrf_token
@@ -24,7 +25,7 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
     if saved_theme not in ("dark", "light", "system"):
         saved_theme = "dark"
 
-    glass_effect = request.cookies.get("app_glass_effect", "true") != "false"
+    glass_effect = request.cookies.get("app_glass", "true") != "false"
 
     return templates.TemplateResponse(
         "settings.html",
@@ -36,7 +37,7 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
             "current_theme": saved_theme,
             "glass_effect": glass_effect,
             "two_factor_enabled": settings.TWO_FACTOR_ENABLED,
-            "version": "0.8.1",
+            "version": PROJECT_VERSION,
         },
     )
 
