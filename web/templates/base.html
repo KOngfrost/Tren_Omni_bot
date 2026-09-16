@@ -73,61 +73,71 @@
                             <span class="brand-sub">Панель управления v0.8.2</span>
                         </span>
                     </a>
-                    <button type="button" class="btn-theme-toggle sidebar-theme-btn" data-action="toggle-theme" aria-label="Сменить тему оформления" title="Сменить тему">
-                        <span class="theme-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
-                    </button>
-                    <button class="sidebar-close-btn" id="sidebar-close-btn" type="button" aria-label="Закрыть меню" title="Закрыть меню">✕</button>
+                    <div class="sidebar-top-actions">
+                        <button type="button" class="btn-theme-toggle sidebar-theme-btn" data-action="toggle-theme" aria-label="Сменить тему оформления" title="Сменить тему">
+                            <span class="theme-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+                        </button>
+                        <button class="sidebar-close-btn" id="sidebar-close-btn" type="button" aria-label="Закрыть меню" title="Закрыть меню">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="user-info">
-                    <div class="user-info-text">
-                        <span>{{ user.username }}</span>
-                        <small>
-                            {% if user.role in ['SUPERADMIN', 'superadmin'] %}Суперадмин
-                            {% else %}Админ отдела{% endif %}
-                        </small>
-                        {% if department_name %}<small>{{ department_name }}</small>{% endif %}
+                    <div class="user-info-header">
+                        <div class="user-avatar">{{ user.username[:1]|upper }}</div>
+                        <div class="user-info-text">
+                            <div class="user-name">{{ user.username }}</div>
+                            <div class="user-role-badge">
+                                {% if user.role in ['SUPERADMIN', 'superadmin'] %}Суперадмин
+                                {% else %}Админ отдела{% endif %}
+                            </div>
+                        </div>
                     </div>
+                    {% if department_name %}
+                    <div class="user-dept">{{ department_name }}</div>
+                    {% endif %}
                     <div class="user-info-actions">
-                        <button type="button" class="btn-sidebar-theme" data-action="toggle-theme" title="Переключить светлую/тёмную тему">
-                            <span class="theme-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span> Тема
-                        </button>
-                        <a href="/settings/" class="btn-sidebar-settings" title="Настройки интерфейса">
-                            <span class="ico" aria-hidden="true">⚙</span>
+                        <a href="/settings/" class="btn-user-action" title="Настройки интерфейса">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            <span>Настройки</span>
                         </a>
-                        <form method="post" action="/auth/logout" style="margin: 0; display: inline;">
+                        <form method="post" action="/auth/logout" style="margin: 0; display: inline-flex;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token|default('') }}">
-                            <button class="btn-logout" type="submit" aria-label="Выйти из системы">Выйти</button>
+                            <button class="btn-logout" type="submit" aria-label="Выйти из системы" title="Выйти из системы">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                <span>Выйти</span>
+                            </button>
                         </form>
                     </div>
                 </div>
             </div>
             <nav class="sidebar-nav" id="sidebar-nav" aria-label="Основная навигация">
                 <span class="nav-label">Рабочая область</span>
-                <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="ico" aria-hidden="true">⌂</span>Обзор</a>
-                <a class="nav-link {% if active == 'tickets' %}active{% endif %}" href="/tickets/"><span class="ico" aria-hidden="true">▣</span>Заявки</a>
-                <a class="nav-link {% if active == 'knowledge' %}active{% endif %}" href="/knowledge/"><span class="ico" aria-hidden="true">▤</span>База знаний</a>
-                <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/"><span class="ico" aria-hidden="true">?</span>Частые вопросы</a>
-                <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico" aria-hidden="true">◷</span>События</a>
+                <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Обзор</a>
+                <a class="nav-link {% if active == 'tickets' %}active{% endif %}" href="/tickets/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h10M7 9h10"/></svg></span>Заявки</a>
+                <a class="nav-link {% if active == 'knowledge' %}active{% endif %}" href="/knowledge/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>База знаний</a>
+                <a class="nav-link {% if active == 'faq' %}active{% endif %}" href="/faq/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Частые вопросы</a>
+                <a class="nav-link {% if active == 'events' %}active{% endif %}" href="/events/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>События</a>
                 {% if user.role in ['SUPERADMIN', 'superadmin'] %}
-                <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico" aria-hidden="true">≡</span>Журнал</a>
+                <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/logs/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>Журнал</a>
                 {% endif %}
                 {% if user.role in ['SUPERADMIN', 'superadmin', 'DEPARTMENT_ADMIN', 'admin'] %}
                 {% if request.state.user_departments or user.role in ['SUPERADMIN', 'superadmin'] %}
                 <span class="nav-label nav-label-spaced">Отделы</span>
                 <div id="sidebar-depts">
                 {% for dept in request.state.user_departments %}
-                <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/"><span class="ico" aria-hidden="true">◈</span>{{ dept.name }}</a>
+                <a class="nav-link {% if active == 'dept' and request.state.dept_id == dept.id %}active{% endif %}" href="/dept/{{ dept.id }}/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>{{ dept.name }}</a>
                 {% endfor %}
                 </div>
                 {% if user.role in ['SUPERADMIN', 'superadmin'] %}
-                <a class="nav-link {% if active == 'departments' %}active{% endif %}" href="/departments/"><span class="ico" aria-hidden="true">⊕</span>Управление отделами</a>
+                <a class="nav-link {% if active == 'departments' %}active{% endif %}" href="/departments/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>Управление отделами</a>
                 {% endif %}
                 {% endif %}
                 <span class="nav-label nav-label-spaced">Доступ</span>
-                <a class="nav-link {% if active == 'admins' %}active{% endif %}" href="/admin/admins/"><span class="ico" aria-hidden="true">♙</span>Администраторы</a>
+                <a class="nav-link {% if active == 'admins' %}active{% endif %}" href="/admin/admins/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Администраторы</a>
                 {% endif %}
                 <span class="nav-label nav-label-spaced">Система</span>
-                <a class="nav-link {% if active == 'settings' %}active{% endif %}" href="/settings/"><span class="ico" aria-hidden="true">⚙</span>Настройки</a>
+                <a class="nav-link {% if active == 'settings' %}active{% endif %}" href="/settings/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Настройки</a>
             </nav>
         </aside>
         <div class="mobile-menu-backdrop" id="mobile-backdrop" aria-hidden="true"></div>
