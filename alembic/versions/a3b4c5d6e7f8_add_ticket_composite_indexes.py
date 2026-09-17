@@ -1,7 +1,7 @@
 """add ticket composite indexes
 
 Revision ID: a3b4c5d6e7f8
-Revises: f2a3b4c5d6e7
+Revises: c4d5e6f7a8b9
 Create Date: 2026-09-18 01:40:00.000000
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a3b4c5d6e7f8"
-down_revision: str | Sequence[str] | None = "f2a3b4c5d6e7"
+down_revision: str | Sequence[str] | None = "c4d5e6f7a8b9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
