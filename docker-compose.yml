@@ -1,209 +1,113 @@
+
 services:
   db:
-    image: postgres:16-alpine
-    container_name: oss_bot_db
-    restart: unless-stopped
+    image: postgres:15-alpine
+    env_file: .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
-      # Только scram-sha-256: пароль никогда не передаётся открытым текстом.
-      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
-      # PGDATA в подкаталоге тома (рекомендация официального postgres-образа
-      # для named volume): initdb инициализирует только этот подкаталог и не
-      # падает с "directory ... exists but is not empty", если в корне тома
-      # остались файлы от прерванной инициализации.
-      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: ${POSTGRES_USER:-student_bot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-student_bot}
+      POSTGRES_DB: ${POSTGRES_DB:-oss_bot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Порт наружу НЕ публикуем: БД доступна только внутри docker-сети.
-    # Это первый уровень защиты базы данных.
+    ports:
+      - "5432:5432"
+    networks:
+      - bot_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-student_bot} -d ${POSTGRES_DB:-oss_bot}"]
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 30s
 
-  # PgBouncer: пулер соединений (режим транзакций) для экономии ресурсов PostgreSQL
-  # при конкурентной нагрузке от воркеров Uvicorn и бота
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    env_file: .env
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    networks:
+      - bot_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: oss_bot_pgbouncer
-    restart: unless-stopped
+    image: pgbouncer:1.22
+    env_file: .env
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:?POSTGRES_USER is required}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      - DB_NAME=${POSTGRES_DB:?POSTGRES_DB is required}
-      - LISTEN_PORT=6432
-      - POOL_MODE=transaction
-      - AUTH_TYPE=scram-sha-256
-      - MAX_CLIENT_CONN=200
-      - DEFAULT_POOL_SIZE=25
-      - MIN_POOL_SIZE=5
-      - RESERVE_POOL_SIZE=5
-      - SERVER_RESET_QUERY=DISCARD ALL
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      DATABASE_URL: postgresql://${POSTGRES_USER:-student_bot}:${POSTGRES_PASSWORD:-student_bot}@db:5432/${POSTGRES_DB:-oss_bot}
+      PGBOUNCER_MAX_CLIENT_CONN: "300"
+      PGBOUNCER_DEFAULT_POOL_SIZE: "20"
+      PGBOUNCER_POOL_MODE: "transaction"
+    ports:
+      - "6432:6432"
     depends_on:
       db:
         condition: service_healthy
-
-  # Одноразовый контейнер миграций: схема изменяется только через Alembic.
-  # bot и web-admin стартуют только после успешного завершения.
-  migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: oss_bot_migrate
-    restart: "no"
-    env_file:
-      - .env
-    environment:
-      # Миграции всегда выполняются напрямую к PostgreSQL (порт 5432),
-      # минуя PgBouncer (DDL транзакции не должны проходить через transaction pooling).
-      - DB_HOST=db
-      - DB_PORT=5432
-    command: python -m alembic upgrade head
-    depends_on:
-      db:
-        condition: service_healthy
+    networks:
+      - bot_net
 
   bot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: oss_bot_app
-    restart: unless-stopped
-    env_file:
-      - .env
+    env_file: .env
     environment:
-      - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
-    command: python main.py
-    healthcheck:
-      # Бот обновляет heartbeat-файл при обработке событий и раз в минуту
-      test: ["CMD", "python", "scripts/healthcheck_bot.py"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      DB_HOST: pgbouncer
+      DB_PORT: "6432"
+      DB_USE_PGBOUNCER: "true"
     depends_on:
       db:
         condition: service_healthy
-      pgbouncer:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    networks:
+      - bot_net
 
-  # Tailscale запускается всегда (не по профилю): без tailnet панель и бот
-  # недоступны извне. Наружу (в интернет) не публикуется ни один порт.
-  # Автоматически включает HTTPS для веб-панели через tailscale serve.
-  tailscale:
-    build:
-      context: .
-      dockerfile: Dockerfile.tailscale
-    container_name: oss_bot_tailscale
-    restart: unless-stopped
-    hostname: oss-web-panel
-    environment:
-      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY:?TAILSCALE_AUTH_KEY is required in .env}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=true
-      - TS_HOSTNAME=oss-web-panel
-    volumes:
-      - tailscale_state:/var/lib/tailscale
-    healthcheck:
-      test: ["CMD", "tailscale", "status"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # Redis для сессий веб-панели, кэширования и распределённой координации воркеров
-  redis:
-    image: redis:7-alpine
-    container_name: oss_bot_redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Веб-панель работает в общей compose-сети (как bot/migrate), поэтому
-  # резолвит имя БД "db" и Redis "redis". Порт 8000 НЕ публикуется на хост: наружу панель
-  # отдаёт только Tailscale-контейнер через HTTPS-прокси (tailscale serve),
-  # который адресует панель по имени сервиса web-admin.
-  # Доступ: https://oss-web-panel.<tailnet>.ts.net
   web-admin:
     build:
       context: .
       dockerfile: Dockerfile.web
-    container_name: oss_bot_web
-    restart: unless-stopped
-    env_file:
-      - .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    env_file: .env
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      DB_HOST: pgbouncer
+      DB_PORT: "6432"
+      DB_USE_PGBOUNCER: "true"
     depends_on:
       db:
         condition: service_healthy
-      pgbouncer:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - bot_net
 
-  # Prometheus: сбор метрик и валидация правил алертинга
-  prometheus:
-    image: prom/prometheus:v2.53.1
-    container_name: oss_bot_prometheus
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
-    depends_on:
-      web-admin:
-        condition: service_healthy
-
-  # Telegram-бот мониторинга и алертов для главного администратора
   tg-monitor:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: oss_bot_tg_monitor
-    restart: unless-stopped
-    user: root
-    env_file:
-      - .env
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command: python scripts/run_tg_monitor.py
+      dockerfile: Dockerfile.monitor
+    env_file: .env
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
+    user: "1000:1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - bot_net
 
 volumes:
   postgres_data:
-  tailscale_state:
-  redis_data:
-  prometheus_data:
+
+networks:
+  bot_net:
+    driver: bridge

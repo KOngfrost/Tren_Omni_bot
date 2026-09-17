@@ -82,3 +82,42 @@ async def test_bot_core_user_and_admin(db_session_maker):
         is_super, dept_id = await get_admin_scope_for_vk_id(session, 987654)
         assert is_super is True
         assert dept_id is None
+
+
+@pytest.mark.asyncio
+async def test_graceful_shutdown_cleanup():
+    """Тест корректного завершения и освобождения ресурсов (Redis, DB, background tasks)."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    import core.redis_client as rc
+    from core.database import dispose_engine
+    from core.redis_client import close_redis_client
+
+    # Моделируем активный клиент Redis
+    mock_redis = AsyncMock()
+    mock_redis.close = AsyncMock()
+    rc._redis_client = mock_redis
+
+    await close_redis_client()
+    assert mock_redis.close.called
+    assert rc._redis_client is None
+
+    # Проверяем dispose_engine
+    await dispose_engine()
+
+    # Проверяем отмену и сбор фоновых задач
+    async def sample_worker():
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
+
+    task = asyncio.create_task(sample_worker())
+    assert not task.done()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.done()
+    assert task.cancelled()
+

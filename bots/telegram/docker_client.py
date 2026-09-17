@@ -191,3 +191,71 @@ class DockerClient:
         except Exception as e:
             logger.error("Ошибка получения логов контейнера %s: %s", name_or_id, e)
             return f"Ошибка получения логов: {e}"
+
+    async def exec_command(
+        self,
+        name_or_id: str,
+        cmd: list[str],
+        env: list[str] | None = None,
+    ) -> tuple[int, bytes, bytes]:
+        """Выполнить команду внутри контейнера.
+
+        Возвращает кортеж (exit_code, stdout_bytes, stderr_bytes).
+        """
+        if not self.is_socket_present():
+            return -1, b"", b"Docker socket not available."
+
+        try:
+            async with await self._get_client() as client:
+                payload: dict[str, Any] = {
+                    "AttachStdout": True,
+                    "AttachStderr": True,
+                    "Cmd": cmd,
+                }
+                if env:
+                    payload["Env"] = env
+
+                res = await client.post(f"/containers/{name_or_id}/exec", json=payload)
+                if res.status_code not in (200, 201):
+                    return res.status_code, b"", res.content
+
+                exec_id = res.json().get("Id")
+                if not exec_id:
+                    return -1, b"", b"Failed to obtain exec ID."
+
+                start_res = await client.post(
+                    f"/exec/{exec_id}/start",
+                    json={"Detach": False, "Tty": False},
+                )
+                raw = start_res.content
+
+                inspect_res = await client.get(f"/exec/{exec_id}/json")
+                exit_code = 0
+                if inspect_res.status_code == 200:
+                    exit_code = inspect_res.json().get("ExitCode", 0)
+
+                stdout_parts: list[bytes] = []
+                stderr_parts: list[bytes] = []
+                offset = 0
+                total = len(raw)
+
+                while offset + 8 <= total:
+                    stream_type = raw[offset]
+                    size = int.from_bytes(raw[offset + 4 : offset + 8], byteorder="big")
+                    chunk = raw[offset + 8 : offset + 8 + size]
+                    if stream_type == 1:
+                        stdout_parts.append(chunk)
+                    elif stream_type == 2:
+                        stderr_parts.append(chunk)
+                    else:
+                        stdout_parts.append(chunk)
+                    offset += 8 + size
+
+                if not stdout_parts and not stderr_parts and raw:
+                    stdout_parts.append(raw)
+
+                return exit_code, b"".join(stdout_parts), b"".join(stderr_parts)
+        except Exception as e:
+            logger.error("Ошибка выполнения exec в контейнере %s: %s", name_or_id, e)
+            return -1, b"", str(e).encode()
+

@@ -7,7 +7,6 @@
 - Санитизация входных данных от XSS
 """
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -16,11 +15,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from core.bulk_import import (
-    export_faq_xlsx,
-    generate_faq_template_csv,
-    generate_faq_template_xlsx,
-    parse_faq_rows,
-    parse_file_or_text,
+    export_faq_xlsx_async,
+    generate_faq_template_csv_async,
+    generate_faq_template_xlsx_async,
+    parse_faq_rows_async,
+    parse_file_or_text_async,
 )
 from core.database import async_session_maker
 from core.models import Department, FAQNode, Log
@@ -205,9 +204,9 @@ async def delete_faq(request: Request, node_id: int, user=Depends(require_writer
 @router.get("/template.xlsx")
 async def faq_template_xlsx(user=Depends(require_auth)):
     """Скачать шаблон Excel (.xlsx) для массовой загрузки частых вопросов."""
-    # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
-    # чтобы не блокировать event loop (Ошибка #11).
-    data = await asyncio.to_thread(generate_faq_template_xlsx)
+    # openpyxl — синхронная ресурсоёмкая библиотека: async API bulk_import
+    # выполняет её в пуле потоков, event loop не блокируется (Ошибка #11).
+    data = await generate_faq_template_xlsx_async()
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -218,7 +217,7 @@ async def faq_template_xlsx(user=Depends(require_auth)):
 @router.get("/template.csv")
 async def faq_template_csv(user=Depends(require_auth)):
     """Скачать шаблон CSV для массовой загрузки частых вопросов."""
-    data = generate_faq_template_csv().encode("utf-8-sig")
+    data = (await generate_faq_template_csv_async()).encode("utf-8-sig")
     return Response(
         content=data,
         media_type="text/csv; charset=utf-8",
@@ -240,9 +239,9 @@ async def faq_export_xlsx(request: Request, user=Depends(require_auth)):
             stmt = stmt.where(FAQNode.department_id == dept_id)
         nodes = list((await session.execute(stmt)).scalars().all())
 
-    # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
-    # чтобы не блокировать event loop (Ошибка #11).
-    data = await asyncio.to_thread(export_faq_xlsx, nodes)
+    # openpyxl — синхронная ресурсоёмкая библиотека: async API bulk_import
+    # выполняет её в пуле потоков, event loop не блокируется (Ошибка #11).
+    data = await export_faq_xlsx_async(nodes)
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -269,12 +268,13 @@ async def import_faq(request: Request, user=Depends(require_writer)):
         return RedirectResponse(url="/faq/", status_code=303)
 
     try:
-        # openpyxl.load_workbook — синхронная ресурсоёмкая операция: выносим
-        # в фоновый поток, чтобы не блокировать event loop (Ошибка #11).
-        raw_rows = await asyncio.to_thread(
-            parse_file_or_text, file_bytes, filename, text_data if text_data else None
+        # openpyxl.load_workbook / csv.reader — синхронные ресурсоёмкие
+        # операции: async API bulk_import выносит их в пул потоков, поэтому
+        # разбор большого файла не блокирует event loop (Ошибка #11).
+        raw_rows = await parse_file_or_text_async(
+            file_bytes, filename, text_data if text_data else None
         )
-        parsed = parse_faq_rows(raw_rows)
+        parsed = await parse_faq_rows_async(raw_rows)
     except Exception as e:
         logger.warning("Ошибка разбора файла частых вопросов: %s", e)
         request.session["flash_error"] = f"Не удалось прочитать файл: {e}"

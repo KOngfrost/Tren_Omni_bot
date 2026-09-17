@@ -97,6 +97,13 @@ async def _start_scheduler() -> None:
     _track_background_task(start_rate_limit_cleanup())
     logger.info("Фоновая очистка rate-limit журналов запущена")
 
+    # FSM-состояния VK-бота при недоступном Redis хранятся в памяти процесса:
+    # периодическая очистка устаревших состояний (TTL-сборщик) защищает RAM
+    # воркера от утечки при длительном отказе Redis.
+    _track_background_task(vk_bot.state_dispenser.start_maintenance())
+    logger.info("Периодическая очистка FSM-состояний запущена")
+
+
 
 async def run_vk_polling() -> None:
     retry_delay = 5

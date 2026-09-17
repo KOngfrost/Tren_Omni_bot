@@ -125,6 +125,7 @@ async def test_events_handler_empty_and_populated(db_session_maker):
 @pytest.mark.asyncio
 async def test_event_registration_syntax_variations_and_keyboard(db_session_maker):
     import json
+
     from bots.vk.keyboards import build_events_keyboard
 
     kb_data = json.loads(build_events_keyboard([10, 20]))

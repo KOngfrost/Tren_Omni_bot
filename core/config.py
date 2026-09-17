@@ -88,8 +88,8 @@ class Settings(BaseSettings):
     DB_HOST: str | None = None
     DB_PORT: str = "5432"
 
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_SIZE: int = 15
+    DB_MAX_OVERFLOW: int = 15
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
     DB_POOL_PRE_PING: bool = True

@@ -84,8 +84,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     cleanup_task = start_rate_limit_cleanup()
     logger.info("Фоновая очистка rate-limit журналов запущена")
+
+    # В callback-режиме FSM-состояния студентов ведутся в этом процессе.
+    # При недоступном Redis они копятся в словаре-фоллбеке диспенсера,
+    # поэтому их TTL-сборщик запускается здесь же (core/state_dispenser.py).
+    state_maintenance_task: asyncio.Task[None] | None = None
+    if settings.VK_MODE == "callback":
+        from bots.vk.bot import vk_bot
+
+        state_maintenance_task = vk_bot.state_dispenser.start_maintenance()
+        logger.info("Периодическая очистка FSM-состояний запущена")
     yield
+    if state_maintenance_task is not None:
+        state_maintenance_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await state_maintenance_task
+        logger.info("Периодическая очистка FSM-состояний остановлена")
     if cleanup_task is not None:
+
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
@@ -208,7 +224,6 @@ _SKIP_MIDDLEWARE_PREFIXES = (
 )
 
 # Валидатор размера запроса (10MB лимит)
-_REQUEST_MAX_BODY_SIZE = 10 * 1024 * 1024
 _request_size_validator = RequestSizeValidator(max_body_size=_REQUEST_MAX_BODY_SIZE)
 
 

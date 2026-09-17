@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -11,8 +13,7 @@ from zoneinfo import ZoneInfo
 import aiosmtplib
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import and_, select
 from vkbottle.tools.uploader import DocMessagesUploader
 
 from core.config import settings
@@ -21,6 +22,12 @@ from core.models import Admin, Department, ReportRun, Ticket, TicketStatus, User
 from core.ticket_service import COMPLETED_STATUSES, status_label
 
 logger = logging.getLogger(__name__)
+
+# Размер пакета (chunk) потоковой выборки заявок для отчёта. Чтение идёт
+# порциями (stream + yield_per), поэтому в памяти одновременно находится
+# только один чанк курсора, а не весь период выборки (защита от OOM на
+# годовых отчётах). Переопределяется через env.
+REPORT_CHUNK_SIZE = int(os.environ.get("REPORT_CHUNK_SIZE", "1000"))
 
 
 def get_app_tz() -> ZoneInfo:
@@ -33,6 +40,45 @@ def get_app_tz() -> ZoneInfo:
 # В production отделы создаёт администратор через панель управления, и
 # книга Excel получает по вкладке на каждый отдел из БД (Ошибка #16).
 DEFAULT_DEPTS = ["Жилищно-бытовой", "Информационный", "Корпоративный", "Культурно-массовый"]
+
+
+@dataclass(frozen=True, slots=True)
+class _DeptRef:
+    """Облегчённая ссылка на отдел вместо ORM-объекта Department."""
+
+    id: int | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _UserRef:
+    """Облегчённая ссылка на пользователя вместо ORM-объекта User."""
+
+    full_name: str | None = None
+    dormitory: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _TicketRow:
+    """Заявка в виде, достаточном для Excel-отчёта.
+
+    Сборщики листов обращаются к полям по тем же именам, что и у модели
+    Ticket (id, status, department.name, user.full_name, ...), поэтому
+    замена ORM-объектов на лёгкие строки не меняет логику отчёта, но
+    освобождает память: ORM identity map сессии не держит все заявки периода.
+    """
+
+    id: int
+    created_at: datetime | None = None
+    topic: str | None = None
+    description: str | None = None
+    status: TicketStatus = TicketStatus.NEW
+    response_text: str | None = None
+    auto_closed: bool = False
+    is_anonymous: bool = False
+    department_id: int | None = None
+    department: _DeptRef | None = None
+    user: _UserRef | None = None
 
 
 def _get_report_departments(data: dict) -> list[Department]:
@@ -330,21 +376,87 @@ def parse_report_date(text: str) -> date | None:
     return None
 
 
+def _ticket_from_record(row) -> _TicketRow:
+    """Строка потоковой выборки (колонки) -> облегчённая заявка отчёта."""
+    return _TicketRow(
+        id=row.id,
+        created_at=row.created_at,
+        topic=row.topic,
+        description=row.description,
+        status=row.status,
+        response_text=row.response_text,
+        auto_closed=bool(row.auto_closed),
+        is_anonymous=bool(row.is_anonymous),
+        department_id=row.department_id,
+        department=_DeptRef(row.department_id, row.name) if row.department_id else None,
+        user=_UserRef(row.full_name, row.dormitory) if row.full_name or row.dormitory else None,
+    )
+
+
+async def _fetch_report_data(
+    period_start: datetime,
+    period_end: datetime,
+    *,
+    end_inclusive: bool,
+) -> dict:
+    """Пакетно прочитать заявки периода и собрать данные отчёта.
+
+    Вместо ``select(Ticket)`` со связями (весь период сразу в памяти ORM)
+    читаются только нужные для Excel колонки, порциями по REPORT_CHUNK_SIZE
+    строк (``stream`` + ``yield_per``), и каждая строка тут же превращается
+    в лёгкий ``_TicketRow``. Пик памяти ограничен размером чанка курсора,
+    а не количеством заявок за период.
+    """
+    if end_inclusive:
+        period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at <= period_end)
+    else:
+        period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at < period_end)
+
+    stmt = (
+        select(
+            Ticket.id,
+            Ticket.created_at,
+            Ticket.topic,
+            Ticket.description,
+            Ticket.status,
+            Ticket.response_text,
+            Ticket.auto_closed,
+            Ticket.is_anonymous,
+            Ticket.department_id,
+            Department.name,
+            User.full_name,
+            User.dormitory,
+        )
+        .outerjoin(Department, Department.id == Ticket.department_id)
+        .outerjoin(User, User.id == Ticket.user_id)
+        .where(period_filter)
+        .order_by(Ticket.created_at, Ticket.id)
+        .execution_options(yield_per=REPORT_CHUNK_SIZE)
+    )
+
+    async with async_session_maker() as session:
+        departments = list(
+            (await session.scalars(select(Department).order_by(Department.name))).all()
+        )
+        result = await session.stream(stmt)
+        tickets = [_ticket_from_record(row) async for row in result]
+
+    if len(tickets) >= REPORT_CHUNK_SIZE:
+        logger.info(
+            "Отчёт: выбрано %s заявок (пакетами по %s)",
+            len(tickets),
+            REPORT_CHUNK_SIZE,
+        )
+    return {"tickets": tickets, "departments": departments}
+
+
 async def get_report_for_date(report_day: date) -> dict:
     """Собирает данные для отчёта за одну конкретную дату (асинхронная обёртка)."""
     tz = get_app_tz()
     day_start = datetime.combine(report_day, datetime.min.time(), tzinfo=tz)
     day_end = day_start + timedelta(days=1)
 
-    async with async_session_maker() as session:
-        tickets = await session.scalars(
-            select(Ticket)
-            .options(selectinload(Ticket.user), selectinload(Ticket.department))
-            .where(Ticket.created_at >= day_start, Ticket.created_at < day_end)
-            .order_by(Ticket.created_at)
-        )
-        departments = await session.scalars(select(Department).order_by(Department.name))
-    return {"tickets": list(tickets), "departments": list(departments)}
+    return await _fetch_report_data(day_start, day_end, end_inclusive=False)
 
 
 async def get_report_for_period(date_from: date, date_to: date) -> dict:
@@ -356,15 +468,7 @@ async def get_report_for_period(date_from: date, date_to: date) -> dict:
     period_start = datetime.combine(date_from, datetime.min.time(), tzinfo=tz)
     period_end = datetime.combine(date_to, datetime.max.time(), tzinfo=tz)
 
-    async with async_session_maker() as session:
-        tickets = await session.scalars(
-            select(Ticket)
-            .options(selectinload(Ticket.user), selectinload(Ticket.department))
-            .where(Ticket.created_at >= period_start, Ticket.created_at <= period_end)
-            .order_by(Ticket.created_at)
-        )
-        departments = await session.scalars(select(Department).order_by(Department.name))
-    return {"tickets": list(tickets), "departments": list(departments)}
+    return await _fetch_report_data(period_start, period_end, end_inclusive=True)
 
 
 async def is_report_already_sent(report_day: date) -> bool:

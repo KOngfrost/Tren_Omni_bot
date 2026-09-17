@@ -119,3 +119,40 @@ async def test_reply_anonymous_ticket_no_outbox(db_session_maker, monkeypatch):
         # У анонимных user_id в заявке может быть NULL — outbox вообще не должен появиться
         all_outbox = (await session.scalars(select(VkOutbox))).all()
         assert len(all_outbox) == 0
+
+
+async def test_outbox_temporary_vk_failure_and_recovery(db_session_maker, monkeypatch):
+    """Сценарий временного сбоя VK API: сообщения накапливаются и доставляются после восстановления."""
+    async with db_session_maker() as session:
+        add_outbox_message(session, vk_id=444, text="Сообщение при сбое")
+        await session.commit()
+
+    # 1. VK API временно недоступен (сбой сети / 5xx)
+    async def _fail_send(vk_id, text):
+        return False
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _fail_send)
+    delivered = await deliver_pending_messages()
+    assert delivered == 0
+
+    async with db_session_maker() as session:
+        msg = await session.scalar(select(VkOutbox).where(VkOutbox.vk_id == 444))
+        assert msg.status == "pending"
+        assert msg.attempts == 1
+        assert msg.error is not None
+
+    # 2. VK API восстановился
+    async def _success_send(vk_id, text):
+        return True
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _success_send)
+    delivered = await deliver_pending_messages()
+    assert delivered == 1
+
+    async with db_session_maker() as session:
+        msg = await session.scalar(select(VkOutbox).where(VkOutbox.vk_id == 444))
+        assert msg.status == "sent"
+        assert msg.attempts == 2
+        assert msg.sent_at is not None
+        assert msg.error is None
+

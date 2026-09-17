@@ -35,9 +35,9 @@ def test_get_system_metrics():
     assert "disk_percent" in metrics
     assert "uptime_str" in metrics
 
-    assert isinstance(metrics["cpu_percent"], (int, float))
-    assert isinstance(metrics["ram_percent"], (int, float))
-    assert isinstance(metrics["disk_percent"], (int, float))
+    assert isinstance(metrics["cpu_percent"], int | float)
+    assert isinstance(metrics["ram_percent"], int | float)
+    assert isinstance(metrics["disk_percent"], int | float)
 
     text = format_metrics_message(metrics)
     assert "Состояние сервера" in text
@@ -133,3 +133,90 @@ async def test_monitor_service_alerts():
     assert bot.send_message.call_count == 2
     recovery_args = bot.send_message.call_args[1]
     assert "ВОССТАНОВЛЕНИЕ" in recovery_args["text"]
+
+
+def test_backup_button_in_keyboards():
+    from bots.telegram.bot import get_main_reply_keyboard
+
+    kb = get_main_reply_keyboard()
+    button_texts = [btn.text for row in kb.keyboard for btn in row]
+    assert "💾 Бэкап" in button_texts
+
+
+@pytest.mark.asyncio
+async def test_render_status_contains_backup_button():
+    from bots.telegram.bot import render_status_content
+
+    docker_mock = mock.AsyncMock(spec=DockerClient)
+    docker_mock.list_containers.return_value = []
+
+    text, kb = await render_status_content(docker_mock)
+    callbacks = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+    assert "backup:create" in callbacks
+
+
+@pytest.mark.asyncio
+async def test_perform_database_backup_docker_success():
+    import gzip
+
+    from bots.telegram.bot import perform_database_backup
+    from core.config import get_settings
+
+    docker_mock = mock.AsyncMock(spec=DockerClient)
+    c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
+    docker_mock.list_containers.return_value = [c_db]
+    docker_mock.exec_command.return_value = (0, b"CREATE TABLE test (id INT);", b"")
+
+    settings = get_settings()
+    ok, data, filename = await perform_database_backup(docker_mock, settings)
+
+    assert ok is True
+    assert data is not None
+    assert filename.startswith("oss_bot_backup_")
+    assert filename.endswith(".sql.gz")
+    assert gzip.decompress(data) == b"CREATE TABLE test (id INT);"
+    docker_mock.exec_command.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_perform_database_backup_docker_failure():
+    from bots.telegram.bot import perform_database_backup
+    from core.config import get_settings
+
+    docker_mock = mock.AsyncMock(spec=DockerClient)
+    c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
+    docker_mock.list_containers.return_value = [c_db]
+    docker_mock.exec_command.return_value = (1, b"", b"FATAL: database does not exist")
+
+    settings = get_settings()
+    ok, data, err_msg = await perform_database_backup(docker_mock, settings)
+
+    assert ok is False
+    assert data is None
+    assert "FATAL: database does not exist" in err_msg
+
+
+@pytest.mark.asyncio
+async def test_cmd_backup_handler():
+    from bots.telegram.bot import cmd_backup
+    from core.config import get_settings
+
+    docker_mock = mock.AsyncMock(spec=DockerClient)
+    c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
+    docker_mock.list_containers.return_value = [c_db]
+    docker_mock.exec_command.return_value = (0, b"DUMP CONTENT", b"")
+
+    msg = mock.MagicMock(spec=Message)
+    status_msg = mock.AsyncMock()
+    msg.answer = mock.AsyncMock(return_value=status_msg)
+    msg.answer_document = mock.AsyncMock()
+
+    settings = get_settings()
+    await cmd_backup(msg, docker_mock, settings)
+
+    msg.answer.assert_called_once()
+    msg.answer_document.assert_called_once()
+    call_kwargs = msg.answer_document.call_args[1]
+    assert "Резервная копия базы данных успешно создана" in call_kwargs["caption"]
+    assert call_kwargs["document"].filename.startswith("oss_bot_backup_")
+

@@ -1,7 +1,21 @@
 """
 Модуль массового импорта и экспорта данных (Excel / CSV) для Частых вопросов и Базы знаний.
+
+Двухслойный API:
+
+1. Синхронные ядра (``generate_*``, ``parse_*``, ``export_*``) — ресурсоёмкие
+   вызовы openpyxl (``load_workbook`` / ``Workbook.save``) и модуля ``csv``.
+   Предназначены только для синхронных потребителей (тесты, CLI-скрипты) и
+   сами по себе блокируют поток вызова.
+2. Асинхронные обёртки (те же имена с суффиксом ``_async``) — публичный API для
+   FastAPI-обработчиков и VK-бота: каждое синхронное ядро выполняется в пуле
+   потоков через ``asyncio.to_thread``, поэтому разбор больших файлов не
+   блокирует event loop (Ошибка #11).
+
+Правило: из async-контекста вызывать только ``*_async`` функции.
 """
 
+import asyncio
 import csv
 import io
 from typing import Any
@@ -336,3 +350,61 @@ def export_knowledge_xlsx(items: list[Any]) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Асинхронный API: неблокирующие обёртки над синхронными ядрами.
+#
+# openpyxl (load_workbook / save) и csv работают только синхронно: на файлах в
+# десятки тысяч строк один вызов занимает сотни миллисекунд и полностью
+# останавливал event loop FastAPI (остальные запросы, longpoll и heartbeat
+# бота простаивали). Каждый вызов уводится в поток пула asyncio.to_thread,
+# поэтому event loop остаётся свободным.
+# ---------------------------------------------------------------------------
+
+
+async def generate_faq_template_xlsx_async() -> bytes:
+    """Неблокирующая версия generate_faq_template_xlsx (openpyxl.save в потоке)."""
+    return await asyncio.to_thread(generate_faq_template_xlsx)
+
+
+async def generate_faq_template_csv_async() -> str:
+    """Неблокирующая версия generate_faq_template_csv (csv.writer в потоке)."""
+    return await asyncio.to_thread(generate_faq_template_csv)
+
+
+async def generate_knowledge_template_xlsx_async() -> bytes:
+    """Неблокирующая версия generate_knowledge_template_xlsx (openpyxl.save в потоке)."""
+    return await asyncio.to_thread(generate_knowledge_template_xlsx)
+
+
+async def generate_knowledge_template_csv_async() -> str:
+    """Неблокирующая версия generate_knowledge_template_csv (csv.writer в потоке)."""
+    return await asyncio.to_thread(generate_knowledge_template_csv)
+
+
+async def parse_file_or_text_async(
+    file_bytes: bytes | None, filename: str | None, text_content: str | None = None
+) -> list[list[str]]:
+    """Неблокирующая версия parse_file_or_text (openpyxl.load_workbook/csv.reader в потоке)."""
+    return await asyncio.to_thread(parse_file_or_text, file_bytes, filename, text_content)
+
+
+async def parse_faq_rows_async(raw_rows: list[list[str]]) -> list[dict[str, str]]:
+    """Неблокирующая версия parse_faq_rows (разбор больших матриц вне event loop)."""
+    return await asyncio.to_thread(parse_faq_rows, raw_rows)
+
+
+async def parse_knowledge_rows_async(raw_rows: list[list[str]]) -> list[dict[str, str]]:
+    """Неблокирующая версия parse_knowledge_rows (разбор больших матриц вне event loop)."""
+    return await asyncio.to_thread(parse_knowledge_rows, raw_rows)
+
+
+async def export_faq_xlsx_async(nodes: list[Any]) -> bytes:
+    """Неблокирующая версия export_faq_xlsx (openpyxl.save в потоке)."""
+    return await asyncio.to_thread(export_faq_xlsx, nodes)
+
+
+async def export_knowledge_xlsx_async(items: list[Any]) -> bytes:
+    """Неблокирующая версия export_knowledge_xlsx (openpyxl.save в потоке)."""
+    return await asyncio.to_thread(export_knowledge_xlsx, items)

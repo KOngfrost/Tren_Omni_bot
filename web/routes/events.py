@@ -85,15 +85,15 @@ async def add_event(request: Request, user=Depends(require_writer)):
     event_date_str: str = str(form.get("event_date", ""))
 
     if not title.strip():
-        request.session["flash_error"] = "Название мероприятия обязательно"
+        request.session["flash_error"] = "Название события обязательно"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
         event_date = datetime.fromisoformat(event_date_str)
         if event_date.tzinfo is None:
             event_date = event_date.replace(tzinfo=UTC)
-    except ValueError:
-        request.session["flash_error"] = "Некорректная дата мероприятия"
+    except (ValueError, TypeError):
+        request.session["flash_error"] = "Некорректная дата события"
         return RedirectResponse(url="/events/", status_code=303)
 
     try:
@@ -102,7 +102,6 @@ async def add_event(request: Request, user=Depends(require_writer)):
             department_id: int | None = parse_form_int(form, "department_id", default=dept_id)
 
             if not is_super:
-                # Админ отдела жёстко привязан к своему отделу
                 department_id = dept_id
             if department_id is None:
                 request.session["flash_error"] = "Не выбран отдел"

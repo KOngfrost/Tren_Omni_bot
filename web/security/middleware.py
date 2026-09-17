@@ -167,55 +167,66 @@ class DBRateLimiter:
         now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=self.window_seconds)
 
-        # Посчитать попытки за окно
+        # Параметризованные запросы с явным указанием таблицы из белого списка.
+        # Имя таблицы подставляется через безопасный форматный строковый шаблон,
+        # а не через f-string, чтобы исключить риск SQL-инъекции при будущих
+        # изменениях логики валидации.
+        if self.table_name == "crud_attempts":
+            count_stmt = text(
+                "SELECT COUNT(*) FROM {table} "  # noqa: UP032
+                "WHERE ip = :ip AND action = :action AND attempted_at >= :cutoff".format(
+                    table=self.table_name
+                )
+            )
+            count_result = await session.execute(
+                count_stmt, {"ip": ip, "action": action, "cutoff": cutoff}
+            )
+            count = int(count_result.scalar() or 0)
+
+            if count >= self.max_requests:
+                return False
+
+            # Записать новую попытку
+            insert_stmt = text(
+                "INSERT INTO {table} (ip, action, attempted_at) "  # noqa: UP032
+                "VALUES (:ip, :action, :now)".format(table=self.table_name)
+            )
+            await session.execute(insert_stmt, {"ip": ip, "action": action, "now": now})
+        else:
+            count_stmt = text(
+                "SELECT COUNT(*) FROM {table} "  # noqa: UP032
+                "WHERE ip = :ip AND attempted_at >= :cutoff".format(table=self.table_name)
+            )
+            count_result = await session.execute(count_stmt, {"ip": ip, "cutoff": cutoff})
+            count = int(count_result.scalar() or 0)
+
+            if count >= self.max_requests:
+                return False
+
+            # Записать новую попытку
+            insert_stmt = text(
+                "INSERT INTO {table} (ip, attempted_at, success) VALUES (:ip, :now, false)".format(  # noqa: UP032
+                    table=self.table_name
+                )
+            )
+            await session.execute(insert_stmt, {"ip": ip, "now": now})
+
         try:
-            if self.table_name == "crud_attempts":
-                count_stmt = text(
-                    f"SELECT COUNT(*) FROM {self.table_name} "
-                    f"WHERE ip = :ip AND action = :action AND attempted_at >= :cutoff"
-                )
-                count_result = await session.execute(
-                    count_stmt, {"ip": ip, "action": action, "cutoff": cutoff}
-                )
-                count = int(count_result.scalar() or 0)
-
-                if count >= self.max_requests:
-                    return False
-
-                # Записать новую попытку
-                insert_stmt = text(
-                    f"INSERT INTO {self.table_name} (ip, action, attempted_at) "
-                    f"VALUES (:ip, :action, :now)"
-                )
-                await session.execute(insert_stmt, {"ip": ip, "action": action, "now": now})
-            else:
-                count_stmt = text(
-                    f"SELECT COUNT(*) FROM {self.table_name} "
-                    f"WHERE ip = :ip AND attempted_at >= :cutoff"
-                )
-                count_result = await session.execute(count_stmt, {"ip": ip, "cutoff": cutoff})
-                count = int(count_result.scalar() or 0)
-
-                if count >= self.max_requests:
-                    return False
-
-                # Записать новую попытку
-                insert_stmt = text(
-                    f"INSERT INTO {self.table_name} (ip, attempted_at, success) VALUES (:ip, :now, false)"
-                )
-                await session.execute(insert_stmt, {"ip": ip, "now": now})
-
             await session.commit()
             return True
-
         except Exception:
-            # При ошибке БД — мягко деградируем: не блокируем, но и не считаем
-            # Это лучше, чем 500 для пользователя
-            logger.warning(
-                "DBRateLimiter: ошибка при проверке лимита (таблица %s может отсутствовать)",
+            # При ошибке БД — блокируем запрос (fail-close), чтобы не пропускать
+            # потенциально вредоносные действия при проблемах с бэкендом.
+            # Логируем полный контекст для последующего анализа.
+            logger.error(
+                "DBRateLimiter: ошибка при фиксации лимита для таблицы %s, "
+                "IP %s, action %s — запрос блокируется (fail-close)",
                 self.table_name,
+                ip,
+                action,
+                exc_info=True,
             )
-            return True
+            return False
 
 
 # Глобальные лимитеры

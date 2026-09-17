@@ -136,10 +136,8 @@ def build_back_nav_keyboard(back_label: str = "К разделам вопрос�
 
 def build_events_keyboard(event_ids: list[int] | None = None) -> str:
     """Клавиатура мероприятий с кнопками быстрой записи в один клик и возвратом в меню."""
-    buttons: list[tuple[str, str]] = []
-    if event_ids:
-        for eid in event_ids[:6]:
-            buttons.append((f"Записаться #{eid}", "positive"))
+    buttons: list[tuple[str, str]] = [
+        (f"Записаться #{eid}", "positive") for eid in (event_ids or [])[:6]
+    ]
     buttons.append(("Меню", "secondary"))
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
-

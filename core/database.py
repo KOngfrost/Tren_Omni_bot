@@ -136,9 +136,8 @@ async def ensure_database_exists(max_retries: int = 10, retry_delay: float = 2.0
 
 def run_migrations(max_retries: int = 5, retry_delay: float = 2.0) -> None:
     """Apply Alembic migrations to the database."""
-    from alembic.config import Config
-
     from alembic import command
+    from alembic.config import Config
 
     last_error = None
 
