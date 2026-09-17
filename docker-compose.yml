@@ -1,4 +1,4 @@
-﻿services:
+services:
   db:
     image: postgres:16-alpine
     container_name: oss_bot_db
@@ -170,13 +170,12 @@
       dockerfile: Dockerfile.monitor
     container_name: oss_bot_tg_monitor
     restart: unless-stopped
-    user: "1000:1000"
     env_file:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     command: python scripts/run_tg_monitor.py
     depends_on:
       redis:

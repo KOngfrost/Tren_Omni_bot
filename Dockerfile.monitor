@@ -1,5 +1,4 @@
 # Dockerfile для tg-monitor (мониторинг Telegram)
-# Запускается от непривилегированного пользователя с доступом к docker.sock
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -9,13 +8,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Создаём непривилегированного пользователя
-RUN useradd --create-home --shell /bin/bash appuser
-
-# Добавляем группу docker с GID 999 (стандартный GID docker-сокета на хосте)
-# Это позволяет appuser получать доступ к docker.sock через belonged group
-RUN groupadd -g 999 docker || true
-
 # Копируем requirements и устанавливаем зависимости
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -23,13 +15,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем код приложения
 COPY . .
 
-# Права на файлы приложения для appuser
-RUN chown -R appuser:appuser /app
-
-# Добавляем appuser в группу docker для доступа к docker.sock
-RUN usermod -aG docker appuser
-
-USER appuser
-
 # Запускаем мониторинг
-CMD ["python", "tg_monitor.py"]
+CMD ["python", "scripts/run_tg_monitor.py"]

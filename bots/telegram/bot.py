@@ -98,9 +98,17 @@ async def render_status_content(docker_client: DockerClient) -> tuple[str, Inlin
     if not containers:
         lines.append("<i>Контейнеры не найдены или Docker недоступен</i>")
     else:
-        for c in containers:
-            health_part = f" ({c.health})" if c.health else ""
-            lines.append(f"{c.status_emoji} <code>{c.name}</code> — {c.status}{health_part}")
+        sorted_containers = sorted(containers, key=lambda x: (not x.is_project_container, x.name))
+        for c in sorted_containers:
+            status_clean = c.status
+            health_part = ""
+            if c.health and f"({c.health.lower()})" not in status_clean.lower():
+                health_part = f" ({c.health})"
+
+            if "migrate" in c.name and "Exited (0)" in status_clean:
+                lines.append(f"⚪ <code>{c.name}</code> — Миграция БД (выполнена)")
+            else:
+                lines.append(f"{c.status_emoji} <code>{c.name}</code> — {status_clean}{health_part}")
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
