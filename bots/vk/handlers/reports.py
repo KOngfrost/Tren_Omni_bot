@@ -57,7 +57,7 @@ async def report_handler(message: Message):
             filename,
         )
         await BotCore.log_action(user, "report_generated", f"Сформирован отчёт {filename}")
-    except (ValueError, OSError, KeyError, VKAPIError):
+    except Exception:
         logger.exception("Ошибка при формировании отчёта")
         await BotCore.log_action(user, "report_failed", "Ошибка при формировании отчёта")
         await message.answer(

@@ -319,13 +319,28 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
     """Отправляет отчёт в VK как документ через встроенный uploader vkbottle."""
     if not admin_vk_id:
         raise ValueError("VK_REPORT_ADMIN_ID не настроен")
+    if not report_bytes:
+        raise ValueError("Сформированный файл отчёта пуст (0 байт)")
 
     uploader = DocMessagesUploader(api)
-    attachment = await uploader.upload(
-        file_source=report_bytes,
-        peer_id=admin_vk_id,
-        title=filename,
-    )
+    try:
+        attachment = await uploader.upload(
+            file_source=report_bytes,
+            peer_id=admin_vk_id,
+            title=filename,
+        )
+    except Exception as e:
+        logger.warning(
+            "Первая попытка загрузки отчёта в VK (%s) не удалась: %s. Выполняется повторная попытка...",
+            filename,
+            e,
+        )
+        await asyncio.sleep(1.0)
+        attachment = await uploader.upload(
+            file_source=report_bytes,
+            peer_id=admin_vk_id,
+            title=filename,
+        )
 
     await api.messages.send(
         peer_id=admin_vk_id,
@@ -431,21 +446,19 @@ async def _fetch_report_data(
         .outerjoin(User, User.id == Ticket.user_id)
         .where(period_filter)
         .order_by(Ticket.created_at, Ticket.id)
-        .execution_options(yield_per=REPORT_CHUNK_SIZE)
     )
 
     async with async_session_maker() as session:
         departments = list(
             (await session.scalars(select(Department).order_by(Department.name))).all()
         )
-        result = await session.stream(stmt)
-        tickets = [_ticket_from_record(row) async for row in result]
+        result = await session.execute(stmt)
+        tickets = [_ticket_from_record(row) for row in result.all()]
 
     if len(tickets) >= REPORT_CHUNK_SIZE:
         logger.info(
-            "Отчёт: выбрано %s заявок (пакетами по %s)",
+            "Отчёт: выбрано %s заявок",
             len(tickets),
-            REPORT_CHUNK_SIZE,
         )
     return {"tickets": tickets, "departments": departments}
 
