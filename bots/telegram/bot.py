@@ -8,6 +8,7 @@ import html
 import logging
 import os
 import subprocess
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -351,13 +352,39 @@ async def callback_reboot_confirm(callback: CallbackQuery) -> None:
             await callback.message.edit_text(f"❌ Ошибка вызова reboot: {e}")
 
 
+def rotate_old_backups(backup_dir: str | None = None, max_days: int = 7) -> int:
+    """Удалить локальные файлы резервных копий старше max_days дней.
+
+    Возвращает количество удаленных файлов.
+    """
+    target_dir = backup_dir or os.getenv("BACKUP_DIR", "/var/backups/oss_bot")
+    if not os.path.exists(target_dir):
+        return 0
+    deleted_count = 0
+    cutoff_time = time.time() - (max_days * 86400)
+    try:
+        for entry in os.scandir(target_dir):
+            if entry.is_file() and entry.name.startswith("oss_bot_backup_"):
+                try:
+                    if entry.stat().st_mtime < cutoff_time:
+                        os.remove(entry.path)
+                        deleted_count += 1
+                        logger.info("Удалена устаревшая резервная копия: %s", entry.name)
+                except Exception as exc:
+                    logger.warning("Не удалось удалить устаревший файл бэкапа %s: %s", entry.name, exc)
+    except Exception as e:
+        logger.warning("Ошибка сканирования каталога бэкапов %s: %s", target_dir, e)
+    return deleted_count
+
+
 def _save_local_copy(data: bytes, filename: str) -> None:
-    """Сохранить резервную копию на диск, если директория доступна."""
+    """Сохранить резервную копию на диск и выполнить ротацию устаревших копий."""
     backup_dir = os.getenv("BACKUP_DIR", "/var/backups/oss_bot")
     try:
         os.makedirs(backup_dir, exist_ok=True)
         with open(os.path.join(backup_dir, filename), "wb") as f:
             f.write(data)
+        rotate_old_backups(backup_dir, max_days=7)
     except Exception as e:
         logger.debug("Не удалось сохранить локальную копию бэкапа: %s", e)
 
@@ -495,6 +522,7 @@ def create_telegram_bot(
         docker_client=docker_client,
         check_interval=settings.TELEGRAM_CHECK_INTERVAL_SECONDS,
         alerts_enabled=settings.TELEGRAM_ALERTS_ENABLED,
+        settings=settings,
     )
 
     return bot, dp, monitor_service

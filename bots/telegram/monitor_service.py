@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from aiogram import Bot
 
     from bots.telegram.docker_client import DockerClient
+    from core.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,8 @@ class MonitorService:
         check_interval: int = 30,
         alerts_enabled: bool = True,
         web_health_url: str = "http://web-admin:8000/health",
+        settings: Settings | None = None,
+        backup_interval_seconds: int = 86400,
     ):
         self.bot = bot
         self.admin_id = admin_id
@@ -37,11 +41,15 @@ class MonitorService:
         self.check_interval = max(5, check_interval)
         self.alerts_enabled = alerts_enabled
         self.web_health_url = web_health_url
+        self.settings = settings
+        self.backup_interval_seconds = backup_interval_seconds
 
         # Предыдущие состояния контейнеров: name -> is_bad (bool)
         self._previous_states: dict[str, bool] = {}
         # Таймстемпы последних алертов по ресурсам (для предотвращения спама)
         self._last_resource_alert_time: float = 0.0
+        # Таймстемп последнего планового бэкапа
+        self._last_backup_time: float = 0.0
         self._is_running = False
 
     async def start(self) -> None:
@@ -71,9 +79,10 @@ class MonitorService:
         self._is_running = False
 
     async def check_all(self) -> None:
-        """Выполнить один такт проверки контейнеров и ресурсов."""
+        """Выполнить один такт проверки контейнеров, ресурсов и планового бэкапа."""
         await self._check_containers()
         await self._check_system_resources()
+        await self._check_scheduled_backup()
 
     async def _check_containers(self) -> None:
         """Проверить статусы контейнеров и отправить уведомления о сбоях/восстановлении."""
@@ -86,10 +95,11 @@ class MonitorService:
             if "migrate" in c.name and "Exited (0)" in c.status:
                 continue
 
-            # Признак сбоя: unhealthy или exited (ненулевой/неожиданный)
+            # Признак сбоя: unhealthy, не работает (кроме штатного Exited 0) или цикличный рестарт
             is_unhealthy = c.health == "unhealthy"
             is_stopped = not c.is_running and "Exited (0)" not in c.status
-            is_bad = is_unhealthy or is_stopped
+            is_restarting = "restarting" in c.status.lower()
+            is_bad = is_unhealthy or is_stopped or is_restarting
 
             prev_bad = self._previous_states.get(c.name)
 
@@ -112,7 +122,7 @@ class MonitorService:
                 await self._send_recovery_alert(c.name, c.status)
 
     async def _check_system_resources(self) -> None:
-        """Проверить критическую нагрузку на диск и оперативную память."""
+        """Проверить критическую или повышенную нагрузку на диск и оперативную память."""
         now = time.time()
         # Лимит повтора алертов по ресурсам: не чаще 1 раза в 15 минут
         if now - self._last_resource_alert_time < 900:
@@ -123,12 +133,20 @@ class MonitorService:
 
         if metrics["disk_percent"] >= 92.0:
             alerts.append(
-                f"💾 <b>Критически мало места на диске!</b> Занято: <b>{metrics['disk_percent']}%</b> (свободно {metrics['disk_free']})"
+                f"🚨 <b>Критически мало места на диске!</b> Занято: <b>{metrics['disk_percent']}%</b> (свободно {metrics['disk_free']})"
+            )
+        elif metrics["disk_percent"] >= 85.0:
+            alerts.append(
+                f"⚠️ <b>Повышенное заполнение диска:</b> <b>{metrics['disk_percent']}%</b> (свободно {metrics['disk_free']})"
             )
 
-        if metrics["ram_percent"] >= 95.0:
+        if metrics["ram_percent"] >= 92.0:
             alerts.append(
-                f"🧠 <b>Критическая загрузка RAM!</b> Занято: <b>{metrics['ram_percent']}%</b> ({metrics['ram_used']} / {metrics['ram_total']})"
+                f"🚨 <b>Критическая загрузка RAM!</b> Занято: <b>{metrics['ram_percent']}%</b> ({metrics['ram_used']} / {metrics['ram_total']})"
+            )
+        elif metrics["ram_percent"] >= 85.0:
+            alerts.append(
+                f"⚠️ <b>Повышенная загрузка RAM:</b> <b>{metrics['ram_percent']}%</b> ({metrics['ram_used']} / {metrics['ram_total']})"
             )
 
         if alerts:
@@ -138,6 +156,47 @@ class MonitorService:
                 await self.bot.send_message(chat_id=self.admin_id, text=msg, parse_mode="HTML")
             except Exception as e:
                 logger.error("Не удалось отправить системный алерт в Telegram: %s", e)
+
+    async def _check_scheduled_backup(self) -> None:
+        """Периодическое автоматическое создание резервной копии БД раз в сутки."""
+        if not self.settings:
+            return
+
+        now = time.time()
+        # Если это первый запуск монитора, планируем первый бэкап через 1 час, чтобы не грузить старт
+        if self._last_backup_time == 0.0:
+            self._last_backup_time = now - (self.backup_interval_seconds - 3600)
+            return
+
+        if now - self._last_backup_time < self.backup_interval_seconds:
+            return
+
+        self._last_backup_time = now
+        logger.info("Запуск автоматического планового резервного копирования БД...")
+        try:
+            from bots.telegram.bot import perform_database_backup
+
+            ok, data, filename = await perform_database_backup(self.docker_client, self.settings)
+            if ok and data:
+                size_mb = len(data) / (1024 * 1024)
+                logger.info("Автоматический бэкап успешно создан: %s (%.2f МБ)", filename, size_mb)
+                if self.alerts_enabled and self.admin_id > 0:
+                    msg = (
+                        f"💾 <b>Автоматический бэкап БД создан успешно</b>\n\n"
+                        f"📁 <b>Файл:</b> <code>{filename}</code>\n"
+                        f"📦 <b>Размер:</b> {size_mb:.2f} МБ\n"
+                        f"🕒 <b>Хранение:</b> сохранено локально с ротацией 7 дней."
+                    )
+                    with contextlib.suppress(Exception):
+                        await self.bot.send_message(chat_id=self.admin_id, text=msg, parse_mode="HTML")
+            else:
+                logger.error("Сбой автоматического бэкапа: %s", filename)
+                if self.alerts_enabled and self.admin_id > 0:
+                    alert_msg = f"❌ <b>Сбой планового бэкапа базы данных!</b>\n\n<code>{filename}</code>"
+                    with contextlib.suppress(Exception):
+                        await self.bot.send_message(chat_id=self.admin_id, text=alert_msg, parse_mode="HTML")
+        except Exception as exc:
+            logger.error("Исключение при выполнении планового бэкапа: %s", exc)
 
     async def _send_failure_alert(self, container_name: str, status: str) -> None:
         """Отправить тревожный алерт о сбое контейнера."""

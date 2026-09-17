@@ -110,6 +110,9 @@ class Ticket(Base):
         Index("ix_tickets_department_id", "department_id"),
         Index("ix_tickets_status", "status"),
         Index("ix_tickets_created_at", "created_at"),
+        Index("ix_tickets_dept_status", "department_id", "status"),
+        Index("ix_tickets_status_created_at", "status", "created_at"),
+        Index("ix_tickets_dept_created_at", "department_id", "created_at"),
     )
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)

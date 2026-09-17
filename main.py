@@ -14,7 +14,9 @@
 """
 
 import asyncio
+import contextlib
 import logging
+import signal
 import socket
 import sys
 
@@ -131,19 +133,75 @@ async def run_vk_polling() -> None:
         retry_delay = min(retry_delay * 2, 300)
 
 
-async def run_bot_service() -> None:
-    """Запуск сервиса бота в зависимости от выбранного режима VK_MODE."""
-    await _start_scheduler()
-    if settings.VK_MODE == "callback":
-        logger.info(
-            "VK интеграция запущена в режиме Callback API. "
-            "События принимаются через HTTP webhook в веб-сервисе."
-        )
-        while True:
-            await asyncio.sleep(3600)
+async def _shutdown_background_services() -> None:
+    """Корректное завершение фоновых задач и освобождение ресурсов базы данных."""
+    logger.info("Запуск graceful shutdown сервиса бота...")
 
-    logger.info("VK интеграция запущена в режиме Long Poll")
-    await run_vk_polling()
+    # 1. Отмена всех активных фоновых задач
+    tasks_to_cancel = [t for t in _background_tasks if not t.done()]
+    if tasks_to_cancel:
+        logger.info("Отмена %d активных фоновых задач...", len(tasks_to_cancel))
+        for t in tasks_to_cancel:
+            t.cancel()
+        with contextlib.suppress(Exception):
+            await asyncio.wait(tasks_to_cancel, timeout=5.0)
+
+    # 2. Закрытие пула соединений SQLAlchemy / asyncpg
+    try:
+        from core.database import engine
+
+        await engine.dispose()
+        logger.info("Пул соединений базы данных успешно освобождён.")
+    except Exception as err:
+        logger.warning("Ошибка при освобождении пула БД: %s", err)
+
+    # 3. Закрытие сессии VK API
+    try:
+        if hasattr(vk_bot.api.http_client, "close"):
+            await vk_bot.api.http_client.close()
+    except Exception as err:
+        logger.debug("Ошибка закрытия http-клиента VK: %s", err)
+
+    logger.info("Сервис бота корректно завершил работу.")
+
+
+async def run_bot_service() -> None:
+    """Запуск сервиса бота в зависимости от выбранного режима VK_MODE с поддержкой graceful shutdown."""
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def _signal_handler() -> None:
+        logger.info("Получен сигнал завершения процесса бота...")
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError, RuntimeError):
+            loop.add_signal_handler(sig, _signal_handler)
+
+    await _start_scheduler()
+    try:
+        if settings.VK_MODE == "callback":
+            logger.info(
+                "VK интеграция запущена в режиме Callback API. "
+                "События принимаются через HTTP webhook в веб-сервисе."
+            )
+            while not stop_event.is_set():
+                await asyncio.sleep(1)
+        else:
+            logger.info("VK интеграция запущена в режиме Long Poll")
+            polling_task = asyncio.create_task(run_vk_polling())
+            stop_task = asyncio.create_task(stop_event.wait())
+            try:
+                done, pending = await asyncio.wait(
+                    [polling_task, stop_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for p in pending:
+                    p.cancel()
+            except asyncio.CancelledError:
+                pass
+    finally:
+        await _shutdown_background_services()
 
 
 def run() -> None:

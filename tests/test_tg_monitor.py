@@ -104,35 +104,49 @@ async def test_monitor_service_alerts():
     bot = mock.AsyncMock()
     docker = mock.AsyncMock(spec=DockerClient)
 
-    # 1 такт: контейнер работает штатно
-    c_ok = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (healthy)", "healthy", True)
-    docker.list_containers.return_value = [c_ok]
+    normal_metrics = {
+        "cpu_percent": 10.0,
+        "cpu_count": 4,
+        "ram_total": "16 GB",
+        "ram_used": "4 GB",
+        "ram_percent": 25.0,
+        "disk_total": "100 GB",
+        "disk_used": "30 GB",
+        "disk_free": "70 GB",
+        "disk_percent": 30.0,
+        "uptime_str": "1 day",
+    }
 
-    monitor = MonitorService(bot, admin_id=12345, docker_client=docker, check_interval=10, alerts_enabled=True)
+    with mock.patch("bots.telegram.monitor_service.get_system_metrics", return_value=normal_metrics):
+        # 1 такт: контейнер работает штатно
+        c_ok = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (healthy)", "healthy", True)
+        docker.list_containers.return_value = [c_ok]
 
-    await monitor.check_all()
-    bot.send_message.assert_not_called()
+        monitor = MonitorService(bot, admin_id=12345, docker_client=docker, check_interval=10, alerts_enabled=True)
 
-    # 2 такт: контейнер сбоит
-    c_bad = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (unhealthy)", "unhealthy", True)
-    docker.list_containers.return_value = [c_bad]
+        await monitor.check_all()
+        bot.send_message.assert_not_called()
 
-    await monitor.check_all()
-    assert bot.send_message.call_count == 1
-    call_args = bot.send_message.call_args[1]
-    assert "СБОЙ СЕРВИСА" in call_args["text"]
-    assert "oss_bot_app" in call_args["text"]
+        # 2 такт: контейнер сбоит
+        c_bad = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (unhealthy)", "unhealthy", True)
+        docker.list_containers.return_value = [c_bad]
 
-    # 3 такт: контейнер всё ещё сбоит -> повторный алерт не должен слаться сразу (защита от спама)
-    await monitor.check_all()
-    assert bot.send_message.call_count == 1
+        await monitor.check_all()
+        assert bot.send_message.call_count == 1
+        call_args = bot.send_message.call_args[1]
+        assert "СБОЙ СЕРВИСА" in call_args["text"]
+        assert "oss_bot_app" in call_args["text"]
 
-    # 4 такт: контейнер восстановился -> отправляется сообщение о восстановлении
-    docker.list_containers.return_value = [c_ok]
-    await monitor.check_all()
-    assert bot.send_message.call_count == 2
-    recovery_args = bot.send_message.call_args[1]
-    assert "ВОССТАНОВЛЕНИЕ" in recovery_args["text"]
+        # 3 такт: контейнер всё ещё сбоит -> повторный алерт не должен слаться сразу (защита от спама)
+        await monitor.check_all()
+        assert bot.send_message.call_count == 1
+
+        # 4 такт: контейнер восстановился -> отправляется сообщение о восстановлении
+        docker.list_containers.return_value = [c_ok]
+        await monitor.check_all()
+        assert bot.send_message.call_count == 2
+        recovery_args = bot.send_message.call_args[1]
+        assert "ВОССТАНОВЛЕНИЕ" in recovery_args["text"]
 
 
 def test_backup_button_in_keyboards():
@@ -219,4 +233,33 @@ async def test_cmd_backup_handler():
     call_kwargs = msg.answer_document.call_args[1]
     assert "Резервная копия базы данных успешно создана" in call_kwargs["caption"]
     assert call_kwargs["document"].filename.startswith("oss_bot_backup_")
+
+
+def test_rotate_old_backups(tmp_path):
+    import time
+    from bots.telegram.bot import rotate_old_backups
+
+    # Создаем 3 тестовых файла: 1 свежий, 2 старых
+    fresh = tmp_path / "oss_bot_backup_2026-09-18_01-00-00.sql.gz"
+    fresh.write_bytes(b"fresh")
+
+    old1 = tmp_path / "oss_bot_backup_2026-08-01_01-00-00.sql.gz"
+    old1.write_bytes(b"old1")
+
+    old2 = tmp_path / "oss_bot_backup_2026-08-02_01-00-00.sql.gz"
+    old2.write_bytes(b"old2")
+
+    # Устанавливаем mtime для старых файлов (10 и 20 дней назад)
+    ten_days_ago = time.time() - (10 * 86400)
+    twenty_days_ago = time.time() - (20 * 86400)
+    import os
+    os.utime(str(old1), (ten_days_ago, ten_days_ago))
+    os.utime(str(old2), (twenty_days_ago, twenty_days_ago))
+
+    deleted = rotate_old_backups(backup_dir=str(tmp_path), max_days=7)
+    assert deleted == 2
+    assert fresh.exists()
+    assert not old1.exists()
+    assert not old2.exists()
+
 
