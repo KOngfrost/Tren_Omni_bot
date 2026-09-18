@@ -10,6 +10,8 @@ services:
     container_name: oss_bot_db
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 256m
+    memswap_limit: 256m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -30,6 +32,8 @@ services:
     container_name: oss_bot_pgbouncer
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 64m
+    memswap_limit: 64m
     environment:
       - DB_HOST=db
       - DB_PORT=5432
@@ -77,6 +81,8 @@ services:
     container_name: oss_bot_app
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 256m
+    memswap_limit: 256m
     env_file:
       - .env
     environment:
@@ -106,6 +112,8 @@ services:
     container_name: oss_bot_tailscale
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 64m
+    memswap_limit: 64m
     hostname: oss-web-panel
     environment:
       - TS_AUTHKEY=${TAILSCALE_AUTH_KEY:?TAILSCALE_AUTH_KEY is required in .env}
@@ -125,6 +133,8 @@ services:
     container_name: oss_bot_redis
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 64m
+    memswap_limit: 64m
     command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -141,6 +151,8 @@ services:
     container_name: oss_bot_web
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 640m
+    memswap_limit: 640m
     env_file:
       - .env
     environment:
@@ -166,6 +178,8 @@ services:
     container_name: oss_bot_prometheus
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 128m
+    memswap_limit: 128m
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -174,6 +188,12 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       web-admin:
         condition: service_healthy
@@ -185,6 +205,8 @@ services:
     container_name: oss_bot_tg_monitor
     restart: unless-stopped
     logging: *default-logging
+    mem_limit: 256m
+    memswap_limit: 256m
     env_file:
       - .env
     environment:
@@ -193,6 +215,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/backups/oss_bot:/var/backups/oss_bot
     command: python scripts/run_tg_monitor.py
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -u ${REDIS_URL:-redis://redis:6379/0} ping > /dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
       redis:
         condition: service_healthy

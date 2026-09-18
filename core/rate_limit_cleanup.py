@@ -51,21 +51,26 @@ async def purge_stale_attempts(now: datetime | None = None) -> dict[str, int]:
                     {"cutoff": cutoff},
                 )
                 deleted[table] = getattr(result, "rowcount", 0)
+                await session.commit()
             except Exception:
+                await session.rollback()
                 logger.warning("Rate-limit cleanup: ошибка очистки %s", table, exc_info=True)
                 deleted[table] = 0
-        await session.commit()
     return deleted
 
 
 async def _cleanup_loop() -> None:
     """Бесконечный цикл периодической очистки устаревших записей."""
+    from core.task_dispatcher import single_instance_guard
+
     while True:
         try:
             await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
-            deleted = await purge_stale_attempts()
-            if any(v > 0 for v in deleted.values()):
-                logger.info("Rate-limit cleanup завершена: %s", deleted)
+            async with single_instance_guard("rate-limit-cleanup") as is_leader:
+                if is_leader:
+                    deleted = await purge_stale_attempts()
+                    if any(v > 0 for v in deleted.values()):
+                        logger.info("Rate-limit cleanup завершена: %s", deleted)
         except asyncio.CancelledError:
             raise
         except Exception:

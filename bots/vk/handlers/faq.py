@@ -61,8 +61,14 @@ async def faq_department_handler(message: Message):
             )
             if dept:
                 stmt = stmt.where(FAQNode.department_id == dept.id)
+            else:
+                await message.answer(
+                    f"Раздел «{dept_raw}» не найден.\nВыберите раздел из списка:",
+                    keyboard=build_back_nav_keyboard("К разделам вопросов"),
+                )
+                return
 
-        nodes = list(await session.scalars(stmt))
+        nodes = list(await session.scalars(stmt.limit(25)))
 
     if not nodes:
         await message.answer(

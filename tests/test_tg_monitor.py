@@ -236,7 +236,9 @@ async def test_cmd_backup_handler():
 
 
 def test_rotate_old_backups(tmp_path):
+    import os
     import time
+
     from bots.telegram.bot import rotate_old_backups
 
     # Создаем 3 тестовых файла: 1 свежий, 2 старых
@@ -252,7 +254,6 @@ def test_rotate_old_backups(tmp_path):
     # Устанавливаем mtime для старых файлов (10 и 20 дней назад)
     ten_days_ago = time.time() - (10 * 86400)
     twenty_days_ago = time.time() - (20 * 86400)
-    import os
     os.utime(str(old1), (ten_days_ago, ten_days_ago))
     os.utime(str(old2), (twenty_days_ago, twenty_days_ago))
 

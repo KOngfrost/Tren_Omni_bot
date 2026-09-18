@@ -115,6 +115,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await close_redis_client()
 
+    from core.database import dispose_engine
+
+    await dispose_engine()
+    logger.info("Пул соединений с БД веб-панели корректно закрыт")
+
 
 app = FastAPI(
     title="oss-web-panel",

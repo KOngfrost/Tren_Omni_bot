@@ -8,6 +8,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiosmtplib
@@ -188,6 +189,20 @@ def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
         sheet.column_dimensions[column[0].column_letter].width = max_length + 2
 
 
+def _sanitize_excel_cell(val: Any) -> Any:
+    """Защита от Formula / CSV Injection (CWE-1236).
+
+    Если строка начинается с формульного символа (=, +, -, @, \t, \r),
+    добавляет ведущую одинарную кавычку, чтобы Excel интерпретировал значение как текст.
+    """
+    if not isinstance(val, str):
+        return val
+    stripped = val.lstrip()
+    if stripped and stripped[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{val}"
+    return val
+
+
 def _build_department_sheets(workbook: Workbook, data: dict) -> None:
     """Формирует листы 2–N+1 с подробным реестром тикетов по каждому отделу.
 
@@ -257,12 +272,12 @@ def _build_department_sheets(workbook: Workbook, data: dict) -> None:
                 [
                     ticket.id,
                     created_str,
-                    full_name,
-                    dormitory,
-                    ticket.topic or "",
-                    ticket.description or "",
+                    _sanitize_excel_cell(full_name),
+                    _sanitize_excel_cell(dormitory),
+                    _sanitize_excel_cell(ticket.topic or ""),
+                    _sanitize_excel_cell(ticket.description or ""),
                     status_label(ticket.status),
-                    ticket.response_text or "",
+                    _sanitize_excel_cell(ticket.response_text or ""),
                     marker,
                 ]
             )

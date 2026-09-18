@@ -142,6 +142,20 @@ class RedisSessionMiddleware:
                     hash(json.dumps(current_session, sort_keys=True, default=str)) != initial_hash
                     or not raw_cookie
                 ):
+                    # Защита от Session Fixation: при входе пользователя
+                    # (появление ключа "user" в сессии) или флаге session_rotate
+                    # генерируем новый session_id и удаляем старый ключ из Redis.
+                    was_authenticated = bool(data.get("user"))
+                    now_authenticated = bool(current_session.get("user"))
+                    should_rotate = (not was_authenticated and now_authenticated) or scope.get("session_rotate")
+
+                    if should_rotate and session_id and redis is not None:
+                        try:
+                            await redis.delete(f"session:{session_id}")
+                        except Exception as e:
+                            logger.debug("Не удалось удалить старую сессию при ротации: %s", e)
+                        session_id = None
+
                     cookie_val, session_id = await self._persist_session(
                         current_session, session_id, redis
                     )

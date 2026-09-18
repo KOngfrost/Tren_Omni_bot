@@ -98,13 +98,21 @@ async def deliver_pending_messages(
     if not to_send:
         return 0
 
-    results: list[tuple[int, int, bool]] = []
+    results: list[tuple[int, int, bool, str | None]] = []
     for msg_id, vk_id, text in to_send:
-        ok = await send_vk_message(vk_id, text)
-        results.append((msg_id, vk_id, ok))
+        try:
+            ok = await send_vk_message(vk_id, text)
+            err = None if ok else "VK API вернул статус неуспешной отправки"
+        except Exception as e:
+            logger.exception("Outbox: непредвиденная ошибка отправки msg_id=%s vk_id=%s", msg_id, vk_id)
+            ok = False
+            err = f"Ошибка отправки: {type(e).__name__}: {e}"
+        results.append((msg_id, vk_id, ok, err))
+        if len(to_send) > 1:
+            await asyncio.sleep(0.05)
 
     async with async_session_maker() as session:
-        for msg_id, _vk_id, ok in results:
+        for msg_id, _vk_id, ok, err in results:
             result = await session.get(VkOutbox, msg_id)
             if result is None or result.status != "sending":
                 continue
@@ -117,7 +125,7 @@ async def deliver_pending_messages(
                 delivered += 1
                 logger.info("Outbox: сообщение #%s доставлено vk_id=%s", result.id, result.vk_id)
             else:
-                result.error = "VK API недоступен или токен не задан"
+                result.error = err or "VK API недоступен или токен не задан"
                 if result.attempts >= OUTBOX_MAX_ATTEMPTS:
                     result.status = "failed"
                     result.claimed_at = None

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import gettext as gettext_module
+import logging
 import re
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -29,6 +30,8 @@ from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Формы одного msgid разделяются символом "|": "заявка|заявки|заявок".
 PLURAL_FORM_SEPARATOR = "|"
@@ -146,7 +149,8 @@ def load_catalog(locale: str) -> gettext_module.NullTranslations:
             localedir=str(translations_dir()),
             fallback=None,
         )
-    except OSError:
+    except (OSError, Exception) as exc:
+        logger.warning("Не удалось загрузить каталог локализации для '%s': %s", code, exc)
         return fallback
     if isinstance(catalog, gettext_module.NullTranslations):
         return fallback

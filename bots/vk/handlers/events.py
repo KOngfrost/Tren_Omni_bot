@@ -79,16 +79,17 @@ async def register_event_handler(message: Message):
             return
         event_title = event.title
         event_date = event.event_date
-        now = datetime.now(UTC)
-        event_dt = (
-            event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
-        )
-        if event_dt < now:
-            await message.answer(
-                "Нельзя записаться на прошедшее мероприятие.",
-                keyboard=await _main_keyboard_for(message.from_id),
+        if event_date is not None:
+            now = datetime.now(UTC)
+            event_dt = (
+                event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
             )
-            return
+            if event_dt < now:
+                await message.answer(
+                    "Нельзя записаться на прошедшее мероприятие.",
+                    keyboard=await _main_keyboard_for(message.from_id),
+                )
+                return
         session.add(Registration(user_id=user.id, event_id=event_id))
         try:
             await session.commit()

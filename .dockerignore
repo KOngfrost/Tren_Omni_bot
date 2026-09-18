@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 *.py[cod]
 *.class
 *.so
@@ -50,6 +50,8 @@ TECHNICAL_SPEC.md
 WEB_ADMIN_GUIDE.md
 Dockerfile
 Dockerfile.web
+Dockerfile.monitor
+*.bundle
 docker-compose.yml
 docker-compose.tailscale.override.yml
 .dockerignore

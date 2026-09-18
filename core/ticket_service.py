@@ -91,25 +91,18 @@ ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {
 
 COMPLETED_STATUSES = {TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO}
 
-# Человекочитаемые названия статусов для бота и веб-панели.
-# Enum-значения (NEW, IN_PROGRESS...) пользователям не показываются.
-STATUS_LABELS: dict[TicketStatus, str] = {
-    TicketStatus.NEW: "Новое",
-    TicketStatus.IN_PROGRESS: "В обработке",
-    TicketStatus.TRANSFERRED_ADMIN: "Передано в администрацию",
-    TicketStatus.TRANSFERRED_HOUSEKEEPING: "Передано в локальный Студсовет",
-    TicketStatus.COMPLETED: "Выполнено",
-    TicketStatus.COMPLETED_AUTO: "Выполнено (авто)",
-    TicketStatus.ANONYMOUS: "Анонимное",
-}
+def status_label(status: "TicketStatus | str | None") -> str:
+    """Русская метка статуса (безопасно для любого входа).
 
-
-def status_label(status: TicketStatus | str | None) -> str:
-    """Русская метка статуса (безопасно для любого входа)."""
+    Поскольку TicketStatus является StrEnum, его .value уже содержит
+    человекочитаемое русское название (напр., «В обработке»).
+    Отдельный словарь STATUS_LABELS был удалён как дублирующий .value и
+    создающий риск рассинхронизации при добавлении новых статусов.
+    """
     if status is None:
         return "—"
     if isinstance(status, TicketStatus):
-        return STATUS_LABELS.get(status, status.value)
+        return status.value
     return status
 
 
@@ -597,28 +590,6 @@ async def create_ticket(
 
         return ticket
 
-
-async def create_anonymous_ticket(
-    topic: str,
-    description: str,
-    vk_id: int | None = None,
-    keep_identity: bool = False,
-    department_name: str | None = None,
-) -> Ticket:
-    """Обратная совместимость: анонимное обращение (с опциональным отделом).
-
-    .. deprecated:: 0.7.9
-       Используйте напрямую :func:`create_ticket`.
-    """
-    return await create_ticket(
-        topic=topic,
-        description=description,
-        vk_id=vk_id,
-        keep_identity=keep_identity,
-        department_name=department_name,
-    )
-
-
 async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket | None:
     """Добавить ответ студента в принадлежащую ему заявку.
 
@@ -632,7 +603,7 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
             .join(User, Ticket.user_id == User.id)
             .options(selectinload(Ticket.user), selectinload(Ticket.department))
             .where(Ticket.id == ticket_id, User.vk_id == vk_id)
-            .with_for_update()
+            .with_for_update(of=Ticket)
         )
         if ticket is None or ticket.is_anonymous:
             return None

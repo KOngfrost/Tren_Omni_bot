@@ -58,8 +58,14 @@ async def knowledge_department_handler(message: Message):
             )
             if dept:
                 stmt = stmt.where(KnowledgeBase.department_id == dept.id)
+            else:
+                await message.answer(
+                    f"Раздел «{dept_raw}» не найден.\nВыберите раздел из списка:",
+                    keyboard=build_back_nav_keyboard("К разделам Базы"),
+                )
+                return
 
-        entries = list(await session.scalars(stmt))
+        entries = list(await session.scalars(stmt.limit(10)))
 
     if not entries:
         await message.answer(
@@ -72,13 +78,18 @@ async def knowledge_department_handler(message: Message):
     cards = []
     for entry in entries:
         dept_name = entry.department.name if entry.department else "Общий"
+        ans = entry.answer or ""
+        if len(ans) > 400:
+            ans = ans[:400] + "..."
         card = (
-            f"📌 Тема / Теги: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{entry.answer}"
+            f"📌 Тема / Теги: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{ans}"
         )
         cards.append(card)
 
     divider = "\n\n" + "─" * 28 + "\n\n"
     response_text = f"📚 База знаний — {dept_raw}:\n\n" + divider.join(cards)
+    if len(response_text) > 4000:
+        response_text = response_text[:3990] + "\n\n[...]"
 
     await message.answer(
         response_text,
@@ -121,11 +132,16 @@ async def knowledge_search_handler(message: Message):
     cards = []
     for entry in entries:
         dept_name = entry.department.name if entry.department else "Общий"
-        card = f"📌 Тема: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{entry.answer}"
+        ans = entry.answer or ""
+        if len(ans) > 400:
+            ans = ans[:400] + "..."
+        card = f"📌 Тема: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{ans}"
         cards.append(card)
 
     divider = "\n\n" + "─" * 28 + "\n\n"
     response_text = f"🔍 Найдено в базе знаний по запросу «{query}»:\n\n" + divider.join(cards)
+    if len(response_text) > 4000:
+        response_text = response_text[:3990] + "\n\n[...]"
 
     await message.answer(
         response_text,

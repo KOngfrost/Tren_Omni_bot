@@ -1,4 +1,5 @@
 import enum
+from typing import ClassVar
 
 from sqlalchemy import (
     BigInteger,
@@ -254,8 +255,11 @@ class FAQNode(Base):
     )
     children: Mapped[list["FAQNode"]] = relationship("FAQNode", back_populates="parent")
 
-    # Transient field (not persisted to DB) — used by _attach_depths for tree rendering
-    depth: int = 0
+    # Transient (не персистируемое) поле — не является колонкой БД.
+    # Используется _attach_depths() для рендеринга дерева FAQ с отступами.
+    # ClassVar исключает поле из ORM-маппинга SQLAlchemy, предотвращая
+    # случайное добавление в INSERT/UPDATE запросы.
+    depth: ClassVar[int]
 
 
 class Subscription(Base):

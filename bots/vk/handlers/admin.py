@@ -25,7 +25,6 @@ from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import Ticket, TicketStatus
 from core.ticket_service import (
-    STATUS_LABELS,
     StatusTransitionError,
     change_ticket_status,
     status_label,
@@ -128,14 +127,14 @@ async def admin_tickets_handler(message: Message):
 
 
 def _parse_status(value: str) -> TicketStatus:
-    """Распознать статус по имени enum или по русской метке."""
+    """Распознать статус по имени enum или по русской метке (StrEnum.value)."""
     value = value.strip()
     try:
         return TicketStatus(value)
     except ValueError:
         pass
-    for status, label in STATUS_LABELS.items():
-        if label.lower() == value.lower():
+    for status in TicketStatus:
+        if status.value.lower() == value.lower():
             return status
     raise ValueError(f"Неизвестный статус: {value!r}")
 
@@ -144,9 +143,12 @@ def _parse_status(value: str) -> TicketStatus:
 async def admin_status_handler(message: Message):
     match = re.match(ADMIN_STATUS_PATTERN, message.text or "", re.DOTALL)
     if not match or not await _operator_can_access(message.from_id, int(match.group(1))):
+        user = await BotCore.get_or_create_user(vk_id=message.from_id)
+        is_adm = await BotCore.is_admin(user)
+        keyboard = build_admin_keyboard() if is_adm else await _main_keyboard_for(message.from_id)
         await message.answer(
             "Заявка не найдена или недоступна.",
-            keyboard=build_admin_keyboard(),
+            keyboard=keyboard,
         )
         return
     try:

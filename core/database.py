@@ -29,11 +29,14 @@ engine: AsyncEngine | None
 if settings.database_url:
     connect_args = {}
     if "asyncpg" in settings.database_url:
+        connect_args["command_timeout"] = 30.0
         if settings.DB_USE_PGBOUNCER or settings.DB_STATEMENT_CACHE_SIZE == 0:
             connect_args["statement_cache_size"] = 0
             connect_args["prepared_statement_cache_size"] = 0
         elif settings.DB_STATEMENT_CACHE_SIZE:
             connect_args["statement_cache_size"] = settings.DB_STATEMENT_CACHE_SIZE
+        if not settings.DB_USE_PGBOUNCER:
+            connect_args.setdefault("server_settings", {})["statement_timeout"] = "30000"
 
     engine = create_async_engine(
         settings.database_url,
@@ -113,6 +116,7 @@ async def ensure_database_exists(max_retries: int = 10, retry_delay: float = 2.0
                 database="postgres",
                 host=settings.db_host,
                 port=int(settings.DB_PORT),
+                timeout=10,
             )
             db_exists = await admin_conn.fetchval(
                 "SELECT 1 FROM pg_database WHERE datname = $1",

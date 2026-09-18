@@ -5,26 +5,38 @@
 давно не обновлял heartbeat.
 """
 
+import logging
 import os
 import tempfile
 import time
 from datetime import UTC, datetime
 
+logger = logging.getLogger(__name__)
+
 HEARTBEAT_FILE = os.getenv(
     "HEARTBEAT_FILE",
     os.path.join(tempfile.gettempdir(), "oss_bot_heartbeat"),
 )
-MAX_AGE_SECONDS = int(os.getenv("HEARTBEAT_MAX_AGE", "600"))  # 10 минут
+try:
+    MAX_AGE_SECONDS = int(os.getenv("HEARTBEAT_MAX_AGE", "600"))  # 10 минут
+except (ValueError, TypeError):
+    MAX_AGE_SECONDS = 600
 
 
 def touch_heartbeat() -> None:
-    """Обновить heartbeat-файл (текущий timestamp)."""
+    """Обновить heartbeat-файл (текущий timestamp) атомарно."""
+    tmp_file = f"{HEARTBEAT_FILE}.tmp.{os.getpid()}"
     try:
-        with open(HEARTBEAT_FILE, "w", encoding="utf-8") as fh:
+        with open(tmp_file, "w", encoding="utf-8") as fh:
             fh.write(str(time.time()))
-    except OSError:
-        # Heartbeat не должен ломать работу бота
-        pass
+        os.replace(tmp_file, HEARTBEAT_FILE)
+    except OSError as e:
+        logger.warning("Не удалось обновить heartbeat-файл %s: %s", HEARTBEAT_FILE, e)
+        try:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
+        except OSError:
+            pass
 
 
 def heartbeat_age_seconds() -> float | None:

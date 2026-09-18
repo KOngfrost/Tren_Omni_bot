@@ -347,6 +347,15 @@ async def ticket_identity_choice_handler(message: Message):
     topic = payload.get("topic", "Вопрос")
     department = payload.get("department")
 
+    if not str(description).strip():
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Сессия создания обращения истекла или текст вопроса пуст.\n"
+            "Пожалуйста, начните оформление обращения заново через главное меню.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+        return
+
     try:
         ticket = await create_ticket(
             topic=topic,

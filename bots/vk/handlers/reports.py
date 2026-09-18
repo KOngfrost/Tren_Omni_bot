@@ -7,9 +7,8 @@ from datetime import datetime, timedelta
 
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
-from vkbottle.exception_factory.base_exceptions import VKAPIError
 
-from bots.vk.common import _REPORT_PERIOD_PATTERN, ReportStates
+from bots.vk.common import _REPORT_PERIOD_PATTERN, ReportStates, _main_keyboard_for
 from bots.vk.keyboards import build_admin_cancel_keyboard, build_admin_keyboard
 from core.bot_core import BotCore
 from core.commands import (
@@ -92,6 +91,12 @@ async def report_by_date(message: Message):
 async def report_by_date_input(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
+        from bots.vk.bot import vk_bot
+
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
 
     parsed = parse_report_date(message.text)
@@ -106,7 +111,7 @@ async def report_by_date_input(message: Message):
     try:
         data = await get_report_for_date(parsed)
         report_dt = datetime.combine(parsed, datetime.min.time(), tzinfo=get_app_tz())
-        report_bytes = build_daily_report(data, report_dt)
+        report_bytes = await asyncio.to_thread(build_daily_report, data, report_dt)
         filename = f"report_{parsed:%Y-%m-%d}.xlsx"
         await send_report_to_vk(
             vk_bot.api,
@@ -155,6 +160,12 @@ async def report_by_period_handler(message: Message):
 async def report_by_period_input(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
+        from bots.vk.bot import vk_bot
+
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
 
     match = re.match(_REPORT_PERIOD_PATTERN, message.text or "")
@@ -174,6 +185,14 @@ async def report_by_period_input(message: Message):
 
     if date_from > date_to:
         await message.answer("Дата начала не может быть позже даты окончания.")
+        return
+
+    MAX_PERIOD_DAYS = 90
+    if (date_to - date_from).days > MAX_PERIOD_DAYS:
+        await message.answer(
+            f"Слишком большой период (максимум {MAX_PERIOD_DAYS} дней).\n"
+            "Пожалуйста, укажите меньший диапазон для выгрузки."
+        )
         return
 
     from bots.vk.bot import vk_bot

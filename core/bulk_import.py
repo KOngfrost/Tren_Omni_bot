@@ -267,13 +267,17 @@ def parse_file_or_text(
     if file_bytes and filename:
         fn = filename.lower()
         if fn.endswith((".xlsx", ".xlsm", ".xltx")):
-            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-            ws = wb.active
-            raw_rows.extend(
-                [str(v or "").strip() for v in row]
-                for row in ws.iter_rows(values_only=True)
-                if any(v is not None and str(v).strip() for v in row)
-            )
+            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+            try:
+                ws = wb.active
+                if ws is not None:
+                    raw_rows.extend(
+                        [str(v or "").strip() for v in row]
+                        for row in ws.iter_rows(values_only=True)
+                        if any(v is not None and str(v).strip() for v in row)
+                    )
+            finally:
+                wb.close()
             return raw_rows
         else:
             text = _decode_bytes(file_bytes)

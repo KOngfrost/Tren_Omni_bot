@@ -1,5 +1,4 @@
 import contextlib
-import os
 import secrets
 from pathlib import Path
 from typing import Any
@@ -194,7 +193,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="allow",
+        extra="ignore",
     )
 
     @classmethod
@@ -275,9 +274,6 @@ class Settings(BaseSettings):
             return [x.strip() for x in v.split(",") if x.strip()]
         return list(v or [])
 
-    REPORT_EMAILS = [
-        email.strip() for email in os.getenv("REPORT_EMAILS", "").split(",") if email.strip()
-    ]
 
     def __setattr__(self, name: str, value: Any) -> None:
         if "__pydantic_fields_set__" not in self.__dict__:

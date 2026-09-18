@@ -34,7 +34,7 @@ from core.vk_client import send_vk_message
 from web.security import otp_store
 from web.security.csrf import get_csrf_token
 from web.security.middleware import DBRateLimiter
-from web.security.passwords import verify_password
+from web.security.passwords import verify_dummy_password, verify_password
 from web.templating import templates
 
 logger = logging.getLogger(__name__)
@@ -384,6 +384,7 @@ async def _authenticate(
         )
         if web_user is not None:
             if not web_user.is_active:
+                verify_dummy_password(password)
                 return None
             if not verify_password(password, web_user.password_hash):
                 return None
@@ -410,6 +411,9 @@ async def _authenticate(
                 "needs_2fa": bool(settings.TWO_FACTOR_ENABLED),
                 "vk_admin_id": vk_admin_id,
             }
+        else:
+            # Защита от timing-атак: выравнивание времени при отсутствии пользователя
+            verify_dummy_password(password)
     except Exception:
         # БД недоступна — вход постоянного пользователя невозможен,
         # далее проверяется только bootstrap-путь (он тоже fail-closed)
