@@ -292,6 +292,16 @@ def parse_file_or_text(
     return raw_rows
 
 
+def _sanitize_excel_cell(val: Any) -> Any:
+    """Защита от Formula / CSV Injection."""
+    if not isinstance(val, str):
+        return val
+    stripped = val.lstrip()
+    if stripped and stripped[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{val}"
+    return val
+
+
 def export_faq_xlsx(nodes: list[Any]) -> bytes:
     """Выгрузить список частых вопросов в Excel."""
     wb = openpyxl.Workbook()
@@ -311,7 +321,12 @@ def export_faq_xlsx(nodes: list[Any]) -> bytes:
 
     for node in nodes:
         dept_name = node.department.name if getattr(node, "department", None) else "—"
-        ws.append([node.id, dept_name, node.question, node.final_answer or ""])
+        ws.append([
+            node.id, 
+            _sanitize_excel_cell(dept_name), 
+            _sanitize_excel_cell(node.question), 
+            _sanitize_excel_cell(node.final_answer or "")
+        ])
 
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 25
@@ -343,7 +358,12 @@ def export_knowledge_xlsx(items: list[Any]) -> bytes:
 
     for item in items:
         dept_name = item.department.name if getattr(item, "department", None) else "—"
-        ws.append([item.id, dept_name, item.keywords, item.answer])
+        ws.append([
+            item.id, 
+            _sanitize_excel_cell(dept_name), 
+            _sanitize_excel_cell(item.keywords), 
+            _sanitize_excel_cell(item.answer)
+        ])
 
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 25

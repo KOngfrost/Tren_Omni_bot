@@ -141,3 +141,12 @@ def build_events_keyboard(event_ids: list[int] | None = None) -> str:
     ]
     buttons.append(("Меню", "secondary"))
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+
+
+def build_knowledge_suggest_keyboard() -> str:
+    """Клавиатура с кнопкой создания заявки после предложения статьи из базы знаний."""
+    buttons = [
+        ("Создать заявку", "positive"),
+        ("Отмена", "negative"),
+    ]
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)

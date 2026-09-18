@@ -29,9 +29,11 @@ logger = logging.getLogger(__name__)
 # Размер партии и частота опроса настраиваются в .env (OUTBOX_BATCH_SIZE,
 # OUTBOX_INTERVAL_SECONDS). При нагрузке >2500 пользователей разумнее
 # выносить больше сообщений за проход, чем делать частые мелкие опросы.
-OUTBOX_BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", "50"))
-OUTBOX_RETRY_DELAY_SECONDS = int(os.getenv("OUTBOX_INTERVAL_SECONDS", "30"))
-OUTBOX_CLAIM_TIMEOUT_SECONDS = int(os.getenv("OUTBOX_CLAIM_TIMEOUT_SECONDS", "300"))
+from core.config import settings
+
+OUTBOX_BATCH_SIZE = settings.OUTBOX_BATCH_SIZE
+OUTBOX_RETRY_DELAY_SECONDS = settings.OUTBOX_INTERVAL_SECONDS
+OUTBOX_CLAIM_TIMEOUT_SECONDS = settings.OUTBOX_CLAIM_TIMEOUT_SECONDS
 
 
 # Ссылки на запущенные задачи доставки: без сильной ссылки GC может

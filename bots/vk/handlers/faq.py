@@ -95,7 +95,7 @@ async def faq_department_handler(message: Message):
     await message.answer("\n".join(lines), keyboard=keyboard)
 
 
-@faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопрос\s*#?|FAQ\s*#?|#)?(\d+)$"))
+@faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопрос\s*#?|FAQ\s*#?|#)(\d+)$"))
 async def faq_node_handler(message: Message):
     """Отображение конкретного ответа на вопрос по ID."""
     match = re.search(r"(\d+)", message.text or "")

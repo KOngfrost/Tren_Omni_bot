@@ -25,7 +25,7 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
     if saved_theme not in ("dark", "light", "system"):
         saved_theme = "dark"
 
-    glass_effect = request.cookies.get("app_glass", "true") != "false"
+    glass_effect = request.cookies.get("app_glass_effect", "true") != "false"
 
     return templates.TemplateResponse(
         "settings.html",

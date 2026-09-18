@@ -74,6 +74,11 @@ async def report_handler(message: Message):
 async def report_by_date(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
+        from bots.vk.common import _main_keyboard_for
+
+        await message.answer(
+            "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
 
     from bots.vk.bot import vk_bot
@@ -142,6 +147,11 @@ async def report_by_date_input(message: Message):
 async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
+        from bots.vk.common import _main_keyboard_for
+
+        await message.answer(
+            "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
         return
 
     from bots.vk.bot import vk_bot
@@ -231,6 +241,22 @@ async def report_by_period_input(message: Message):
             "Не удалось сформировать отчет за указанный период.",
             keyboard=build_admin_keyboard(),
         )
+
+
+@reports_labeler.private_message(state=ReportStates.WAITING_DATE)
+async def report_by_date_fallback(message: Message):
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.delete(message.from_id)
+    await message.answer("Неверный формат даты. Формирование отчета отменено.")
+
+
+@reports_labeler.private_message(state=ReportStates.WAITING_DATE_FROM)
+async def report_by_period_fallback(message: Message):
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.delete(message.from_id)
+    await message.answer("Неверный формат диапазона дат. Формирование отчета отменено.")
 
 
 # Алиасы для обратной совместимости

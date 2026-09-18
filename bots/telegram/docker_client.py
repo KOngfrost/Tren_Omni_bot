@@ -74,7 +74,7 @@ class DockerClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Создать httpx клиент через UDS (Unix Domain Socket)."""
         transport = httpx.AsyncHTTPTransport(uds=self.socket_path)
-        return httpx.AsyncClient(transport=transport, base_url="http://docker", timeout=15.0)
+        return httpx.AsyncClient(transport=transport, base_url="http://docker", timeout=120.0)
 
     async def ping(self) -> bool:
         """Проверить доступность Docker Engine API."""

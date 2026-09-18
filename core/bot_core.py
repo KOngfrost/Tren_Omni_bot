@@ -53,7 +53,11 @@ class BotCore:
                     raise RuntimeError(
                         f"Не удалось получить пользователя vk_id={vk_id} после race condition"
                     ) from None
+                # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker, 
+                # это ОК для скалярных атрибутов, но lazy-связи будут недоступны вне сессии.
                 return db_user
+            # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker, 
+            # это ОК для скалярных атрибутов, но lazy-связи будут недоступны вне сессии.
             return db_user
 
     @staticmethod
@@ -75,8 +79,6 @@ class BotCore:
                 return True
 
             # Проверка учётной записи веб-панели через связанного администратора
-            from core.models import WebRole, WebUser
-
             web_user = await session.scalar(
                 select(WebUser)
                 .join(Admin, WebUser.admin_id == Admin.id)

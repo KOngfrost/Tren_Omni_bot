@@ -5,6 +5,25 @@
 
 ---
 
+## [0.8.3.9] — 2026-09-19
+
+### Исправлено и улучшено
+- **Комплексный аудит и исправление системных багов**:
+  - `core/reporting.py`: исправлено переполнение `random_id` (диапазон `2**31 - 1`), актуализирован docstring `REPORT_CHUNK_SIZE`.
+  - `core/database.py`: добавлен lazy guard для `async_session_maker` при `engine is None`.
+  - `core/cache.py`: устранено задвоение счётчика удалённых ключей в `cache_delete_pattern`.
+  - `core/outbox.py`, `core/config.py`: параметры очереди outbox перенесены в Pydantic `Settings`.
+  - `core/bulk_import.py`: добавлена санитизация Excel-ячеек `_sanitize_excel_cell()` от Formula/CSV Injection.
+  - `core/ticket_service.py`: очищен избыточный `tuple()` в фильтрах SQLAlchemy.
+  - `bots/vk/handlers/faq.py`: исправлен regex FAQ-хендлера, исключён ложный перехват произвольных чисел.
+  - `bots/vk/handlers/reports.py`: добавлены fallback-хендлеры FSM со сбросом состояния при ошибках ввода даты; добавлено уведомление об отсутствии прав админа.
+  - `bots/vk/handlers/student.py`, `bots/vk/keyboards.py`: добавлена клавиатура с кнопкой «Создать заявку» при подсказке из базы знаний.
+  - `bots/telegram/`: таймаут клиента увеличен до 120с (`docker_client.py`), добавлена проверка наличия бинарников перезагрузки (`shutil.which`) в `/reboot`, учтён лимит 50 МБ Telegram Bot API для бэкапов.
+  - `web/routes/settings.py`: синхронизировано имя cookie оформления (`app_glass_effect`).
+  - `docker-compose.yml`: сокет Docker переведён в read-only (`:ro`), исправлен healthcheck сервиса `tg-monitor` на проверку через Python, добавлены флаги `--no-auth-warning`.
+
+---
+
 ## [0.8.3.5] — 2026-09-18
 
 ### Исправлено и улучшено

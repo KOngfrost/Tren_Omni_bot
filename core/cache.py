@@ -179,7 +179,7 @@ async def cache_delete(key: str) -> bool:
 
 async def cache_delete_pattern(pattern: str) -> int:
     """Удалить все ключи по маске (например, 'dept_stats:*')."""
-    total_deleted = 0
+    deleted_keys = set()
     redis = await get_redis_client()
     if redis is not None:
         try:
@@ -188,14 +188,17 @@ async def cache_delete_pattern(pattern: str) -> int:
                 async for k in redis.scan_iter(match=f"cache:{pattern}", count=100):
                     keys.append(k)
                     if len(keys) >= 500:
-                        total_deleted += await redis.delete(*keys)
+                        await redis.delete(*keys)
+                        deleted_keys.update(k.removeprefix("cache:") for k in keys)
                         keys.clear()
                 if keys:
-                    total_deleted += await redis.delete(*keys)
+                    await redis.delete(*keys)
+                    deleted_keys.update(k.removeprefix("cache:") for k in keys)
             else:
                 keys = await redis.keys(f"cache:{pattern}")
                 if keys:
-                    total_deleted = await redis.delete(*keys)
+                    await redis.delete(*keys)
+                    deleted_keys.update(k.removeprefix("cache:") for k in keys)
         except Exception as e:
             logger.debug("Redis cache_delete_pattern failed (%s): %s", pattern, e)
 
@@ -205,9 +208,9 @@ async def cache_delete_pattern(pattern: str) -> int:
     to_remove = [k for k in _memory_cache if fnmatch.fnmatch(k, pattern)]
     for k in to_remove:
         _memory_cache.pop(k, None)
-        total_deleted += 1
+        deleted_keys.add(k)
 
-    return total_deleted
+    return len(deleted_keys)
 
 
 async def cache_get_or_set(

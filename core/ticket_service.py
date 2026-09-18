@@ -146,7 +146,7 @@ async def get_user_tickets(
             .offset(offset)
         )
         if not include_completed:
-            stmt = stmt.where(Ticket.status.not_in(tuple(COMPLETED_STATUSES)))
+            stmt = stmt.where(Ticket.status.not_in(COMPLETED_STATUSES))
         result = await session.scalars(stmt)
         return list(result)
 

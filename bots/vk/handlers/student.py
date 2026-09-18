@@ -17,6 +17,7 @@ from bots.vk.keyboards import (
     build_admin_keyboard,
     build_anonymous_choice_keyboard,
     build_cancel_keyboard,
+    build_knowledge_suggest_keyboard,
     build_main_keyboard,
     build_tickets_keyboard,
 )
@@ -312,7 +313,7 @@ async def ticket_description_handler(message: Message):
         await message.answer(
             f"Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
             "Если ответ не подходит, напишите «Создать заявку», чтобы продолжить.",
-            keyboard=await _main_keyboard_for(message.from_id),
+            keyboard=build_knowledge_suggest_keyboard(),
         )
         return
 

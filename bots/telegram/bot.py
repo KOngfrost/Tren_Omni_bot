@@ -7,6 +7,7 @@ import gzip
 import html
 import logging
 import os
+import shutil
 import subprocess
 import time
 from collections.abc import Awaitable, Callable
@@ -343,13 +344,20 @@ async def callback_reboot_confirm(callback: CallbackQuery) -> None:
 
     try:
         if os.name != "nt":
-            subprocess.Popen(["sudo", "reboot"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            cmd = (
+                ["reboot"]
+                if shutil.which("sudo") is None and shutil.which("reboot")
+                else (["sudo", "reboot"] if shutil.which("sudo") else None)
+            )
+            if not cmd:
+                raise RuntimeError("Команда перезагрузки (reboot/sudo) недоступна внутри данного окружения.")
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
             subprocess.Popen(["shutdown", "/r", "/t", "5"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         logger.error("Ошибка команды reboot: %s", e)
         if callback.message:
-            await callback.message.edit_text(f"❌ Ошибка вызова reboot: {e}")
+            await callback.message.edit_text(f"❌ Не удалось выполнить перезагрузку: {e}")
 
 
 def rotate_old_backups(backup_dir: str | None = None, max_days: int = 7) -> int:
@@ -475,7 +483,19 @@ async def cmd_backup(
             f"📁 <b>Имя файла:</b> <code>{info}</code>"
         )
         if target_message:
-            await target_message.answer_document(document=doc, caption=caption, parse_mode="HTML")
+            if len(data) > 50 * 1024 * 1024:
+                caption += (
+                    "\n\n⚠️ <i>Размер архива превышает 50 МБ (лимит Telegram Bot API). "
+                    "Файл сохранён локально на сервере в каталоге бэкапов.</i>"
+                )
+                await target_message.answer(caption, parse_mode="HTML")
+            else:
+                try:
+                    await target_message.answer_document(document=doc, caption=caption, parse_mode="HTML")
+                except Exception as exc:
+                    logger.warning("Не удалось отправить файл бэкапа в Telegram: %s", exc)
+                    caption += f"\n\n⚠️ <i>Не удалось отправить документ в Telegram: {exc}. Архив сохранён на сервере.</i>"
+                    await target_message.answer(caption, parse_mode="HTML")
         if status_msg:
             with contextlib.suppress(Exception):
                 await status_msg.delete()

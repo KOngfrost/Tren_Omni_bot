@@ -24,10 +24,9 @@ from core.ticket_service import COMPLETED_STATUSES, status_label
 
 logger = logging.getLogger(__name__)
 
-# Размер пакета (chunk) потоковой выборки заявок для отчёта. Чтение идёт
-# порциями (stream + yield_per), поэтому в памяти одновременно находится
-# только один чанк курсора, а не весь период выборки (защита от OOM на
-# годовых отчётах). Переопределяется через env.
+# Размер пакета (chunk) выборки заявок для отчёта. Данные загружаются целиком
+# через result.all(), а не стримятся. Результаты конвертируются в лёгкие DTO
+# для снижения потребления памяти на больших отчётах. Переопределяется через env.
 REPORT_CHUNK_SIZE = int(os.environ.get("REPORT_CHUNK_SIZE", "1000"))
 
 
@@ -359,7 +358,7 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
 
     await api.messages.send(
         peer_id=admin_vk_id,
-        random_id=secrets.randbelow(2**31) + 1,
+        random_id=secrets.randbelow(2**31 - 1) + 1,
         message="Ежедневный отчёт.",
         attachment=attachment,
     )

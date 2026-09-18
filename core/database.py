@@ -66,7 +66,12 @@ else:
 # в приложении креды БД гарантированы (ensure_production_config).
 # Пустой engine (нет кредов) приведёт к ошибке только при запросе —
 # тип остаётся не-Optional, что честно для 35+ мест использования.
-async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def async_session_maker(*args, **kwargs):
+    if engine is None:
+        raise RuntimeError("Не удалось создать сессию: engine is None. Проверьте настройки БД.")
+    return _session_maker(*args, **kwargs)
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:

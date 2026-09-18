@@ -137,6 +137,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:8000"])
     WEB_OUTBOX_WORKER: bool = True
 
+    # Outbox
+    OUTBOX_BATCH_SIZE: int = 50
+    OUTBOX_INTERVAL_SECONDS: int = 30
+    OUTBOX_CLAIM_TIMEOUT_SECONDS: int = 300
+
     # Redis
     REDIS_URL: str | None = None
     CACHE_DEFAULT_TTL: int = 300
