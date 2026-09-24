@@ -11,6 +11,7 @@ from core.config import settings
 from core.heartbeat import touch_heartbeat
 from core.state_dispenser import RedisStateDispenser
 
+from bots.vk.polling import RobustBotPolling
 from bots.vk.common import (
     ReportStates,
     TicketStates,
@@ -77,6 +78,7 @@ from bots.vk.handlers.student import (
 
 vk_bot = Bot(
     token=settings.VK_BOT_TOKEN,
+    polling=RobustBotPolling(),
     # Ошибка #15: распределённый state dispenser. При WEB_WORKERS>1 и
     # VK_MODE=callback FSM-состояние студента хранится в Redis (TTL
     # BOT_STATE_TTL_SECONDS) и доступно любому воркеру Uvicorn, поэтому

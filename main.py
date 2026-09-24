@@ -86,10 +86,17 @@ async def _start_scheduler() -> None:
 
     _spawn_background_task(outbox_worker_loop())
 
-    # Периодическое обновление heartbeat для docker healthcheck
+    # Первичное обновление heartbeat при старте планировщика
+    touch_heartbeat()
+
+    # Периодическое обновление heartbeat для docker healthcheck:
+    # В режиме callback события приходят через webhook в веб-сервис, поэтому процесс
+    # бота обновляет heartbeat по таймеру. В режиме Long Poll heartbeat обновляется
+    # непосредственно в цикле RobustBotPolling при каждом успешном ответе от VK.
     async def _heartbeat_loop() -> None:
         while True:
-            touch_heartbeat()
+            if settings.VK_MODE == "callback":
+                touch_heartbeat()
             await asyncio.sleep(60)
 
     _spawn_background_task(_heartbeat_loop())
