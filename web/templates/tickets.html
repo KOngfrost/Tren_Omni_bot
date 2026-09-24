@@ -216,15 +216,6 @@ function openTicket(id) {
             }
             body += '</div>';
 
-            // Быстрые шаблоны ответов
-            body += '<div class="chat-quick-templates">';
-            body += '  <span class="chat-quick-label">Быстрые ответы:</span>';
-            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Уточните, пожалуйста, номер комнаты и общежития.\')">Номер комнаты</span>';
-            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Заявка принята в работу. Мастер подойдёт в течение рабочего дня.\')">Принято в работу</span>';
-            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Вопрос передан коменданту общежития для решения.\')">Коменданту</span>';
-            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Работы по вашей заявке выполнены. Пожалуйста, проверьте результат.\')">Работы выполнены</span>';
-            body += '</div>';
-
             // Форма ответа в диалог (AJAX)
             body += '<div class="chat-input-container">';
             body += '  <textarea id="chat-reply-input" class="chat-input-textarea" placeholder="Напишите ответ студенту... (Отправка: Ctrl + Enter)"></textarea>';
@@ -296,17 +287,6 @@ function openTicket(id) {
                 console.error('Ошибка загрузки заявки:', err);
             }
         });
-}
-
-function insertReplyTemplate(text) {
-    var input = document.getElementById('chat-reply-input');
-    if (!input) return;
-    if (input.value.trim().length > 0) {
-        input.value = input.value.trim() + ' ' + text;
-    } else {
-        input.value = text;
-    }
-    input.focus();
 }
 
 function sendTicketReply(ticketId) {

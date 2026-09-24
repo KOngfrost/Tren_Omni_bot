@@ -1401,42 +1401,6 @@ textarea::placeholder {
     white-space: pre-wrap;
 }
 
-.chat-quick-templates {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 10px;
-}
-
-.chat-quick-label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-tertiary);
-    margin-right: 2px;
-}
-
-.chat-quick-chip {
-    background: var(--bg-surface-2);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 3px 10px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    user-select: none;
-}
-
-.chat-quick-chip:hover {
-    background: var(--primary-soft);
-    color: var(--primary);
-    border-color: var(--primary);
-    transform: translateY(-1px);
-}
-
 .chat-input-container {
     display: flex;
     flex-direction: column;
