@@ -17,7 +17,7 @@ from pydantic_settings import (
 
 load_dotenv()
 
-from core import PROJECT_VERSION as _project_version  # noqa: E402
+from core import APP_VERSION as _app_version, PROJECT_VERSION as _project_version  # noqa: E402
 
 # Файл dev-фоллбэка секрета сессий (добавлен в .gitignore)
 _DEV_SECRET_FILE = Path(__file__).resolve().parent.parent / ".session_secret"
@@ -66,7 +66,14 @@ class _LenientDotEnvSource(DotEnvSettingsSource):
 class Settings(BaseSettings):
     """Единый класс настроек приложения на базе Pydantic BaseSettings."""
 
-    PROJECT_VERSION: str = _project_version
+    APP_VERSION: str = Field(
+        default=_app_version,
+        validation_alias=AliasChoices("APP_VERSION", "PROJECT_VERSION", "VERSION"),
+    )
+
+    @property
+    def PROJECT_VERSION(self) -> str:
+        return self.APP_VERSION
 
     # === Окружение ===
     APP_ENV: str = "development"

@@ -140,7 +140,7 @@
                 </div>
                 <div class="settings-info-item">
                     <div class="settings-info-label">Версия системы</div>
-                    <div class="settings-info-value">OSS Bot v{{ version }}</div>
+                    <div class="settings-info-value">OSS Bot v{{ version|default(app_version) }}</div>
                 </div>
             </div>
         </div>

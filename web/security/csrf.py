@@ -19,6 +19,8 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from core import PROJECT_VERSION
+
 CSRF_SESSION_KEY = "csrf_token"
 CSRF_HEADER_NAME = "x-csrf-token"
 CSRF_FORM_FIELD = "csrf_token"
@@ -67,7 +69,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     "<!DOCTYPE html>"
                     '<html lang="ru"><head><meta charset="UTF-8"><title>Ошибка безопасности — OSS Bot</title>'
                     '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-                    '<link rel="stylesheet" href="/static/style.css?v=0.8.3.11">'
+                    f'<link rel="stylesheet" href="/static/style.css?v={PROJECT_VERSION}">'
                     '</head><body>'
                     '<div class="auth-page-wrapper"><div class="login-card" style="max-width:480px; text-align:center;">'
                     '<div style="margin-bottom:12px;"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger, #ef4444);"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>'

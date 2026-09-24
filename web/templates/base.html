@@ -47,9 +47,9 @@
             window.CSRF_TOKEN = "{{ csrf_token|default('') }}";
         })();
     </script>
-    <link rel="stylesheet" href="/static/style.css?v=0.8.3.10">
-    <script src="/static/store.js?v=0.8.3.10" defer></script>
-    <script src="/static/app.js?v=0.8.3.10" defer></script>
+    <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
+    <script src="/static/store.js?v={{ app_version }}" defer></script>
+    <script src="/static/app.js?v={{ app_version }}" defer></script>
 </head>
 <body>
     <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
@@ -70,7 +70,7 @@
                         <span class="monogram" role="img" aria-label="Логотип OSS Bot">OB</span>
                         <span>
                             <span class="brand-name">OSS Bot</span>
-                            <span class="brand-sub">Панель управления v0.8.3.10</span>
+                            <span class="brand-sub">Панель управления v{{ app_version }}</span>
                         </span>
                     </a>
                     <div class="sidebar-top-actions">
@@ -151,7 +151,7 @@
                 </button>
                 <a href="/" class="mobile-brand" aria-label="OSS Bot главная страница">
                     <span class="monogram monogram-sm" role="img" aria-label="Логотип">OB</span>
-                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v0.8.3.10</small></span>
+                    <span class="brand-name">OSS Bot <small style="font-size: 11px; opacity: 0.7; font-weight: normal;">v{{ app_version }}</small></span>
                 </a>
                 <div class="top-nav-right">
                     {% block top_actions %}{% endblock %}
@@ -194,7 +194,7 @@
                 <div class="footer-container">
                     <div class="footer-copy">
                         <span>© 2026 OSS Bot</span>
-                        <span class="footer-version-badge">v0.8.3.10</span>
+                        <span class="footer-version-badge">v{{ app_version }}</span>
                     </div>
                     <div class="footer-links">
                         <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>
@@ -212,7 +212,7 @@
             <div class="footer-container">
                 <div class="footer-copy">
                     <span>© 2026 OSS Bot</span>
-                    <span class="footer-version-badge">v0.8.3.10</span>
+                    <span class="footer-version-badge">v{{ app_version }}</span>
                 </div>
                 <div class="footer-links">
                     <a href="/legal/privacy" class="footer-link">Политика конфиденциальности</a>

@@ -51,6 +51,8 @@ templates.env.install_gettext_callables(
 # потому что шаблоны рендерятся и вне HTTP-запроса (тесты, офлайн-генерация).
 templates.env.globals["csp_nonce"] = csp_nonce
 templates.env.globals["get_csrf_token"] = get_csrf_token
+templates.env.globals["app_version"] = settings.APP_VERSION
+templates.env.globals["project_version"] = settings.APP_VERSION
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
@@ -103,6 +105,8 @@ def render_admin_template(
         "request": request,
         "csrf_token": csrf_val,
         "department_name": getattr(request.state, "department_name", None),
+        "app_version": settings.APP_VERSION,
+        "project_version": settings.APP_VERSION,
         **context,
     }
     return templates.TemplateResponse(template_name, merged)
