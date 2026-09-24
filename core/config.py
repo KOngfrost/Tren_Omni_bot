@@ -1,11 +1,11 @@
 import contextlib
 import secrets
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_core import PydanticUndefined
 from pydantic_settings import (
     BaseSettings,
@@ -296,6 +296,12 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [x.strip() for x in v.split(",") if x.strip()]
         return list(v or [])
+
+    @model_validator(mode="after")
+    def _adjust_session_same_site(self) -> Self:
+        if self.SESSION_HTTPS_ONLY and self.SESSION_SAME_SITE == "lax":
+            self.SESSION_SAME_SITE = "none"
+        return self
 
 
     def __setattr__(self, name: str, value: Any) -> None:
