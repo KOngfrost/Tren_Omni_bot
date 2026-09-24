@@ -3,11 +3,11 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from core import PROJECT_VERSION
-from core.config import settings
+from core.two_factor import is_two_factor_enabled, set_two_factor_mode
 from web.dependencies import require_auth
 from web.security.csrf import get_csrf_token
 from web.templating import templates
@@ -26,6 +26,7 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
         saved_theme = "dark"
 
     glass_effect = request.cookies.get("app_glass_effect", "true") != "false"
+    two_factor_on = await is_two_factor_enabled()
 
     return templates.TemplateResponse(
         "settings.html",
@@ -36,7 +37,7 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
             "csrf_token": get_csrf_token(request),
             "current_theme": saved_theme,
             "glass_effect": glass_effect,
-            "two_factor_enabled": settings.TWO_FACTOR_ENABLED,
+            "two_factor_enabled": two_factor_on,
             "version": PROJECT_VERSION,
         },
     )
@@ -86,3 +87,39 @@ async def update_theme(
         httponly=False,
     )
     return response
+
+
+@router.post("/2fa")
+async def toggle_2fa(
+    request: Request,
+    user: dict = Depends(require_auth),
+    enabled: str | None = Form(None),
+):
+    """Включить или отключить двухфакторную аутентификацию (2FA) для панели.
+
+    Доступно только суперадминистраторам (SUPERADMIN).
+    """
+    if str(user.get("role", "")).upper() != "SUPERADMIN":
+        raise HTTPException(
+            status_code=403,
+            detail="Доступ запрещён: требуется роль суперадминистратора для изменения 2FA.",
+        )
+
+    is_enabled = enabled in ("true", "1", "on")
+    result = await set_two_factor_mode(is_enabled, updated_by=user.get("username", "admin"))
+
+    accept = request.headers.get("accept", "")
+    is_ajax = "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    if is_ajax:
+        return JSONResponse(
+            {
+                "success": True,
+                "enabled": is_enabled,
+                "updated_at": result.get("updated_at"),
+            }
+        )
+
+    status_msg = "включена" if is_enabled else "отключена"
+    request.session["flash_success"] = f"Двухфакторная аутентификация (2FA) успешно {status_msg}."
+    return RedirectResponse(url="/settings/", status_code=303)
+

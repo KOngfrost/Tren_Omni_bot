@@ -19,6 +19,7 @@ from core.config import settings
 from core.database import async_session_maker
 from core.models import Department, Ticket, TicketStatus
 from core.redis_client import is_redis_available
+from core.two_factor import is_two_factor_enabled
 from web.dependencies import get_admin_scope, require_auth, require_superadmin
 from web.routes.api import _get_all_departments_usage, _get_department_usage
 from web.routes.auth import require_crud_rate_limit
@@ -245,12 +246,13 @@ async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
         )
 
     redis_ok = await is_redis_available()
+    two_factor_on = await is_two_factor_enabled()
     stats = SystemStatsResponse(
         version=settings.PROJECT_VERSION,
         environment=settings.APP_ENV,
         redis_connected=redis_ok,
         sentry_enabled=bool(settings.SENTRY_DSN),
-        two_factor_enabled=settings.TWO_FACTOR_ENABLED,
+        two_factor_enabled=two_factor_on,
         total_tickets=total,
         active_tickets=active,
     )

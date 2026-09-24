@@ -31,6 +31,7 @@ from core import database as core_db
 from core.config import settings
 from core.database import get_db
 from core.models import Log, LoginAttempt, WebRole, WebUser
+from core.two_factor import is_two_factor_enabled
 from core.vk_client import send_vk_message
 from web.security import otp_store
 from web.security.csrf import get_csrf_token
@@ -333,8 +334,9 @@ async def _authenticate_bootstrap(
     if not password_ok:
         return None
 
+    two_factor_on = await is_two_factor_enabled()
     channel = _bootstrap_2fa_channel()
-    if settings.TWO_FACTOR_ENABLED and not channel:
+    if two_factor_on and not channel:
         logger.warning(
             "SECURITY AUDIT: BOOTSTRAP_LOGIN BLOCKED | user=%s | "
             "reason=2FA включена, но доверенный канал не настроен "
@@ -387,7 +389,7 @@ async def _authenticate_bootstrap(
         "web_user_id": None,
         "bootstrap": True,
         "department_id": None,
-        "needs_2fa": bool(settings.TWO_FACTOR_ENABLED),
+        "needs_2fa": bool(two_factor_on),
         "vk_admin_id": channel,
     }
 
@@ -422,7 +424,8 @@ async def _authenticate(
             vk_admin_id = (
                 web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
             )
-            if settings.TWO_FACTOR_ENABLED and not vk_admin_id:
+            two_factor_on = await is_two_factor_enabled()
+            if two_factor_on and not vk_admin_id:
                 # Нет доверенного канала — вход блокируется до привязки VK
                 logger.warning(
                     "SECURITY AUDIT: 2FA LOGIN BLOCKED | user=%s | "
@@ -436,7 +439,7 @@ async def _authenticate(
                 "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
                 "web_user_id": web_user.id,
                 "department_id": web_user.department_id,
-                "needs_2fa": bool(settings.TWO_FACTOR_ENABLED),
+                "needs_2fa": bool(two_factor_on),
                 "vk_admin_id": vk_admin_id,
             }
         else:
@@ -645,7 +648,8 @@ async def two_factor_verify(
             return RedirectResponse(url="/auth/login", status_code=302)
 
         vk_admin_id = web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
-        if settings.TWO_FACTOR_ENABLED and not vk_admin_id:
+        two_factor_on = await is_two_factor_enabled()
+        if two_factor_on and not vk_admin_id:
             await otp_store.cancel(request)
             request.session["flash_error"] = "Привязка VK-аккаунта снята — вход с 2FA невозможен."
             return RedirectResponse(url="/auth/login", status_code=302)
@@ -666,8 +670,9 @@ async def two_factor_verify(
             )
             return RedirectResponse(url="/auth/login", status_code=302)
 
+        two_factor_on = await is_two_factor_enabled()
         channel = _bootstrap_2fa_channel()
-        if settings.TWO_FACTOR_ENABLED and not channel:
+        if two_factor_on and not channel:
             await otp_store.cancel(request)
             request.session["flash_error"] = (
                 "Доверенный канал 2FA больше не настроен — вход отменён."

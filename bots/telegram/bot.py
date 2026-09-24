@@ -7,8 +7,6 @@ import gzip
 import html
 import logging
 import os
-import shutil
-import subprocess
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -32,6 +30,7 @@ from bots.telegram.monitor_service import MonitorService
 from bots.telegram.system_metrics import format_metrics_message, get_system_metrics
 from core.config import Settings
 from core.maintenance import get_maintenance_info, set_maintenance_mode
+from core.two_factor import get_two_factor_info, is_two_factor_enabled, set_two_factor_mode
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,8 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📊 Статус"), KeyboardButton(text="🔄 Перезапуск")],
             [KeyboardButton(text="📋 Логи"), KeyboardButton(text="💾 Бэкап")],
-            [KeyboardButton(text="🚧 Техработы"), KeyboardButton(text="ℹ️ Помощь")],
+            [KeyboardButton(text="🚧 Техработы"), KeyboardButton(text="🔐 2FA")],
+            [KeyboardButton(text="ℹ️ Помощь")],
         ],
         resize_keyboard=True,
     )
@@ -104,10 +104,18 @@ async def render_status_content(docker_client: DockerClient) -> tuple[str, Inlin
         else "🟢 <b>Выключен</b>"
     )
 
+    two_factor_on = await is_two_factor_enabled()
+    two_factor_status = (
+        "🟢 <b>ВКЛЮЧЕНА</b>"
+        if two_factor_on
+        else "⚪ <b>Отключена</b>"
+    )
+
     lines = [
         metrics_text,
         "",
         f"🚧 <b>Режим техработ:</b> {maint_status}",
+        f"🔐 <b>2FA (два фактора):</b> {two_factor_status}",
         "",
         "📦 <b>Контейнеры Docker:</b>",
     ]
@@ -138,6 +146,7 @@ async def render_status_content(docker_client: DockerClient) -> tuple[str, Inlin
             ],
             [
                 InlineKeyboardButton(text="🚧 Техработы", callback_data="maint:menu"),
+                InlineKeyboardButton(text="🔐 2FA", callback_data="2fa:menu"),
             ],
         ]
     )
@@ -161,6 +170,7 @@ async def cmd_start_help(message: Message) -> None:
         "📋 <b>/logs</b> — Просмотр свежих логов контейнера\n"
         "💾 <b>/backup</b> — Создать и выгрузить резервную копию базы данных\n"
         "🚧 <b>/maintenance</b> — Включение/отключение режима технических работ\n"
+        "🔐 <b>/2fa</b> — Включение/отключение двухфакторной аутентификации\n"
         "⚠️ <b>/reboot</b> — Перезапуск контейнеров проекта (с подтверждением)\n\n"
         "При любых сбоях (падение контейнера, переход в <i>unhealthy</i>) "
         "бот автоматически уведомит вас тревожным сообщением."
@@ -287,6 +297,109 @@ async def callback_maintenance_disable(callback: CallbackQuery) -> None:
     )
     await callback.answer("✅ Режим техработ ВЫКЛЮЧЕН! Системы работают штатно.", show_alert=True)
     text, keyboard = await render_maintenance_content()
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def render_two_factor_content() -> tuple[str, InlineKeyboardMarkup]:
+    """Сформировать текст и инлайн-клавиатуру управления 2FA."""
+    info = await get_two_factor_info()
+    enabled = info.get("enabled", True)
+    updated_at = info.get("updated_at", "")
+    updated_by = info.get("updated_by", "")
+
+    if enabled:
+        status_line = "🟢 <b>ВКЛЮЧЕНА</b> (Код подтверждения в VK)"
+        desc_line = (
+            "Для входа в веб-панель требуется ввести 6-значный одноразовый код, "
+            "который отправляется администратору в личные сообщения ВКонтакте.\n\n"
+            "При отключении 2FA авторизация в панель управления происходит "
+            "напрямую по логину и паролю без запроса OTP-кода."
+        )
+        buttons = [
+            [InlineKeyboardButton(text="⚪ Отключить 2FA", callback_data="2fa:disable")],
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="2fa:refresh"),
+                InlineKeyboardButton(text="📊 Статус", callback_data="status:refresh"),
+            ],
+        ]
+    else:
+        status_line = "⚪ <b>ОТКЛЮЧЕНА</b> (Вход по логину и паролю)"
+        desc_line = (
+            "Двухфакторная аутентификация выключена. Авторизация в веб-панель "
+            "осуществляется по логину и паролю без подтверждения через VK.\n\n"
+            "Рекомендуется включать 2FA в рабочей среде для защиты административного доступа."
+        )
+        buttons = [
+            [InlineKeyboardButton(text="🟢 Включить 2FA", callback_data="2fa:enable")],
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="2fa:refresh"),
+                InlineKeyboardButton(text="📊 Статус", callback_data="status:refresh"),
+            ],
+        ]
+
+    audit_part = ""
+    if updated_at:
+        audit_part = f"\n\n<i>Последнее изменение: {updated_at[:19]} ({updated_by})</i>"
+
+    text = (
+        f"🔐 <b>Управление двухфакторной аутентификацией (2FA)</b>\n\n"
+        f"Текущее состояние: {status_line}\n\n"
+        f"{desc_line}{audit_part}"
+    )
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.message(Command("2fa"))
+@router.message(F.text == "🔐 2FA")
+@router.callback_query(F.data == "2fa:menu")
+async def cmd_two_factor(event: Message | CallbackQuery) -> None:
+    """Управление двухфакторной аутентификацией (2FA)."""
+    text, keyboard = await render_two_factor_content()
+    if isinstance(event, CallbackQuery):
+        if event.message:
+            await event.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "2fa:refresh")
+async def callback_two_factor_refresh(callback: CallbackQuery) -> None:
+    """Обновление статуса 2FA."""
+    text, keyboard = await render_two_factor_content()
+    try:
+        if callback.message:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer("Статус 2FA обновлён.")
+    except Exception:
+        await callback.answer("Данные актуальны.")
+
+
+@router.callback_query(F.data == "2fa:enable")
+async def callback_two_factor_enable(callback: CallbackQuery) -> None:
+    """Включение 2FA."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    await set_two_factor_mode(
+        enabled=True,
+        updated_by=f"telegram:{user_id}",
+    )
+    await callback.answer("🔒 Двухфакторная аутентификация (2FA) ВКЛЮЧЕНА!", show_alert=True)
+    text, keyboard = await render_two_factor_content()
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "2fa:disable")
+async def callback_two_factor_disable(callback: CallbackQuery) -> None:
+    """Отключение 2FA."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    await set_two_factor_mode(
+        enabled=False,
+        updated_by=f"telegram:{user_id}",
+    )
+    await callback.answer("🔓 Двухфакторная аутентификация (2FA) ОТКЛЮЧЕНА! Вход доступен по логину и паролю.", show_alert=True)
+    text, keyboard = await render_two_factor_content()
     if callback.message:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
