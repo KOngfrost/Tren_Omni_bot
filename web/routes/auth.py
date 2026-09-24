@@ -14,6 +14,7 @@
   web.security.otp_store.
 """
 
+import ipaddress
 import logging
 import re
 import secrets
@@ -141,18 +142,45 @@ def _mask_vk_id(vk_admin_id: object) -> str:
     return f"***{digits[-4:]}" if digits else "***"
 
 
+def is_trusted_proxy(ip_str: str) -> bool:
+    """Проверить, является ли IP доверенным прокси (поддержка IP, CIDR и loopback)."""
+    if not ip_str or ip_str == "unknown":
+        return False
+    if ip_str in settings.TRUSTED_PROXIES:
+        return True
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    if addr.is_loopback:
+        return True
+    for trusted in settings.TRUSTED_PROXIES:
+        if not trusted:
+            continue
+        try:
+            if "/" in trusted:
+                if addr in ipaddress.ip_network(trusted, strict=False):
+                    return True
+            elif addr == ipaddress.ip_address(trusted):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _get_client_ip(request: Request) -> str:
     """Получить реальный IP клиента.
 
     X-Forwarded-For принимается ТОЛЬКО от доверенных прокси
-    (settings.TRUSTED_PROXIES). При прямой публикации панели подделка
-    заголовка больше не позволяет обойти rate-limit.
+    (settings.TRUSTED_PROXIES с поддержкой IP, CIDR и loopback).
     """
     client_ip = request.client.host if request.client else "unknown"
-    if client_ip in settings.TRUSTED_PROXIES:
+    if is_trusted_proxy(client_ip):
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            candidate = forwarded.split(",")[0].strip()
+            if candidate:
+                return candidate
     return client_ip
 
 

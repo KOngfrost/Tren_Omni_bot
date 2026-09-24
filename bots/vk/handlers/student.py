@@ -46,6 +46,7 @@ from core.ticket_service import (
     format_ticket_details,
     format_ticket_list,
     get_ticket_messages,
+    get_user_ticket_by_id,
     get_user_tickets,
     reply_to_ticket,
     status_label,
@@ -120,15 +121,19 @@ async def ticket_details_handler(message: Message):
         )
         return
 
-    local_id = int(match.group(1))
-    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+    parsed_id = int(match.group(1))
 
-    # O(1) поиск заявки по локальному номеру
-    ticket = tickets[local_id - 1] if 1 <= local_id <= len(tickets) else None
+    # 1. Сначала ищем по глобальному ID заявки пользователя
+    ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
+
+    # 2. Если не найдено по глобальному ID — ищем по локальному номеру в последних заявках
+    if ticket is None:
+        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+        ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
 
     if ticket is None or ticket.id is None:
         await message.answer(
-            f"Заявка #{local_id} не найдена среди ваших заявок.",
+            f"Заявка #{parsed_id} не найдена среди ваших заявок.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -136,13 +141,13 @@ async def ticket_details_handler(message: Message):
     history = await get_ticket_messages(ticket.id)
     await message.answer(
         format_ticket_details(ticket, history),
-        keyboard=build_tickets_keyboard([local_id]),
+        keyboard=build_tickets_keyboard([ticket.id]),
     )
 
 
 @student_labeler.private_message(RegexRule(STUDENT_REPLY_PATTERN))
 async def ticket_reply_handler(message: Message):
-    """Единый диспетчер ответов на заявки: операторы (глобальный ID) и студенты (локальный ID)."""
+    """Единый диспетчер ответов на заявки: операторы (глобальный ID) и студенты (глобальный/локальный ID)."""
     match = re.match(STUDENT_REPLY_PATTERN, message.text or "", re.DOTALL)
     if match is None:
         return
@@ -163,16 +168,18 @@ async def ticket_reply_handler(message: Message):
         )
         return
 
-    # 2. Иначе обрабатываем как ответ студента по локальному номеру
-    local_id = parsed_id
-    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+    # 2. Иначе обрабатываем как ответ студента:
+    # 2.1. Сначала ищем по глобальному ID
+    ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
 
-    # O(1) поиск заявки по локальному номеру
-    ticket = tickets[local_id - 1] if 1 <= local_id <= len(tickets) else None
+    # 2.2. Если не найдено по глобальному ID — ищем по локальному номеру
+    if ticket is None:
+        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+        ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
 
     if ticket is None or ticket.id is None:
         await message.answer(
-            f"Заявка #{local_id} не найдена среди ваших заявок.",
+            f"Заявка #{parsed_id} не найдена среди ваших заявок.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -185,8 +192,8 @@ async def ticket_reply_handler(message: Message):
         )
         return
     await message.answer(
-        f"Ответ добавлен в заявку #{local_id}. Администратор увидит его в переписке.",
-        keyboard=build_tickets_keyboard([local_id]),
+        f"Ответ добавлен в заявку #{ticket.id}. Администратор увидит его в переписке.",
+        keyboard=build_tickets_keyboard([ticket.id]),
     )
 
 

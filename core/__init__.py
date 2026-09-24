@@ -5,6 +5,6 @@ import importlib.metadata
 try:
     __version__ = importlib.metadata.version("student-bot")
 except Exception:
-    __version__ = "0.8.3.10"
+    __version__ = "0.8.3.11"
 
 PROJECT_VERSION = __version__

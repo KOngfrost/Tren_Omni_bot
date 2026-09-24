@@ -8,12 +8,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Создаём непривилегированного пользователя appuser (безопасность контейнера)
+RUN groupadd -g 988 docker 2>/dev/null || true \
+    && useradd --create-home --shell /bin/bash -u 1000 appuser \
+    && usermod -aG docker appuser 2>/dev/null || true
+
 # Копируем requirements и устанавливаем зависимости
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
 COPY . .
+RUN chown -R appuser:appuser /app
+
+USER appuser
 
 # Запускаем мониторинг
 CMD ["python", "scripts/run_tg_monitor.py"]

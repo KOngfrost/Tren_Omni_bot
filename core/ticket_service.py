@@ -151,6 +151,18 @@ async def get_user_tickets(
         return list(result)
 
 
+async def get_user_ticket_by_id(vk_id: int, ticket_id: int) -> Ticket | None:
+    """Получить заявку конкретного пользователя по глобальному ticket_id с проверкой владельца."""
+    async with async_session_maker() as session:
+        stmt = (
+            select(Ticket)
+            .join(User, Ticket.user_id == User.id)
+            .options(selectinload(Ticket.department), selectinload(Ticket.user))
+            .where(Ticket.id == ticket_id, User.vk_id == vk_id)
+        )
+        return await session.scalar(stmt)
+
+
 async def get_ticket_messages(ticket_id: int) -> list[TicketMessage]:
     """Получить историю переписки по заявке."""
     async with async_session_maker() as session:

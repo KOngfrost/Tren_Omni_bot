@@ -519,15 +519,18 @@ async def mark_report_sent(report_day: date, status: str = "sent") -> None:
         await session.commit()
 
 
-async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> None:
-    """Сформировать и отправить ежедневный отчет всем суперадминам и по email."""
+async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bool:
+    """Сформировать и отправить ежедневный отчет всем суперадминам и по email.
+
+    Возвращает True при успешной отправке (или если уже отправлен ранее).
+    """
     report_day = report_date.date()
 
     if await is_report_already_sent(report_day):
         logger.info("Отчёт за %s уже отправлен ранее — пропуск", report_day)
-        return
+        return True
 
-    data = await get_report_for_date(report_date.date())
+    data = await get_report_for_date(report_day)
     # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
     # чтобы не блокировать event loop (Ошибка #11).
     report_bytes = await asyncio.to_thread(build_daily_report, data, report_date)
@@ -539,7 +542,7 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> No
     delivery_configured = bool(admin_vk_ids or email_configured)
     if not delivery_configured:
         logger.error("Отчёт не отправлен: не настроен ни один канал доставки")
-        return
+        return False
 
     for admin_vk_id in admin_vk_ids:
         try:
@@ -560,19 +563,44 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> No
     if not vk_failed and not email_failed:
         await mark_report_sent(report_day)
         logger.info("Ежедневный отчёт за %s отправлен", report_day)
+        return True
+    return False
 
 
 async def _report_loop(api) -> None:
     tz = get_app_tz()
     while True:
         try:
-            await asyncio.sleep(_seconds_until_report())
+            now = datetime.now(tz)
+            try:
+                target_time = datetime.strptime(settings.REPORT_TIME, "%H:%M").time()
+            except ValueError:
+                target_time = datetime.strptime("09:00", "%H:%M").time()
 
-            # Отчёт за вчера по часовому поясу приложения
-            report_date = datetime.now(tz) - timedelta(days=1)
-            await _run_report(api, await get_superadmin_vk_ids(), report_date)
+            yesterday = now.date() - timedelta(days=1)
+            scheduled_today = datetime.combine(now.date(), target_time, tzinfo=tz)
+
+            # Если время отчёта на сегодня уже наступило, но отчёт за вчера ещё не отправлен
+            if now >= scheduled_today and not await is_report_already_sent(yesterday):
+                report_dt = datetime.combine(yesterday, target_time, tzinfo=tz)
+                admin_ids = await get_superadmin_vk_ids()
+                success = await _run_report(api, admin_ids, report_dt)
+                if not success:
+                    # При сбое доставки повторяем попытку через 5 минут
+                    logger.warning(
+                        "Сбой доставки отчёта за %s. Повторная попытка через 300 секунд...",
+                        yesterday,
+                    )
+                    await asyncio.sleep(300)
+                    continue
+
+            # Отчёт за вчера отправлен или время отчёта ещё не наступило —
+            # спим до следующего планового времени (порциями не более часа)
+            delay = _seconds_until_report()
+            sleep_chunk = min(max(30.0, delay), 3600.0)
+            await asyncio.sleep(sleep_chunk)
         except Exception:
-            logger.exception("Не удалось отправить ежедневный отчёт")
+            logger.exception("Непредвиденная ошибка в цикле ежедневных отчётов")
             await asyncio.sleep(60)
 
 

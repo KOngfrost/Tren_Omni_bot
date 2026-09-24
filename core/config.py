@@ -99,7 +99,17 @@ class Settings(BaseSettings):
     def db_host(self) -> str:
         if self.DB_HOST:
             return self.DB_HOST
+        if self.DB_USE_PGBOUNCER:
+            return "pgbouncer" if self.IS_PRODUCTION else "localhost"
         return "db" if self.IS_PRODUCTION else "localhost"
+
+    @property
+    def db_port(self) -> str:
+        if self.DB_PORT and self.DB_PORT not in {"5432", "6432"}:
+            return self.DB_PORT
+        if self.DB_USE_PGBOUNCER:
+            return "6432"
+        return self.DB_PORT or "5432"
 
     @property
     def database_url(self) -> str:
@@ -107,7 +117,7 @@ class Settings(BaseSettings):
             return ""
         _db_user = quote_plus(self.DB_USER)
         _db_pass = quote_plus(self.DB_PASS)
-        return f"postgresql+asyncpg://{_db_user}:{_db_pass}@{self.db_host}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"postgresql+asyncpg://{_db_user}:{_db_pass}@{self.db_host}:{self.db_port}/{self.DB_NAME}"
 
     # VK
     VK_MODE: str = "longpoll"

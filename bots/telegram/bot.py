@@ -309,19 +309,20 @@ async def callback_view_logs(callback: CallbackQuery, docker_client: DockerClien
 
 @router.message(Command("reboot"))
 async def cmd_reboot(message: Message) -> None:
-    """Запрос подтверждения перезагрузки сервера."""
+    """Запрос подтверждения перезапуска сервисов проекта."""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="⚠️ Да, перезагрузить сервер", callback_data="reboot:confirm"),
+                InlineKeyboardButton(text="🔄 Да, перезапустить сервисы", callback_data="reboot:confirm"),
                 InlineKeyboardButton(text="❌ Отмена", callback_data="reboot:cancel"),
             ]
         ]
     )
     await message.answer(
-        "⚠️ <b>ВНИМАНИЕ: Перезагрузка сервера!</b>\n\n"
-        "Вы действительно хотите отправить физический сервер в перезагрузку? "
-        "Все сервисы будут временно недоступны на 1-2 минуты.",
+        "⚠️ <b>ВНИМАНИЕ: Перезапуск сервисов OSS Bot!</b>\n\n"
+        "Вы действительно хотите перезапустить все рабочие контейнеры проекта?\n"
+        "Сервисы будут кратковременно недоступны (10-30 секунд).\n\n"
+        "<i>Для полной перезагрузки физического сервера используйте SSH: <code>sudo reboot</code></i>",
         reply_markup=kb,
         parse_mode="HTML",
     )
@@ -329,35 +330,41 @@ async def cmd_reboot(message: Message) -> None:
 
 @router.callback_query(F.data == "reboot:cancel")
 async def callback_reboot_cancel(callback: CallbackQuery) -> None:
-    """Отмена перезагрузки."""
+    """Отмена перезапуска."""
     if callback.message:
-        await callback.message.edit_text("❌ Перезагрузка отменена.")
+        await callback.message.edit_text("❌ Перезапуск отменен.")
     await callback.answer("Отменено.")
 
 
 @router.callback_query(F.data == "reboot:confirm")
-async def callback_reboot_confirm(callback: CallbackQuery) -> None:
-    """Подтверждение перезагрузки сервера."""
+async def callback_reboot_confirm(callback: CallbackQuery, docker_client: DockerClient) -> None:
+    """Подтверждение перезапуска: перезапуск контейнеров проекта."""
     if callback.message:
-        await callback.message.edit_text("⏳ <b>Инициируется перезагрузка сервера...</b>", parse_mode="HTML")
-    await callback.answer("Перезагрузка запущена!")
+        await callback.message.edit_text("⏳ <b>Инициируется перезапуск сервисов OSS Bot...</b>", parse_mode="HTML")
+    await callback.answer("Перезапуск запущен!")
 
     try:
-        if os.name != "nt":
-            cmd = (
-                ["reboot"]
-                if shutil.which("sudo") is None and shutil.which("reboot")
-                else (["sudo", "reboot"] if shutil.which("sudo") else None)
-            )
-            if not cmd:
-                raise RuntimeError("Команда перезагрузки (reboot/sudo) недоступна внутри данного окружения.")
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.Popen(["shutdown", "/r", "/t", "5"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception as e:
-        logger.error("Ошибка команды reboot: %s", e)
+        restarted: list[str] = []
+        failed: list[str] = []
+        containers = await docker_client.list_containers(all=False)
+        for c in containers:
+            if c.is_project_container and "monitor" not in c.name:
+                ok = await docker_client.restart_container(c.id)
+                if ok:
+                    restarted.append(c.name)
+                else:
+                    failed.append(c.name)
+
+        res = "✅ <b>Сервисы успешно перезапущены:</b>\n" + "\n".join(f"• <code>{n}</code>" for n in restarted)
+        if failed:
+            res += "\n\n❌ <b>Не удалось перезапустить:</b>\n" + "\n".join(f"• <code>{n}</code>" for n in failed)
+        res += "\n\n💡 <i>Примечание: перезагрузка физического сервера выполняется через SSH-терминал (`sudo reboot`).</i>"
         if callback.message:
-            await callback.message.edit_text(f"❌ Не удалось выполнить перезагрузку: {e}")
+            await callback.message.edit_text(res, parse_mode="HTML")
+    except Exception as e:
+        logger.error("Ошибка при перезапуске сервисов: %s", e)
+        if callback.message:
+            await callback.message.edit_text(f"❌ Ошибка перезапуска: {e}")
 
 
 def rotate_old_backups(backup_dir: str | None = None, max_days: int = 7) -> int:
