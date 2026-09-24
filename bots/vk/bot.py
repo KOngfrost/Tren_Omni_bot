@@ -14,6 +14,7 @@ from core.state_dispenser import RedisStateDispenser
 
 from bots.vk.polling import RobustBotPolling
 from bots.vk.common import (
+    AdminTicketStates,
     ReportStates,
     TicketStates,
     _get_department_names,
@@ -162,6 +163,7 @@ async def fallback_handler(message: Message):
 
 
 __all__ = [
+    "AdminTicketStates",
     "ReportStates",
     "TicketStates",
     "_get_department_names",

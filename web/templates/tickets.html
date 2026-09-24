@@ -112,15 +112,15 @@
     {% endif %}
 </div>
 
-<!-- Modal для просмотра заявки -->
+<!-- Modal для просмотра заявки и истории диалога -->
 <div id="ticket-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content modal-ticket-lg">
         <div class="modal-header">
             <h3 id="modal-title">Заявка #1</h3>
             <button class="close-btn" data-close-ticket-modal>&times;</button>
         </div>
         <div id="modal-body">
-            <!-- Динамическое содержимое -->
+            <!-- Динамическое содержимое чата и карточки -->
         </div>
     </div>
 </div>
@@ -148,6 +148,8 @@ window.STATUS_LABELS = {
     'Анонимное': 'Анонимное'
 };
 
+var currentActiveTicket = null;
+
 function openTicket(id) {
     fetch(`/tickets/${id}`)
         .then(res => {
@@ -155,78 +157,139 @@ function openTicket(id) {
             return res.json();
         })
         .then(ticket => {
-            document.getElementById('modal-title').textContent = 'Заявка #' + ticket.id;
-            var body = '';
-            body += '<div class="detail-block"><strong>Тема:</strong> ' + escapeHtml(ticket.topic || '—') + '</div>';
-            body += '<div class="detail-block"><strong>Описание:</strong><div class="detail-box">' + escapeHtml(ticket.description || '—') + '</div></div>';
-            body += '<div class="detail-block"><strong>Пользователь:</strong> ' + escapeHtml(ticket.user ? (ticket.user.full_name || 'Аноним') : 'Аноним') + '</div>';
-            body += '<div class="detail-block"><strong>Отдел:</strong> ' + escapeHtml(ticket.department ? ticket.department.name : '—') + '</div>';
+            currentActiveTicket = ticket;
+            document.getElementById('modal-title').textContent = 'Заявка #' + ticket.id + ' · Диалог с заявителем';
+
             var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
             var displayStatus = window.STATUS_LABELS[rawStatus] || rawStatus || '—';
-            body += '<div class="detail-block"><strong>Статус:</strong> ' + escapeHtml(displayStatus) + '</div>';
-            body += '<div class="detail-block"><strong>Дата:</strong> ' + escapeHtml(formatTicketDate(ticket)) + '</div>';
+            var studentName = ticket.is_anonymous ? 'Анонимное обращение' : (ticket.user ? (ticket.user.full_name || 'Студент') : 'Студент');
+            var dormInfo = (ticket.user && ticket.user.dormitory && !ticket.is_anonymous) ? (' · Общежитие: ' + escapeHtml(ticket.user.dormitory)) : '';
 
-            // История переписки
-            if (ticket.messages && ticket.messages.length > 0) {
-                body += '<div class="detail-block"><strong>История:</strong><div class="detail-box">';
+            var body = '';
+
+            // Шапка-сводка по заявке
+            body += '<div class="ticket-header-summary">';
+            body += '  <div class="summary-item"><span class="summary-label">Тема:</span><span class="summary-value">' + escapeHtml(ticket.topic || 'Без темы') + '</span></div>';
+            body += '  <div class="summary-item"><span class="summary-label">Отдел:</span><span class="summary-value">' + escapeHtml(ticket.department ? ticket.department.name : 'Без привязки') + '</span></div>';
+            body += '  <div class="summary-item"><span class="summary-label">Заявитель:</span><span class="summary-value">' + escapeHtml(studentName) + dormInfo + '</span></div>';
+            body += '  <div class="summary-item"><span class="summary-label">Статус:</span><span class="summary-value" id="modal-ticket-status-badge"><span class="badge">' + escapeHtml(displayStatus) + '</span></span></div>';
+            body += '  <div class="summary-item"><span class="summary-label">Создана:</span><span class="summary-value">' + escapeHtml(formatTicketDate(ticket)) + '</span></div>';
+            body += '</div>';
+
+            // Окно диалога (чат)
+            body += '<div class="ticket-chat-container" id="ticket-chat-box">';
+
+            var hasMessages = ticket.messages && ticket.messages.length > 0;
+            if (hasMessages) {
                 ticket.messages.forEach(function (m) {
-                    var author = {user: 'Студент', admin: 'Администратор', system: 'Система'}[m.author_type] || '—';
-                    body += '<div><em>' + author + ':</em> ' + escapeHtml(m.message) + '</div>';
+                    var authorType = String(m.author_type || '').toUpperCase();
+                    var timeStr = m.created_at_display || (m.created_at ? formatTimeStr(m.created_at) : '');
+
+                    if (authorType === 'SYSTEM') {
+                        body += '<div class="chat-bubble chat-bubble-system">' + escapeHtml(m.message) + (timeStr ? ' · <span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div>';
+                    } else if (authorType === 'ADMIN') {
+                        body += '<div class="chat-bubble chat-bubble-admin">';
+                        body += '  <div class="chat-bubble-header"><span>Администратор</span>' + (timeStr ? '<span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div>';
+                        body += '  <div class="chat-bubble-text">' + escapeHtml(m.message) + '</div>';
+                        body += '</div>';
+                    } else {
+                        var userLabel = ticket.is_anonymous ? 'Студент (анонимно)' : (ticket.user && ticket.user.full_name ? ticket.user.full_name : 'Студент');
+                        body += '<div class="chat-bubble chat-bubble-user">';
+                        body += '  <div class="chat-bubble-header"><span>' + escapeHtml(userLabel) + '</span>' + (timeStr ? '<span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div>';
+                        body += '  <div class="chat-bubble-text">' + escapeHtml(m.message) + '</div>';
+                        body += '</div>';
+                    }
                 });
-                body += '</div></div>';
-            } else if (ticket.response_text) {
-                body += '<div class="detail-block"><strong>Ответ:</strong><div class="detail-box detail-box-response">' + escapeHtml(ticket.response_text) + '</div></div>';
+            } else {
+                // Если истории сообщений ещё нет в таблице ticket_messages — отображаем описание и сохранённый ответ
+                body += '<div class="chat-bubble chat-bubble-user">';
+                body += '  <div class="chat-bubble-header"><span>Студент</span><span class="chat-bubble-time">' + escapeHtml(formatTicketDate(ticket)) + '</span></div>';
+                body += '  <div class="chat-bubble-text">' + escapeHtml(ticket.description || 'Без описания') + '</div>';
+                body += '</div>';
+
+                if (ticket.response_text) {
+                    body += '<div class="chat-bubble chat-bubble-admin">';
+                    body += '  <div class="chat-bubble-header"><span>Администратор</span></div>';
+                    body += '  <div class="chat-bubble-text">' + escapeHtml(ticket.response_text) + '</div>';
+                    body += '</div>';
+                }
             }
+            body += '</div>';
 
-            // Форма ответа и смены статуса
-            body += '<form method="post" action="/tickets/' + ticket.id + '/reply" class="detail-form">';
-            body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-            body += '<label><strong>Ответ студенту:</strong></label>';
-            body += '<textarea name="message" rows="3" required class="input-full"></textarea>';
-            body += '<label class="checkbox-label"><input type="checkbox" name="complete"> Завершить заявку (уведомить и закрыть)</label>';
-            body += '<button type="submit" class="btn btn-primary btn-small">Отправить ответ</button>';
-            body += '</form>';
+            // Быстрые шаблоны ответов
+            body += '<div class="chat-quick-templates">';
+            body += '  <span class="chat-quick-label">Быстрые ответы:</span>';
+            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Уточните, пожалуйста, номер комнаты и общежития.\')">Номер комнаты</span>';
+            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Заявка принята в работу. Мастер подойдёт в течение рабочего дня.\')">Принято в работу</span>';
+            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Вопрос передан коменданту общежития для решения.\')">Коменданту</span>';
+            body += '  <span class="chat-quick-chip" onclick="insertReplyTemplate(\'Работы по вашей заявке выполнены. Пожалуйста, проверьте результат.\')">Работы выполнены</span>';
+            body += '</div>';
 
-            // Смена статуса
-            body += '<form method="post" action="/tickets/' + ticket.id + '/status" class="detail-form">';
-            body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-            body += '<label><strong>Статус:</strong> </label>';
-            body += '<select name="status">';
+            // Форма ответа в диалог (AJAX)
+            body += '<div class="chat-input-container">';
+            body += '  <textarea id="chat-reply-input" class="chat-input-textarea" placeholder="Напишите ответ студенту... (Отправка: Ctrl + Enter)"></textarea>';
+            body += '  <div class="chat-input-footer">';
+            body += '    <label class="checkbox-label" style="margin:0;"><input type="checkbox" id="chat-reply-complete"> Завершить заявку (отправить и закрыть)</label>';
+            body += '    <div style="display:flex; align-items:center; gap:8px;">';
+            body += '      <span class="chat-send-shortcut-hint">Ctrl + Enter</span>';
+            body += '      <button type="button" id="chat-reply-submit" class="btn btn-primary btn-small" onclick="sendTicketReply(' + ticket.id + ')">Отправить ответ</button>';
+            body += '    </div>';
+            body += '  </div>';
+            body += '</div>';
+
+            // Управление статусом и передача другому отделу
+            body += '<div class="ticket-management-row">';
+            body += '  <form method="post" action="/tickets/' + ticket.id + '/status" style="display:flex; align-items:center; gap:8px; margin:0;">';
+            body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+            body += '    <label style="font-size:12.5px; font-weight:700;">Статус:</label>';
+            body += '    <select name="status" style="padding:4px 8px; font-size:12.5px;">';
             window.STATUS_CHOICES.forEach(function (s) {
-                // Ошибка #6: текущий статус заявки должен быть выбран в списке.
-                // Сравниваем значение enum (s[0], русские значения TicketStatus),
-                // имя enum и приведённый к верхнему регистру rawStatus —
-                // чтобы для завершённой заявки был выбран «Выполнено»,
-                // а не происходил непреднамеренный сброс в NEW.
                 var choiceVal = String(s[0] || '');
                 var isCurrent = choiceVal === rawStatus
                     || choiceVal.toUpperCase() === rawStatus.toUpperCase()
                     || choiceVal === String(rawStatus || '').toUpperCase();
                 body += '<option value="' + choiceVal + '"' + (isCurrent ? ' selected' : '') + '>' + s[1] + '</option>';
             });
-            body += '</select> ';
-            body += '<button type="submit" class="btn btn-secondary btn-small">Сменить статус</button>';
-            body += '</form>';
+            body += '    </select>';
+            body += '    <button type="submit" class="btn btn-secondary btn-small">Сменить статус</button>';
+            body += '  </form>';
 
-            // Передача другому отделу (только суперадмин)
             if (window.CURRENT_ROLE === 'SUPERADMIN') {
-                body += '<form method="post" action="/tickets/' + ticket.id + '/assign" class="detail-form">';
-                body += '<input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-                body += '<label><strong>Передать в отдел:</strong> </label>';
-                body += '<select name="department_id">';
+                body += '  <form method="post" action="/tickets/' + ticket.id + '/assign" style="display:flex; align-items:center; gap:8px; margin:0;">';
+                body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+                body += '    <label style="font-size:12.5px; font-weight:700;">Передать в:</label>';
+                body += '    <select name="department_id" style="padding:4px 8px; font-size:12.5px;">';
                 document.querySelectorAll('#dept-filter option').forEach(function (opt) {
                     if (opt.value) body += '<option value="' + opt.value + '">' + escapeHtml(opt.textContent) + '</option>';
                 });
-                body += '</select> ';
-                body += '<button type="submit" class="btn btn-secondary btn-small">Передать</button>';
-                body += '</form>';
+                body += '    </select>';
+                body += '    <button type="submit" class="btn btn-secondary btn-small">Передать</button>';
+                body += '  </form>';
             }
+            body += '</div>';
 
             document.getElementById('modal-body').innerHTML = body;
             document.getElementById('ticket-modal').classList.add('active');
+
+            // Автопрокрутка чата к последнему сообщению
+            var chatBox = document.getElementById('ticket-chat-box');
+            if (chatBox) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            // Обработка Ctrl+Enter в textarea
+            var textarea = document.getElementById('chat-reply-input');
+            if (textarea) {
+                textarea.focus();
+                textarea.addEventListener('keydown', function (e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        sendTicketReply(ticket.id);
+                    }
+                });
+            }
         })
         .catch(function (err) {
-            // Ошибка #7: нативный alert() заменён на тост дизайн-системы (showError)
             if (typeof window.showError === 'function') {
                 window.showError(err && err.message ? err.message : 'Не удалось загрузить заявку');
             } else {
@@ -235,19 +298,120 @@ function openTicket(id) {
         });
 }
 
-/**
- * Ошибка #19: синхронизация часовых поясов клиент/сервер.
- * Приоритет — строка, отрендеренная сервером в едином поясе проекта
- * (APP_TIMEZONE, Europe/Moscow) с явным указанием «МСК».
- * Fallback: парсим наивную UTC-дату из API и рендерим в Europe/Moscow.
- */
+function insertReplyTemplate(text) {
+    var input = document.getElementById('chat-reply-input');
+    if (!input) return;
+    if (input.value.trim().length > 0) {
+        input.value = input.value.trim() + ' ' + text;
+    } else {
+        input.value = text;
+    }
+    input.focus();
+}
+
+function sendTicketReply(ticketId) {
+    var textarea = document.getElementById('chat-reply-input');
+    var completeCheckbox = document.getElementById('chat-reply-complete');
+    var submitBtn = document.getElementById('chat-reply-submit');
+    if (!textarea || !submitBtn) return;
+
+    var text = textarea.value.trim();
+    if (!text) {
+        if (typeof window.showError === 'function') {
+            window.showError('Введите текст ответа студенту');
+        } else {
+            alert('Введите текст ответа студенту');
+        }
+        textarea.focus();
+        return;
+    }
+
+    var complete = completeCheckbox ? completeCheckbox.checked : false;
+
+    submitBtn.disabled = true;
+    var originalBtnText = submitBtn.textContent;
+    submitBtn.textContent = 'Отправка...';
+
+    fetch('/tickets/' + ticketId + '/reply', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'x-csrf-token': window.CSRF_FORM_TOKEN
+        },
+        body: JSON.stringify({
+            message: text,
+            complete: complete,
+            csrf_token: window.CSRF_FORM_TOKEN
+        })
+    })
+    .then(function (res) {
+        if (!res.ok) {
+            return res.json().then(function (errData) {
+                throw new Error(errData.detail || 'Ошибка отправки ответа');
+            });
+        }
+        return res.json();
+    })
+    .then(function (data) {
+        // Добавляем новое сообщение в чат
+        var chatBox = document.getElementById('ticket-chat-box');
+        if (chatBox) {
+            var bubble = document.createElement('div');
+            bubble.className = 'chat-bubble chat-bubble-admin';
+            var timeStr = (data.message && data.message.created_at_display) ? data.message.created_at_display : 'Только что';
+            bubble.innerHTML = '<div class="chat-bubble-header"><span>Администратор</span><span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span></div><div class="chat-bubble-text">' + escapeHtml(text) + '</div>';
+            chatBox.appendChild(bubble);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        textarea.value = '';
+        if (completeCheckbox) completeCheckbox.checked = false;
+
+        var note = data.vk_sent ? 'Ответ отправлен студенту в VK' : 'Ответ сохранён в системе';
+        if (typeof window.showSuccess === 'function') {
+            window.showSuccess(note);
+        }
+
+        // Если заявка завершена — обновляем статус
+        if (complete && data.status) {
+            var statusBadge = document.getElementById('modal-ticket-status-badge');
+            if (statusBadge) {
+                var displayStatus = window.STATUS_LABELS[data.status] || data.status;
+                statusBadge.innerHTML = '<span class="badge badge-success">' + escapeHtml(displayStatus) + '</span>';
+            }
+        }
+    })
+    .catch(function (err) {
+        if (typeof window.showError === 'function') {
+            window.showError(err && err.message ? err.message : 'Не удалось отправить ответ');
+        } else {
+            alert('Ошибка: ' + (err && err.message ? err.message : 'Не удалось отправить ответ'));
+        }
+    })
+    .finally(function () {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+    });
+}
+
+function formatTimeStr(isoString) {
+    try {
+        var d = new Date(isoString);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' });
+    } catch (e) {
+        return '';
+    }
+}
+
 function formatTicketDate(ticket) {
     if (!ticket) return '—';
     if (ticket.created_at_display) return ticket.created_at_display;
     if (!ticket.created_at) return '—';
     try {
         var iso = String(ticket.created_at);
-        // API отдаёт наивную UTC-дату (без суффикса зоны) — трактуем как UTC
         var utcIso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z';
         var d = new Date(utcIso);
         if (isNaN(d.getTime())) return iso;
@@ -258,13 +422,15 @@ function formatTicketDate(ticket) {
 }
 
 function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
     var div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = String(str);
     return div.innerHTML;
 }
 
 function closeTicketModal() {
     document.getElementById('ticket-modal').classList.remove('active');
+    currentActiveTicket = null;
 }
 
 document.querySelectorAll('[data-ticket-id]').forEach(function (button) {

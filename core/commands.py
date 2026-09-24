@@ -154,6 +154,11 @@ COMMANDS_ANONYMOUS_STAY = COMMANDS_IDENTITY_CHOICE  # Алиас для обра
 # Шаблоны команд администратора
 ADMIN_REPLY_PATTERN = TICKET_REPLY_PATTERN
 ADMIN_STATUS_PATTERN = r"(?i)^Статус\s*#?(\d+)[:\s]\s*(.+)$"
+ADMIN_TICKET_VIEW_PATTERN = r"(?i)^(?:Заявка|Подробнее|Тикет)\s*#?\s*(\d+)$"
+ADMIN_REPLY_START_PATTERN = r"(?i)^Ответить\s*#?\s*(\d+)$"
+ADMIN_HISTORY_PATTERN = r"(?i)^(?:История|Вся\s+история)\s*#?\s*(\d+)$"
+ADMIN_COMPLETE_PATTERN = r"(?i)^Выполнено\s*#?\s*(\d+)$"
+ADMIN_IN_PROGRESS_PATTERN = r"(?i)^В\s+обработку\s*#?\s*(\d+)$"
 
 # Команда отмены (отменить создание заявки/вопроса)
 COMMAND_CANCEL = "Отмена"

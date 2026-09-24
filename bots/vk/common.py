@@ -29,6 +29,12 @@ class TicketStates(BaseStateGroup):
     WAITING_IDENTITY_CHOICE = "waiting_identity_choice"
 
 
+class AdminTicketStates(BaseStateGroup):
+    """FSM StateGroup для ответов администратора в тикеты."""
+
+    WAITING_REPLY_TEXT = "admin_waiting_reply_text"
+
+
 def _main_reply_text(departments: list[str] | None = None) -> str:
     lines = [
         "Привет! Я бот-помощник Объединённого студсовета общежитий.\n",

@@ -3,6 +3,19 @@
 Все ключевые изменения проекта документируются в этом файле.  
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/), проект придерживается [семантического версионирования (SemVer)](https://semver.org/).
 
+## [0.8.3.13] — 2026-09-24
+
+### Добавлено
+- **История диалога в веб-панели (Messenger UI)**:
+  - `web/static/style.css`: полноценные стили чата (`.ticket-chat-container`, `.chat-bubble`, `.chat-bubble-user`, `.chat-bubble-admin`, `.chat-bubble-system`), плавная прокрутка к последнему сообщению, адаптивная карточка заявки (`.modal-ticket-lg`).
+  - `web/templates/tickets.html`: интерактивное модальное окно переписки со студентом, кнопки быстрых шаблонов ответов («Номер комнаты», «Принято в работу», «Коменданту», «Работы выполнены»), отправка ответа без перезагрузки всей страницы (AJAX) и поддержка горячей клавиши `Ctrl + Enter`.
+  - `web/routes/tickets.py`: поддержка AJAX-ответов (возврат JSON с сохранением в истории `ticket_messages` и доставкой через VK outbox) и поле `created_at_display` для каждого сообщения в таймзоне проекта.
+- **Интерактивное решение вопросов администратором в VK-боте**:
+  - `bots/vk/common.py`: добавлен FSM StateGroup `AdminTicketStates` (`WAITING_REPLY_TEXT`) для пошагового ответа на обращения через личные сообщения VK.
+  - `bots/vk/keyboards.py`: добавлены клавиатуры списка активных заявок (`build_admin_tickets_list_keyboard`), карточки действий над заявкой (`build_admin_ticket_actions_keyboard`) и клавиатура отмены ввода ответа (`build_admin_reply_cancel_keyboard`).
+  - `bots/vk/handlers/admin.py`: реализованы хендлеры `admin_ticket_view_handler` (`Заявка #N`), `admin_reply_start_handler` (`Ответить #N`), `admin_reply_text_handler` (приём текста ответа админа), `admin_ticket_history_handler` (`История #N`), а также быстрое завершение (`Выполнено #N`) и перевод в статус «В обработке» (`В обработку #N`).
+  - `core/ticket_service.py`: добавлена автоматическая фоновая доставка оповещений о новых заявках администраторам соответствующего отдела через outbox VK.
+
 ---
 
 ## [0.8.3.12] — 2026-09-24

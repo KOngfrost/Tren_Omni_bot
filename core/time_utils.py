@@ -9,6 +9,7 @@
 
 import logging
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Максимально допустимый дрейф времени между приложением и БД (в секундах)
 MAX_ALLOWED_DRIFT_SECONDS = 5.0
+
+
+def get_app_tz() -> ZoneInfo:
+    """Часовой пояс приложения (APP_TIMEZONE, по умолчанию Europe/Moscow)."""
+    return ZoneInfo(settings.APP_TIMEZONE)
 
 
 async def check_time_sync(session) -> dict:

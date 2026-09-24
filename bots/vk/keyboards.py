@@ -18,7 +18,8 @@ def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) 
                 ]
                 for row in rows
             ],
-        }
+        },
+        ensure_ascii=False,
     )
 
 
@@ -51,6 +52,40 @@ def build_admin_keyboard() -> str:
         ("Обычное меню", "secondary"),
     ]
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+
+
+def build_admin_tickets_list_keyboard(ticket_ids: list[int], max_buttons: int = 6) -> str:
+    """Клавиатура списка заявок для администратора: кнопки открытия конкретных заявок."""
+    buttons: list[tuple[str, str]] = [
+        (f"Заявка #{tid}", "primary") for tid in ticket_ids[:max_buttons]
+    ]
+    buttons.append(("Заявки администратора", "secondary"))
+    buttons.append(("Админ", "negative"))
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+
+
+def build_admin_ticket_actions_keyboard(ticket_id: int, is_completed: bool = False) -> str:
+    """Клавиатура действий над заявкой: быстрый ответ, смена статуса, история."""
+    rows: list[list[tuple[str, str]]] = [
+        [(f"Ответить #{ticket_id}", "primary"), (f"История #{ticket_id}", "secondary")]
+    ]
+    if is_completed:
+        rows.append([(f"В обработку #{ticket_id}", "secondary")])
+    else:
+        rows.append([(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "positive")])
+    rows.append([("Заявки администратора", "primary"), ("Админ", "negative")])
+    return _format_keyboard(rows, one_time=False)
+
+
+def build_admin_reply_cancel_keyboard(ticket_id: int) -> str:
+    """Клавиатура отмены ввода ответа на заявку."""
+    return _format_keyboard(
+        [
+            [("Отмена", "negative")],
+            [(f"Заявка #{ticket_id}", "secondary")],
+        ],
+        one_time=True,
+    )
 
 
 def build_cancel_keyboard() -> str:

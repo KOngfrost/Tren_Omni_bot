@@ -9,6 +9,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -268,6 +269,11 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
                 ),
                 "message": m.message,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
+                "created_at_display": (
+                    format_datetime(m.created_at, "%d.%m.%Y %H:%M") + " МСК"
+                    if m.created_at
+                    else None
+                ),
             }
             for m in messages
         ],
@@ -278,7 +284,8 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
 async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(require_writer)):
     """Ответ администратора студенту.
 
-    Форма: message (обязательно), complete=on (завершить заявку).
+    Поддерживает как классическую отправку HTML-формы, так и AJAX-запрос.
+    Форма: message (обязательно), complete (завершить заявку).
     Сохраняет сообщение, обновляет response_text, статус, шлёт VK-уведомление.
 
     Безопасность:
@@ -287,23 +294,53 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
     - IDOR: проверка department_id через БД
     """
     await require_crud_rate_limit(request)
-    form = await request.form()
-    message: str = str(form.get("message", "")).strip()
-    complete: bool = form.get("complete") == "on"
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        message = str(body.get("message", "")).strip()
+        complete = bool(body.get("complete", False))
+    else:
+        form = await request.form()
+        message = str(form.get("message", "")).strip()
+        complete = form.get("complete") in ("on", "true", True, "1")
 
     if not message:
         raise HTTPException(status_code=400, detail="Текст ответа не может быть пустым")
 
     await _load_ticket_for_user(ticket_id, user)
 
+    admin_username = user.get("username", "unknown")
     ticket, vk_sent = await reply_to_ticket(
         ticket_id=ticket_id,
-        admin_username=user.get("username", "unknown"),
+        admin_username=admin_username,
         message=message,
         complete=complete,
     )
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    is_ajax = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("accept", "")
+        or "application/json" in content_type
+    )
+
+    if is_ajax:
+        from core.time_utils import get_app_tz
+        now_dt = datetime.now(get_app_tz())
+        return {
+            "success": True,
+            "ticket_id": ticket_id,
+            "status": ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+            "vk_sent": vk_sent,
+            "message": {
+                "author_type": "ADMIN",
+                "message": message,
+                "created_at": now_dt.isoformat(),
+                "created_at_display": format_datetime(now_dt, "%d.%m.%Y %H:%M") + " МСК",
+            },
+        }
 
     note: str = "" if vk_sent else " (VK-уведомление не доставлено)"
     request.session["flash_success"] = f"Ответ на заявку #{ticket_id} отправлен{note}"
