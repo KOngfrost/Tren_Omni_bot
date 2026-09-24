@@ -6,7 +6,7 @@
 # ============================================================
 [project]
 name = "student-bot"
-version = "0.8.3.13"
+version = "0.8.3.14"
 description = "OSS Bot: Student Ticket Management System"
 readme = "README.md"
 requires-python = ">=3.11"

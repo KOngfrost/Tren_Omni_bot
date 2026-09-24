@@ -878,8 +878,8 @@ body.no-scroll {
     border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
     box-shadow: var(--glass-shadow);
-    padding: 20px;
-    margin-bottom: 22px;
+    padding: 26px 28px;
+    margin-bottom: 28px;
     overflow: hidden;
     animation: fadeIn 0.6s ease-out 0.15s both;
     transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
@@ -894,22 +894,23 @@ body.no-scroll {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 16px;
     flex-wrap: wrap;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
 }
 
 .card-header h2 {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 800;
+    line-height: 1.35;
 }
 
 /* ---------- Stats grid ---------- */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 22px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 28px;
 }
 
 .stat-card {
@@ -918,7 +919,7 @@ body.no-scroll {
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
-    padding: 18px 20px;
+    padding: 22px 24px;
     box-shadow: var(--glass-shadow);
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
     animation: scaleIn 0.5s ease-out both;
@@ -937,16 +938,18 @@ body.no-scroll {
 
 .stat-card h3 {
     color: var(--text-tertiary);
-    font-size: 12.5px;
+    font-size: 13.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    line-height: 1.35;
 }
 
 .stat-card .value {
-    font-size: 28px;
+    font-size: 32px;
     font-weight: 800;
+    line-height: 1.2;
     color: var(--text-primary);
 }
 
@@ -966,16 +969,16 @@ body.no-scroll {
 table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13.5px;
+    font-size: 14px;
     min-width: 100%;
 }
 
 th {
     text-align: left;
-    padding: 11px 14px;
+    padding: 13px 16px;
     background: var(--bg-surface-2);
     color: var(--text-tertiary);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -984,10 +987,11 @@ th {
 }
 
 td {
-    padding: 11px 14px;
+    padding: 13px 16px;
     border-bottom: 1px solid var(--line);
     vertical-align: middle;
     color: var(--text-primary);
+    line-height: 1.45;
 }
 
 tbody tr:last-child td {
@@ -1050,15 +1054,15 @@ tbody tr:hover {
 
 /* ---------- Forms ---------- */
 .form-group {
-    margin-bottom: 14px;
+    margin-bottom: 16px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 6px;
 }
 
 .form-group label {
     font-weight: 600;
-    font-size: 13px;
+    font-size: 13.5px;
     color: var(--text-secondary);
 }
 
@@ -1069,13 +1073,13 @@ input[type="datetime-local"],
 select,
 textarea {
     width: 100%;
-    padding: 9px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--line-strong);
     border-radius: var(--r-sm);
     background: var(--bg-surface);
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 13.5px;
+    font-size: 14px;
     outline: none;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
@@ -1214,8 +1218,8 @@ textarea::placeholder {
     border-radius: var(--r-lg);
     box-shadow: var(--shadow-lg), var(--glass-shadow);
     width: 100%;
-    max-width: 560px;
-    padding: 22px;
+    max-width: 580px;
+    padding: 26px 28px;
     margin: auto;
     animation: scaleIn 0.3s ease-out;
 }
@@ -1224,13 +1228,14 @@ textarea::placeholder {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 14px;
+    margin-bottom: 20px;
 }
 
 .modal-header h3 {
-    font-size: 17px;
+    font-size: 19px;
     font-weight: 800;
+    line-height: 1.35;
 }
 
 .close-btn {
@@ -1286,62 +1291,66 @@ textarea::placeholder {
 
 /* ---------- Ticket dialogue & chat styles ---------- */
 .modal-content.modal-ticket-lg {
-    max-width: 740px;
+    max-width: 880px;
     width: 95%;
+    padding: 28px 32px;
 }
 
 .ticket-header-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px 20px;
     background: var(--bg-surface-2);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    font-size: 13px;
+    padding: 18px 22px;
+    margin-bottom: 20px;
+    font-size: 14px;
 }
 
 .ticket-header-summary .summary-item {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 5px;
 }
 
 .ticket-header-summary .summary-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     color: var(--text-tertiary);
+    line-height: 1.3;
 }
 
 .ticket-header-summary .summary-value {
     font-weight: 600;
+    font-size: 14.5px;
+    line-height: 1.45;
     color: var(--text-primary);
 }
 
 .ticket-chat-container {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-height: 380px;
-    min-height: 180px;
+    gap: 16px;
+    max-height: 480px;
+    min-height: 240px;
     overflow-y: auto;
-    padding: 16px;
+    padding: 22px 24px;
     background: var(--bg-surface-1);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    margin-bottom: 12px;
+    margin-bottom: 18px;
     scroll-behavior: smooth;
 }
 
 .chat-bubble {
-    max-width: 78%;
-    padding: 10px 14px;
-    border-radius: 14px;
-    font-size: 13.5px;
-    line-height: 1.45;
+    max-width: 82%;
+    padding: 14px 18px;
+    border-radius: 16px;
+    font-size: 14.5px;
+    line-height: 1.55;
     position: relative;
     word-break: break-word;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -1365,7 +1374,7 @@ textarea::placeholder {
 
 .chat-bubble-admin .chat-bubble-header,
 .chat-bubble-admin .chat-bubble-time {
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .chat-bubble-system {
@@ -1373,8 +1382,9 @@ textarea::placeholder {
     background: var(--bg-surface-2);
     border: 1px dashed var(--line);
     border-radius: 20px;
-    padding: 4px 14px;
-    font-size: 12px;
+    padding: 8px 18px;
+    font-size: 13px;
+    line-height: 1.45;
     color: var(--text-secondary);
     text-align: center;
     max-width: 90%;
@@ -1384,47 +1394,48 @@ textarea::placeholder {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    font-size: 11.5px;
+    gap: 12px;
+    font-size: 12.5px;
     font-weight: 700;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
     color: var(--text-secondary);
 }
 
 .chat-bubble-time {
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 400;
     color: var(--text-tertiary);
 }
 
 .chat-bubble-text {
     white-space: pre-wrap;
+    line-height: 1.55;
 }
 
 .chat-input-container {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     background: var(--bg-surface-2);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    padding: 12px;
-    margin-bottom: 14px;
+    padding: 16px 20px;
+    margin-bottom: 18px;
 }
 
 .chat-input-textarea {
     width: 100%;
-    min-height: 64px;
-    max-height: 160px;
+    min-height: 84px;
+    max-height: 180px;
     resize: vertical;
     border: 1px solid var(--line);
     border-radius: var(--r-sm);
-    padding: 8px 10px;
+    padding: 12px 14px;
     background: var(--bg-surface-1);
     color: var(--text-primary);
-    font-size: 13.5px;
+    font-size: 14.5px;
     font-family: inherit;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 .chat-input-textarea:focus {
@@ -1438,11 +1449,12 @@ textarea::placeholder {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 12px;
+    font-size: 14px;
 }
 
 .chat-send-shortcut-hint {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-tertiary);
 }
 
@@ -1451,33 +1463,56 @@ textarea::placeholder {
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding-top: 12px;
+    gap: 16px;
+    padding-top: 18px;
     border-top: 1px solid var(--line);
+    font-size: 14px;
 }
 
 .ticket-management-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
+}
+
+.ticket-action-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.ticket-action-label {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.ticket-action-select {
+    padding: 6px 12px;
+    font-size: 13.5px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--bg-surface-1);
+    color: var(--text-primary);
 }
 
 /* ---------- Admins ---------- */
 .admins-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 18px;
 }
 
 .admin-card {
     background: var(--bg-surface-2);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    padding: 16px;
+    padding: 20px 22px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     animation: scaleIn 0.5s ease-out both;
 }
@@ -1497,12 +1532,12 @@ textarea::placeholder {
 .admin-card-top {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
 }
 
 .admin-avatar {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     border-radius: var(--r-full);
     background: var(--primary-soft);
     color: var(--primary);
@@ -1510,7 +1545,7 @@ textarea::placeholder {
     align-items: center;
     justify-content: center;
     font-weight: 800;
-    font-size: 16px;
+    font-size: 17px;
     flex-shrink: 0;
 }
 
@@ -1520,7 +1555,8 @@ textarea::placeholder {
 
 .admin-name {
     font-weight: 700;
-    font-size: 14px;
+    font-size: 15.5px;
+    line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1528,7 +1564,8 @@ textarea::placeholder {
 
 .admin-vk {
     color: var(--text-tertiary);
-    font-size: 12.5px;
+    font-size: 13px;
+    margin-top: 2px;
 }
 
 .admin-card-meta {
@@ -1540,7 +1577,7 @@ textarea::placeholder {
 
 .admin-dept {
     color: var(--text-tertiary);
-    font-size: 12.5px;
+    font-size: 13px;
 }
 
 .admin-card-footer {
@@ -1548,21 +1585,21 @@ textarea::placeholder {
     align-items: center;
     justify-content: space-between;
     border-top: 1px solid var(--line);
-    padding-top: 10px;
-    gap: 8px;
+    padding-top: 14px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
 .admin-card-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
 .admin-id {
     color: var(--text-tertiary);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
@@ -2084,11 +2121,11 @@ html[data-theme="light"] .auth-page-wrapper::after {
     background: var(--bg-surface-2);
     border: 1px solid var(--line-strong);
     border-radius: var(--r-lg);
-    padding: 20px;
+    padding: 24px 26px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 16px;
+    gap: 18px;
     height: 100%;
     box-shadow: var(--shadow-sm);
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
@@ -2104,12 +2141,12 @@ html[data-theme="light"] .auth-page-wrapper::after {
 .department-card-top {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
 }
 
 .department-ico {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     border-radius: var(--r-md);
     background: linear-gradient(135deg, rgba(255, 77, 157, 0.25), rgba(214, 93, 177, 0.15));
     border: 1px solid rgba(255, 77, 157, 0.35);
@@ -2117,7 +2154,7 @@ html[data-theme="light"] .auth-page-wrapper::after {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 22px;
     flex-shrink: 0;
 }
 
@@ -2128,30 +2165,30 @@ html[data-theme="light"] .auth-page-wrapper::after {
 
 .department-name {
     font-weight: 800;
-    font-size: 16px;
+    font-size: 17px;
     color: var(--text-primary);
-    line-height: 1.3;
+    line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .department-id {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-tertiary);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    margin-top: 2px;
+    margin-top: 3px;
 }
 
 /* Единая сетка метрик отдела: 5 колонок */
 .department-stats-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
+    gap: 8px;
     background: var(--bg-surface);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    padding: 10px 8px;
+    padding: 12px 10px;
 }
 
 .dept-stat-box {
@@ -2160,24 +2197,24 @@ html[data-theme="light"] .auth-page-wrapper::after {
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 4px 2px;
+    padding: 6px 4px;
 }
 
 .dept-stat-val {
-    font-size: 17px;
+    font-size: 19px;
     font-weight: 800;
     color: var(--text-primary);
-    line-height: 1.2;
+    line-height: 1.25;
     transition: color 0.2s ease;
 }
 
 .dept-stat-key {
-    font-size: 10.5px;
+    font-size: 11.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-tertiary);
-    margin-top: 2px;
+    margin-top: 3px;
 }
 
 .department-card:hover .dept-stat-val {
@@ -2393,6 +2430,48 @@ html[data-theme="light"] .auth-page-wrapper::after {
         max-width: 100%;
         max-height: 90dvh;
         overflow-y: auto;
+    }
+
+    .modal-content.modal-ticket-lg {
+        padding: 18px 14px;
+    }
+
+    .ticket-header-summary {
+        grid-template-columns: 1fr;
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .ticket-chat-container {
+        padding: 14px 12px;
+        max-height: 360px;
+        min-height: 180px;
+    }
+
+    .chat-bubble {
+        max-width: 90%;
+        padding: 10px 14px;
+        font-size: 13.5px;
+    }
+
+    .chat-input-container {
+        padding: 12px 14px;
+    }
+
+    .ticket-management-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .ticket-action-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ticket-action-form select,
+    .ticket-action-form .btn {
+        width: 100%;
     }
 
     input[type="text"],
@@ -3347,28 +3426,30 @@ input:checked + .slider:before {
 /* Settings info grid */
 .settings-info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
 }
 
 .settings-info-item {
     background: var(--bg-surface-2);
     border: 1px solid var(--border-glass);
     border-radius: var(--r-md);
-    padding: 14px 16px;
+    padding: 18px 20px;
 }
 
 .settings-info-label {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-tertiary);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
     text-transform: uppercase;
     font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 .settings-info-value {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--text-primary);
+    line-height: 1.4;
 }
 
 /* Settings action bar (в самом низу и по центру) */

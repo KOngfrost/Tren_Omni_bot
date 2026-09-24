@@ -230,10 +230,10 @@ function openTicket(id) {
 
             // Управление статусом и передача другому отделу
             body += '<div class="ticket-management-row">';
-            body += '  <form method="post" action="/tickets/' + ticket.id + '/status" style="display:flex; align-items:center; gap:8px; margin:0;">';
+            body += '  <form method="post" action="/tickets/' + ticket.id + '/status" class="ticket-action-form">';
             body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-            body += '    <label style="font-size:12.5px; font-weight:700;">Статус:</label>';
-            body += '    <select name="status" style="padding:4px 8px; font-size:12.5px;">';
+            body += '    <label class="ticket-action-label">Статус:</label>';
+            body += '    <select name="status" class="ticket-action-select">';
             window.STATUS_CHOICES.forEach(function (s) {
                 var choiceVal = String(s[0] || '');
                 var isCurrent = choiceVal === rawStatus
@@ -246,10 +246,10 @@ function openTicket(id) {
             body += '  </form>';
 
             if (window.CURRENT_ROLE === 'SUPERADMIN') {
-                body += '  <form method="post" action="/tickets/' + ticket.id + '/assign" style="display:flex; align-items:center; gap:8px; margin:0;">';
+                body += '  <form method="post" action="/tickets/' + ticket.id + '/assign" class="ticket-action-form">';
                 body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
-                body += '    <label style="font-size:12.5px; font-weight:700;">Передать в:</label>';
-                body += '    <select name="department_id" style="padding:4px 8px; font-size:12.5px;">';
+                body += '    <label class="ticket-action-label">Передать в:</label>';
+                body += '    <select name="department_id" class="ticket-action-select">';
                 document.querySelectorAll('#dept-filter option').forEach(function (opt) {
                     if (opt.value) body += '<option value="' + opt.value + '">' + escapeHtml(opt.textContent) + '</option>';
                 });
