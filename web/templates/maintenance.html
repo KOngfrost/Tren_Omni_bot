@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Технические работы — OSS Bot</title>
+    <meta name="description" content="На платформе OSS Bot ведутся плановые технические работы. Приём и обработка обращений временно приостановлены.">
+    
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="alternate icon" href="/favicon.ico">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script nonce="{{ csp_nonce('script') if csp_nonce is defined else '' }}">
+        (function() {
+            try {
+                var theme = localStorage.getItem('app_theme');
+                if (!theme) {
+                    var m = document.cookie.match(/(^|;)\s*app_theme=([^;]+)/);
+                    if (m) theme = decodeURIComponent(m[2]);
+                }
+                if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    theme = 'light';
+                }
+                if (theme === 'light' || theme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
+    <style>
+        .maint-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+            background: var(--bg-primary, #0f1117);
+        }
+        .maint-card {
+            width: 100%;
+            max-width: 540px;
+            background: var(--bg-card, rgba(26, 29, 39, 0.75));
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            border-radius: 20px;
+            padding: 40px 32px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .maint-icon-wrap {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .maint-icon-wrap svg {
+            color: #f59e0b;
+            animation: wrenchPulse 3s ease-in-out infinite;
+        }
+        @keyframes wrenchPulse {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.08) rotate(6deg); }
+        }
+        .maint-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 14px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            margin-bottom: 16px;
+        }
+        .maint-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #f59e0b;
+            box-shadow: 0 0 8px #f59e0b;
+            animation: pulseDot 2s infinite;
+        }
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+        .maint-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-primary, #ffffff);
+            margin: 0 0 12px;
+            letter-spacing: -0.5px;
+        }
+        .maint-text {
+            font-size: 14.5px;
+            line-height: 1.6;
+            color: var(--text-secondary, #94a3b8);
+            margin: 0 0 24px;
+        }
+        .maint-features {
+            background: var(--bg-secondary, rgba(15, 23, 42, 0.5));
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+            border-radius: 12px;
+            padding: 16px;
+            text-align: left;
+            margin-bottom: 24px;
+            font-size: 13.5px;
+            color: var(--text-secondary, #94a3b8);
+        }
+        .maint-feature-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .maint-feature-item:last-child {
+            margin-bottom: 0;
+        }
+        .maint-feature-icon {
+            color: var(--success, #10b981);
+            font-size: 14px;
+            line-height: 1.3;
+        }
+        .maint-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .maint-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            border: none;
+        }
+        .maint-btn-primary {
+            background: var(--primary, #e11d48);
+            color: #ffffff;
+        }
+        .maint-btn-primary:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
+        .maint-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 12.5px;
+            color: var(--text-tertiary, #64748b);
+        }
+    </style>
+</head>
+<body>
+    <div class="maint-wrapper">
+        <div class="maint-card">
+            <div class="maint-icon-wrap" aria-hidden="true">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+            </div>
+            
+            <div class="maint-badge">
+                <span class="maint-dot" aria-hidden="true"></span>
+                <span>Техническое обслуживание</span>
+            </div>
+
+            <h1 class="maint-title">Ведутся технические работы</h1>
+            
+            <p class="maint-text">
+                {{ maintenance_message|default('В данный момент на платформе проводятся плановые технические работы. Приём и обработка обращений временно приостановлены. Мы скоро вернёмся!') }}
+            </p>
+
+            <div class="maint-features">
+                <div class="maint-feature-item">
+                    <span class="maint-feature-icon" aria-hidden="true">✓</span>
+                    <span>Все ранее отправленные тикеты и история сохраняются в полной безопасности.</span>
+                </div>
+                <div class="maint-feature-item">
+                    <span class="maint-feature-icon" aria-hidden="true">✓</span>
+                    <span>Сервисы будут автоматически запущены сразу по завершении обновления.</span>
+                </div>
+            </div>
+
+            <div class="maint-actions">
+                <button type="button" class="maint-btn maint-btn-primary" onclick="window.location.reload();">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    <span>Проверить статус</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="maint-footer">
+            <span>© 2026 OSS Bot</span> • <span>v{{ app_version }}</span>
+        </div>
+    </div>
+
+    <script nonce="{{ csp_nonce('script') if csp_nonce is defined else '' }}">
+        // Автоматическая фоновая проверка каждые 30 секунд
+        setInterval(function() {
+            fetch('/health', { cache: 'no-store' })
+                .then(function(res) {
+                    if (res.ok) {
+                        return res.json();
+                    }
+                })
+                .then(function(data) {
+                    // Если статус ok, пробуем обновить страницу
+                    if (data && data.status === 'ok') {
+                        // Небольшая задержка перед обновлением
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 2000);
+                    }
+                })
+                .catch(function() {});
+        }, 30000);
+    </script>
+</body>
+</html>

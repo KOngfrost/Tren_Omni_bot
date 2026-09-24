@@ -4,11 +4,12 @@ from core.vk_compat import patch_vkbottle_logging
 
 patch_vkbottle_logging()
 
-from vkbottle import Bot, ErrorHandler
+from vkbottle import BaseMiddleware, Bot, ErrorHandler
 from vkbottle.bot import Message
 
 from core.config import settings
 from core.heartbeat import touch_heartbeat
+from core.maintenance import get_maintenance_info, is_maintenance_mode
 from core.state_dispenser import RedisStateDispenser
 
 from bots.vk.polling import RobustBotPolling
@@ -118,6 +119,29 @@ async def _handle_bot_error(error: Exception, *args, **kwargs):
 for _view in vk_bot.on.views().values():
     _view.error_handler = _error_handler
 
+
+class VKMaintenanceMiddleware(BaseMiddleware[Message]):
+    """Перехват входящих сообщений VK при активном режиме технических работ."""
+
+    async def pre(self) -> None:
+        if await is_maintenance_mode():
+            touch_heartbeat()
+            info = await get_maintenance_info()
+            bot_msg = info.get("bot_message") or (
+                "🛠 Ведутся технические работы\n\n"
+                "В данный момент проводятся плановые технические работы. "
+                "Приём и обработка обращений временно приостановлены.\n\n"
+                "Приносим извинения за временные неудобства. Пожалуйста, повторите попытку позже."
+            )
+            try:
+                await self.event.answer(bot_msg)
+            except Exception:
+                logger.exception("Не удалось отправить сообщение о техработах в VK")
+            self.stop("maintenance_mode_active")
+
+
+vk_bot.labeler.message_view.register_middleware(VKMaintenanceMiddleware)
+
 # Регистрация модульных обработчиков через BotLabeler
 vk_bot.labeler.load(faq_labeler)
 vk_bot.labeler.load(knowledge_labeler)
@@ -189,5 +213,6 @@ __all__ = [
     "ticket_details_handler",
     "ticket_identity_choice_handler",
     "ticket_reply_handler",
+    "VKMaintenanceMiddleware",
     "vk_bot",
 ]

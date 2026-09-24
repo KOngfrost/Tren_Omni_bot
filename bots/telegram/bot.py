@@ -31,6 +31,7 @@ from bots.telegram.docker_client import DockerClient
 from bots.telegram.monitor_service import MonitorService
 from bots.telegram.system_metrics import format_metrics_message, get_system_metrics
 from core.config import Settings
+from core.maintenance import get_maintenance_info, set_maintenance_mode
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📊 Статус"), KeyboardButton(text="🔄 Перезапуск")],
             [KeyboardButton(text="📋 Логи"), KeyboardButton(text="💾 Бэкап")],
-            [KeyboardButton(text="ℹ️ Помощь")],
+            [KeyboardButton(text="🚧 Техработы"), KeyboardButton(text="ℹ️ Помощь")],
         ],
         resize_keyboard=True,
     )
@@ -96,7 +97,20 @@ async def render_status_content(docker_client: DockerClient) -> tuple[str, Inlin
 
     containers = await docker_client.list_containers(all=True)
 
-    lines = [metrics_text, "", "📦 <b>Контейнеры Docker:</b>"]
+    maint_info = await get_maintenance_info()
+    maint_status = (
+        "🔴 <b>ВКЛЮЧЕН</b>"
+        if maint_info.get("enabled")
+        else "🟢 <b>Выключен</b>"
+    )
+
+    lines = [
+        metrics_text,
+        "",
+        f"🚧 <b>Режим техработ:</b> {maint_status}",
+        "",
+        "📦 <b>Контейнеры Docker:</b>",
+    ]
     if not containers:
         lines.append("<i>Контейнеры не найдены или Docker недоступен</i>")
     else:
@@ -122,6 +136,9 @@ async def render_status_content(docker_client: DockerClient) -> tuple[str, Inlin
                 InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
                 InlineKeyboardButton(text="💾 Бэкап БД", callback_data="backup:create"),
             ],
+            [
+                InlineKeyboardButton(text="🚧 Техработы", callback_data="maint:menu"),
+            ],
         ]
     )
 
@@ -143,7 +160,8 @@ async def cmd_start_help(message: Message) -> None:
         "🔄 <b>/restart</b> — Перезапуск отдельных сервисов или всего стека\n"
         "📋 <b>/logs</b> — Просмотр свежих логов контейнера\n"
         "💾 <b>/backup</b> — Создать и выгрузить резервную копию базы данных\n"
-        "⚠️ <b>/reboot</b> — Перезагрузка сервера (с подтверждением)\n\n"
+        "🚧 <b>/maintenance</b> — Включение/отключение режима технических работ\n"
+        "⚠️ <b>/reboot</b> — Перезапуск контейнеров проекта (с подтверждением)\n\n"
         "При любых сбоях (падение контейнера, переход в <i>unhealthy</i>) "
         "бот автоматически уведомит вас тревожным сообщением."
     )
@@ -168,6 +186,109 @@ async def callback_status_refresh(callback: CallbackQuery, docker_client: Docker
         await callback.answer("Статус обновлён.")
     except Exception:
         await callback.answer("Данные актуальны.")
+
+
+async def render_maintenance_content() -> tuple[str, InlineKeyboardMarkup]:
+    """Сформировать текст и инлайн-клавиатуру управления режимом техработ."""
+    info = await get_maintenance_info()
+    enabled = bool(info.get("enabled", False))
+    updated_at = info.get("updated_at", "")
+    updated_by = info.get("updated_by", "")
+
+    if enabled:
+        status_line = "🔴 <b>ВКЛЮЧЕН</b> (Технические работы активны)"
+        desc_line = (
+            "⚠️ <b>Внимание:</b>\n"
+            "• Веб-панель возвращает страницу обслуживания (HTTP 503).\n"
+            "• VK-бот отправляет студентам автоответ о техработах.\n"
+            "• Доступ в веб-панель открыт только для суперадминистраторов.\n\n"
+            f"🕒 <i>Включен: {html.escape(updated_at)}</i>\n"
+            f"👤 <i>Инициатор: {html.escape(updated_by)}</i>"
+        )
+        buttons = [
+            [InlineKeyboardButton(text="🟢 Отключить техработы", callback_data="maint:disable")],
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="maint:refresh"),
+                InlineKeyboardButton(text="📊 Статус", callback_data="status:refresh"),
+            ],
+        ]
+    else:
+        status_line = "🟢 <b>ВЫКЛЮЧЕН</b> (Штатный режим)"
+        desc_line = (
+            "Все системы (веб-панель и боты) работают в обычном режиме.\n\n"
+            "При включении режима:\n"
+            "• Для пользователей веб-панель закроется заглушкой (HTTP 503)\n"
+            "• Бот ВК перестанет принимать обращения и предупредит о работах"
+        )
+        buttons = [
+            [InlineKeyboardButton(text="🔴 Включить техработы", callback_data="maint:enable")],
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="maint:refresh"),
+                InlineKeyboardButton(text="📊 Статус", callback_data="status:refresh"),
+            ],
+        ]
+
+    text = (
+        f"🚧 <b>Управление режимом технических работ</b>\n\n"
+        f"Текущее состояние: {status_line}\n\n"
+        f"{desc_line}"
+    )
+    return text, InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.message(Command("maintenance"))
+@router.message(Command("maint"))
+@router.message(F.text == "🚧 Техработы")
+@router.callback_query(F.data == "maint:menu")
+async def cmd_maintenance(event: Message | CallbackQuery) -> None:
+    """Управление режимом технических работ."""
+    text, keyboard = await render_maintenance_content()
+    if isinstance(event, CallbackQuery):
+        if event.message:
+            await event.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "maint:refresh")
+async def callback_maintenance_refresh(callback: CallbackQuery) -> None:
+    """Обновление карточки техработ."""
+    text, keyboard = await render_maintenance_content()
+    try:
+        if callback.message:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer("Статус техработ обновлён.")
+    except Exception:
+        await callback.answer("Данные актуальны.")
+
+
+@router.callback_query(F.data == "maint:enable")
+async def callback_maintenance_enable(callback: CallbackQuery) -> None:
+    """Включение режима техработ."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    await set_maintenance_mode(
+        enabled=True,
+        updated_by=f"telegram:{user_id}",
+    )
+    await callback.answer("🚨 Режим техработ ВКЛЮЧЕН!", show_alert=True)
+    text, keyboard = await render_maintenance_content()
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "maint:disable")
+async def callback_maintenance_disable(callback: CallbackQuery) -> None:
+    """Выключение режима техработ."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    await set_maintenance_mode(
+        enabled=False,
+        updated_by=f"telegram:{user_id}",
+    )
+    await callback.answer("✅ Режим техработ ВЫКЛЮЧЕН! Системы работают штатно.", show_alert=True)
+    text, keyboard = await render_maintenance_content()
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.message(Command("restart"))

@@ -463,3 +463,66 @@ class RequestSizeLimitMiddleware:
 async def _drained_receive() -> Message:
     """Receive для случая «клиент уже отключился»."""
     return {"type": "http.disconnect"}
+
+
+class MaintenanceMiddleware(BaseHTTPMiddleware):
+    """Перехватчик режима технических работ для веб-панели.
+
+    Когда режим техработ активен:
+    - Пропускает служебные маршруты: /static/*, /health, /metrics, /favicon.ico, /maintenance.
+    - Пропускает авторизованных суперадминистраторов (role in ('SUPERADMIN', 'superadmin')),
+      выставляя request.state.maintenance_active = True для отображения служебного баннера.
+    - Для остальных пользователей возвращает стилизованную страницу maintenance.html (HTTP 503)
+      или JSON-ответ 503 для API с заголовком Retry-After: 300.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if (
+            path.startswith("/static/")
+            or path in ("/health", "/metrics", "/favicon.ico", "/maintenance")
+        ):
+            return await call_next(request)
+
+        from core.maintenance import get_maintenance_info, is_maintenance_mode
+
+        if await is_maintenance_mode():
+            user = request.session.get("user") if hasattr(request, "session") else None
+            is_superadmin = (
+                isinstance(user, dict)
+                and user.get("role") in ("SUPERADMIN", "superadmin")
+            )
+            if is_superadmin:
+                request.state.maintenance_active = True
+                return await call_next(request)
+
+            accept = request.headers.get("accept", "")
+            if path.startswith("/api/") or ("application/json" in accept and "text/html" not in accept):
+                info = await get_maintenance_info()
+                from starlette.responses import JSONResponse
+
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "maintenance",
+                        "detail": info.get("message", "Ведутся технические работы."),
+                    },
+                    headers={"Retry-After": "300"},
+                )
+
+            from core.config import settings
+            from web.templating import templates
+
+            info = await get_maintenance_info()
+            return templates.TemplateResponse(
+                "maintenance.html",
+                {
+                    "request": request,
+                    "maintenance_message": info.get("message", ""),
+                    "app_version": settings.APP_VERSION,
+                },
+                status_code=503,
+                headers={"Retry-After": "300"},
+            )
+
+        return await call_next(request)

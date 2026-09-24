@@ -34,6 +34,7 @@ from core.logging_config import setup_logging
 from core.sentry import init_sentry
 from web.security.csrf import CSRFMiddleware
 from web.security.middleware import (
+    MaintenanceMiddleware,
     RequestSizeLimitMiddleware,
     RequestSizeValidator,
     SecurityHeadersMiddleware,
@@ -160,6 +161,9 @@ app.add_middleware(
 # ДОЛЖЕН выполняться ПОСЛЕ SessionMiddleware, чтобы scope["session"] существовал
 app.add_middleware(CSRFMiddleware)
 
+# 2.5. Режим технических работ (перехватывает запросы при включенном обслуживании)
+app.add_middleware(MaintenanceMiddleware)
+
 # 3. Redis-backed сессия с безопасными настройками и TTL (для CSRF и auth)
 # ДОЛЖЕН выполняться ДО CSRFMiddleware,
 # чтобы scope["session"] был создан до того, как он попытается его прочитать.
@@ -209,6 +213,22 @@ async def favicon_endpoint():
     return FileResponse("web/static/favicon.ico", media_type="image/x-icon")
 
 
+@app.get("/maintenance", response_class=HTMLResponse, include_in_schema=False)
+async def maintenance_endpoint(request: Request):
+    """Страница уведомления о проведении технических работ."""
+    from core.maintenance import get_maintenance_info
+
+    info = await get_maintenance_info()
+    return templates.TemplateResponse(
+        "maintenance.html",
+        {
+            "request": request,
+            "maintenance_message": info.get("message", ""),
+            "app_version": settings.APP_VERSION,
+        },
+    )
+
+
 # Middleware для кэширования статических файлов (Cache-Control)
 @app.middleware("http")
 async def add_static_cache_headers(request: Request, call_next):
@@ -226,6 +246,7 @@ _SKIP_MIDDLEWARE_PREFIXES = (
     "/auth/",
     "/legal/",
     "/favicon.ico",
+    "/maintenance",
 )
 
 # Валидатор размера запроса (10MB лимит)
