@@ -164,7 +164,7 @@ async def test_render_status_contains_backup_button():
     docker_mock = mock.AsyncMock(spec=DockerClient)
     docker_mock.list_containers.return_value = []
 
-    text, kb = await render_status_content(docker_mock)
+    _text, kb = await render_status_content(docker_mock)
     callbacks = [btn.callback_data for row in kb.inline_keyboard for btn in row]
     assert "backup:create" in callbacks
 
@@ -262,5 +262,53 @@ def test_rotate_old_backups(tmp_path):
     assert fresh.exists()
     assert not old1.exists()
     assert not old2.exists()
+
+
+@pytest.mark.asyncio
+async def test_setup_bot_commands_and_menu_button():
+    from aiogram.types import BotCommandScopeChat, MenuButtonWebApp
+
+    from bots.telegram.bot import setup_bot_commands
+
+    bot_mock = mock.AsyncMock()
+    admin_id = 998877
+    webapp_url = "https://example-bot.duckdns.org"
+
+    await setup_bot_commands(bot_mock, admin_id=admin_id, webapp_url=webapp_url)
+
+    # Проверяем удаление старых команд
+    assert bot_mock.delete_my_commands.call_count >= 1
+
+    # Проверяем регистрацию аккуратных команд
+    bot_mock.set_my_commands.assert_called_once()
+    cmds_call = bot_mock.set_my_commands.call_args[1]
+    cmd_names = [c.command for c in cmds_call["commands"]]
+    assert "status" in cmd_names
+    assert "panel" in cmd_names
+    assert "restart" in cmd_names
+    assert "logs" in cmd_names
+    assert "backup" in cmd_names
+    assert "maintenance" in cmd_names
+    assert "2fa" in cmd_names
+    assert "help" in cmd_names
+    assert isinstance(cmds_call["scope"], BotCommandScopeChat)
+    assert cmds_call["scope"].chat_id == admin_id
+
+    # Проверяем установку постоянной кнопки Mini App в меню чата
+    bot_mock.set_chat_menu_button.assert_called_once()
+    menu_call = bot_mock.set_chat_menu_button.call_args[1]
+    assert menu_call["chat_id"] == admin_id
+    assert isinstance(menu_call["menu_button"], MenuButtonWebApp)
+    assert menu_call["menu_button"].web_app.url == webapp_url
+
+
+def test_main_reply_keyboard_webapp_button():
+    from bots.telegram.keyboards import get_main_reply_keyboard
+
+    kb = get_main_reply_keyboard(webapp_url="https://example-bot.duckdns.org")
+    assert kb.keyboard[0][0].text == "📱 Веб-панель"
+    assert kb.keyboard[0][0].web_app is not None
+    assert kb.keyboard[0][0].web_app.url == "https://example-bot.duckdns.org"
+
 
 

@@ -12,7 +12,7 @@ from pathlib import Path
 # Обеспечиваем импорт модулей проекта
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bots.telegram.bot import create_telegram_bot
+from bots.telegram.bot import create_telegram_bot, setup_bot_commands
 from core.config import get_settings
 from core.logging_config import setup_logging
 
@@ -56,11 +56,14 @@ async def main() -> None:
             loop.add_signal_handler(sig, _signal_handler)
 
     try:
+        # Регистрируем аккуратный список слэш-команд и кнопку WebApp в чате
+        await setup_bot_commands(bot, settings.TELEGRAM_ADMIN_ID, settings.TELEGRAM_WEBAPP_URL)
+
         # Отправляем сообщение о старте монитора администратору
         try:
             await bot.send_message(
                 chat_id=settings.TELEGRAM_ADMIN_ID,
-                text="🟢 <b>Telegram-монитор сервера запущен и активен!</b>\nИспользуйте /status для проверки состояния.",
+                text="🟢 <b>Telegram-монитор сервера запущен и активен!</b>\nИспользуйте /status или кнопку «📱 Веб-панель» для работы.",
                 parse_mode="HTML",
             )
         except Exception as e:

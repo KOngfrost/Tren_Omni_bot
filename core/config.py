@@ -17,7 +17,7 @@ from pydantic_settings import (
 
 load_dotenv()
 
-from core import APP_VERSION as _app_version, PROJECT_VERSION as _project_version  # noqa: E402
+from core import APP_VERSION as _app_version  # noqa: E402
 
 # Файл dev-фоллбэка секрета сессий (добавлен в .gitignore)
 _DEV_SECRET_FILE = Path(__file__).resolve().parent.parent / ".session_secret"
@@ -211,6 +211,7 @@ class Settings(BaseSettings):
     TELEGRAM_ADMIN_ID: int = 0
     TELEGRAM_ALERTS_ENABLED: bool = True
     TELEGRAM_CHECK_INTERVAL_SECONDS: int = 30
+    TELEGRAM_WEBAPP_URL: str = "https://example-bot.duckdns.org"
 
     model_config = SettingsConfigDict(
         env_file=".env",

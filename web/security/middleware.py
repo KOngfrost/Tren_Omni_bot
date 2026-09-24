@@ -38,7 +38,6 @@ def csp_nonce(kind: str = "script") -> str:
 # === Безопасные заголовки ===
 
 SECURITY_HEADERS = {
-    "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "X-XSS-Protection": "1; mode=block",
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -52,11 +51,11 @@ SECURITY_HEADERS = {
 # снижает защиту от XSS. Все скрипты должны быть подключены через nonce.
 CONTENT_SECURITY_POLICY_BASE = (
     "default-src 'self'; "
-    "script-src 'self' 'nonce-{nonce}'; "
+    "script-src 'self' 'nonce-{nonce}' https://telegram.org; "
     "style-src 'self' 'nonce-{nonce_style}' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' https://fonts.gstatic.com; "
     "img-src 'self' data:; "
-    "frame-ancestors 'none'; "
+    "frame-ancestors 'self' https://*.telegram.org https://telegram.org; "
     "base-uri 'self'; "
     "form-action 'self';"
 )

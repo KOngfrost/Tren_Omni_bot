@@ -48,6 +48,15 @@
         })();
     </script>
     <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
+    <script src="https://telegram.org/js/telegram-web-app.js" nonce="{{ csp_nonce('script') }}"></script>
+    <script nonce="{{ csp_nonce('script') }}">
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.ready();
+                window.Telegram.WebApp.expand();
+            }
+        } catch (e) {}
+    </script>
     <script src="/static/store.js?v={{ app_version }}" defer></script>
     <script src="/static/app.js?v={{ app_version }}" defer></script>
 </head>
