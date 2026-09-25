@@ -53,6 +53,7 @@ templates.env.globals["csp_nonce"] = csp_nonce
 templates.env.globals["get_csrf_token"] = get_csrf_token
 templates.env.globals["app_version"] = settings.APP_VERSION
 templates.env.globals["project_version"] = settings.APP_VERSION
+templates.env.globals["css_version"] = f"{settings.APP_VERSION}.2"
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
