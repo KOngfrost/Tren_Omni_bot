@@ -2,38 +2,28 @@
     auto_https disable_redirects
 }
 
-# Caddyfile: Закрытый контур для веб-панели через NetBird VPN
-# Доступ разрешён ТОЛЬКО авторизованным узлам NetBird (100.64.0.0/10) и доверенным приватным сетям.
-# Любые неавторизованные запросы из публичного интернета немедленно сбрасываются (abort).
-(protected_proxy) {
-    @allowed {
-        remote_ip 100.64.0.0/10 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1
-    }
-    handle @allowed {
-        reverse_proxy web-admin:8000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-    handle {
-        abort
+(common_proxy) {
+    reverse_proxy web-admin:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
     }
 }
 
-# Публичный домен DuckDNS (Let's Encrypt SSL, доступ только из VPN)
+# Публичный домен DuckDNS (Let's Encrypt SSL, веб-панель и Telegram WebApp)
 {$DOMAIN:example-bot.duckdns.org} {
-    import protected_proxy
+    import common_proxy
 }
 
-# Все запросы по HTTP (IP NetBird, localhost и MagicDNS)
+# Доступ по HTTP через NetBird VPN, localhost и MagicDNS
 http://localhost, http://127.0.0.1, http://100.64.0.1, http://oss-web-panel.example.netbird.cloud, http://oss-web-panel.example.netbird.cloud {
-    import protected_proxy
+    import common_proxy
 }
 
+# Доступ по HTTPS внутри NetBird VPN
 https://oss-web-panel.example.netbird.cloud, https://oss-web-panel.example.netbird.cloud {
     tls internal
-    import protected_proxy
+    import common_proxy
 }
 
