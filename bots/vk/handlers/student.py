@@ -283,6 +283,13 @@ async def ticket_description_handler(message: Message):
         )
         return
 
+    if len(description) > 3000:
+        await message.answer(
+            "Описание слишком длинное (максимум 3000 символов).\n\n"
+            f"Текущая длина: {len(description)} символов. Пожалуйста, сократите текст и отправьте снова:"
+        )
+        return
+
     state_peer = await vk_bot.state_dispenser.get(message.from_id)
     department = state_peer.payload.get("department") if state_peer else None
 

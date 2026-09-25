@@ -336,32 +336,45 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
     if not report_bytes:
         raise ValueError("Сформированный файл отчёта пуст (0 байт)")
 
-    uploader = DocMessagesUploader(api)
-    try:
-        attachment = await uploader.upload(
-            file_source=report_bytes,
-            peer_id=admin_vk_id,
-            title=filename,
-        )
-    except Exception as e:
-        logger.warning(
-            "Первая попытка загрузки отчёта в VK (%s) не удалась: %s. Выполняется повторная попытка...",
-            filename,
-            e,
-        )
-        await asyncio.sleep(1.0)
-        attachment = await uploader.upload(
-            file_source=report_bytes,
-            peer_id=admin_vk_id,
-            title=filename,
-        )
+    import os
+    import tempfile
 
-    await api.messages.send(
-        peer_id=admin_vk_id,
-        random_id=secrets.randbelow(2**31 - 1) + 1,
-        message="Ежедневный отчёт.",
-        attachment=attachment,
-    )
+    uploader = DocMessagesUploader(api)
+    suffix = os.path.splitext(filename)[1] or ".xlsx"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(report_bytes)
+        tmp_path = tmp.name
+
+    try:
+        try:
+            attachment = await uploader.upload(
+                file_source=tmp_path,
+                peer_id=admin_vk_id,
+                title=filename,
+            )
+        except Exception as e:
+            logger.warning(
+                "Первая попытка загрузки отчёта в VK (%s) не удалась: %s. Выполняется повторная попытка...",
+                filename,
+                e,
+            )
+            await asyncio.sleep(1.0)
+            attachment = await uploader.upload(
+                file_source=tmp_path,
+                peer_id=admin_vk_id,
+                title=filename,
+            )
+
+        await api.messages.send(
+            peer_id=admin_vk_id,
+            random_id=secrets.randbelow(2**31 - 1) + 1,
+            message="Ежедневный отчёт.",
+            attachment=attachment,
+        )
+    finally:
+        if os.path.exists(tmp_path):
+            with contextlib.suppress(Exception):
+                os.remove(tmp_path)
 
 
 async def get_superadmin_vk_ids() -> list[int]:

@@ -43,6 +43,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _escape_like(text: str) -> str:
+    """Экранировать спецсимволы ILIKE (_, %, \\) для предотвращения wildcard injection."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _build_ticket_search_filter(clean_q: str):
     """Полнотекстовый гибкий поиск по словам, фразе, номеру, автору и отделу.
 
@@ -53,13 +58,14 @@ def _build_ticket_search_filter(clean_q: str):
     term_conditions = []
     for term in terms:
         term_clean_num = term.lstrip("#").lstrip("№").strip()
+        esc_term = _escape_like(term)
         conds: list[Any] = [
-            Ticket.topic.ilike(f"%{term}%"),
-            Ticket.description.ilike(f"%{term}%"),
-            Ticket.response_text.ilike(f"%{term}%"),
-            User.full_name.ilike(f"%{term}%"),
-            cast(User.vk_id, String).like(f"%{term}%"),
-            Department.name.ilike(f"%{term}%"),
+            Ticket.topic.ilike(f"%{esc_term}%", escape="\\"),
+            Ticket.description.ilike(f"%{esc_term}%", escape="\\"),
+            Ticket.response_text.ilike(f"%{esc_term}%", escape="\\"),
+            User.full_name.ilike(f"%{esc_term}%", escape="\\"),
+            cast(User.vk_id, String).like(f"%{esc_term}%", escape="\\"),
+            Department.name.ilike(f"%{esc_term}%", escape="\\"),
         ]
         if term_clean_num.isdigit():
             conds.append(Ticket.id == int(term_clean_num))
@@ -67,12 +73,13 @@ def _build_ticket_search_filter(clean_q: str):
 
     if len(terms) > 1:
         phrase_clean_num = clean_q.lstrip("#").lstrip("№").strip()
+        esc_phrase = _escape_like(clean_q)
         phrase_conds: list[Any] = [
-            Ticket.topic.ilike(f"%{clean_q}%"),
-            Ticket.description.ilike(f"%{clean_q}%"),
-            Ticket.response_text.ilike(f"%{clean_q}%"),
-            User.full_name.ilike(f"%{clean_q}%"),
-            Department.name.ilike(f"%{clean_q}%"),
+            Ticket.topic.ilike(f"%{esc_phrase}%", escape="\\"),
+            Ticket.description.ilike(f"%{esc_phrase}%", escape="\\"),
+            Ticket.response_text.ilike(f"%{esc_phrase}%", escape="\\"),
+            User.full_name.ilike(f"%{esc_phrase}%", escape="\\"),
+            Department.name.ilike(f"%{esc_phrase}%", escape="\\"),
         ]
         if phrase_clean_num.isdigit():
             phrase_conds.append(Ticket.id == int(phrase_clean_num))

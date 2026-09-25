@@ -90,7 +90,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.3.16}
+      - APP_VERSION=${APP_VERSION:-0.8.4}
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -108,28 +108,32 @@ services:
       redis:
         condition: service_healthy
 
-  tailscale:
-    build:
-      context: .
-      dockerfile: Dockerfile.tailscale
-    container_name: oss_bot_tailscale
+  netbird:
+    image: netbirdio/netbird:latest
+    container_name: oss_bot_netbird
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 64m
-    memswap_limit: 64m
+    mem_limit: 128m
+    memswap_limit: 128m
     hostname: oss-web-panel
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
     environment:
-      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY:?TAILSCALE_AUTH_KEY is required in .env}
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=true
-      - TS_HOSTNAME=oss-web-panel
+      - NB_SETUP_KEY=${NETBIRD_SETUP_KEY:-}
+      - NB_MANAGEMENT_URL=${NETBIRD_MANAGEMENT_URL:-https://api.netbird.io:443}
+      - NB_HOSTNAME=oss-web-panel
+      - NB_LOG_LEVEL=info
     volumes:
-      - tailscale_state:/var/lib/tailscale
+      - netbird_data:/etc/netbird
     healthcheck:
-      test: ["CMD", "tailscale", "status"]
+      test: ["CMD", "netbird", "status"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
@@ -162,7 +166,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.3.16}
+      - APP_VERSION=${APP_VERSION:-0.8.4}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -220,7 +224,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.3.16}
+      - APP_VERSION=${APP_VERSION:-0.8.4}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/backups/oss_bot:/var/backups/oss_bot
@@ -252,7 +256,7 @@ services:
 
 volumes:
   postgres_data:
-  tailscale_state:
+  netbird_data:
   redis_data:
   prometheus_data:
   caddy_data:

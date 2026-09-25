@@ -1,9 +1,19 @@
-# Caddyfile: Автоматический HTTPS для Telegram Mini App через DuckDNS
-example-bot.duckdns.org {
-    reverse_proxy web-admin:8000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+# Caddyfile: Закрытый контур для веб-панели через NetBird VPN
+# Доступ разрешён ТОЛЬКО авторизованным узлам NetBird (100.64.0.0/10) и доверенным приватным сетям.
+# Любые неавторизованные запросы из публичного интернета немедленно сбрасываются (abort).
+{$DOMAIN:example-bot.duckdns.org} {
+    @allowed {
+        remote_ip 100.64.0.0/10 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1
+    }
+    handle @allowed {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    handle {
+        abort
     }
 }

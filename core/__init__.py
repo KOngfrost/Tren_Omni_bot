@@ -60,7 +60,7 @@ def _resolve_project_version() -> str:
         pass
 
     # 5. Фоллбэк
-    return "0.8.3.16"
+    return "0.8.4"
 
 
 __version__ = _resolve_project_version()

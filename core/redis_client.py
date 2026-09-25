@@ -30,15 +30,7 @@ async def get_redis_client() -> Any | None:
     global _redis_client, _redis_available, _last_failed_attempt
 
     if _redis_client is not None:
-        try:
-            await _redis_client.ping()
-            return _redis_client
-        except Exception:
-            logger.warning("Существующее соединение Redis разорвано, выполняется сброс")
-            with contextlib.suppress(Exception):
-                await _redis_client.close()
-            _redis_client = None
-            _redis_available = False
+        return _redis_client
 
     if not settings.REDIS_URL:
         _redis_available = False
@@ -56,6 +48,7 @@ async def get_redis_client() -> Any | None:
             decode_responses=True,
             socket_connect_timeout=0.5,
             socket_timeout=0.5,
+            health_check_interval=30,
             max_connections=20,
         )
         # Проверяем подключение

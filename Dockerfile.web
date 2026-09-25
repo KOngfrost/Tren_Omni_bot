@@ -30,4 +30,4 @@ EXPOSE 8000
 # Запускаем веб-админку в многоворкерном режиме (2+ воркера).
 # Сессии хранятся в Redis (RedisSessionMiddleware), поэтому распределение
 # запросов между воркерами безопасно и не приводит к рассинхронизации.
-CMD ["sh", "-c", "exec uvicorn web.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_WORKERS:-2} --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "exec uvicorn web.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_WORKERS:-2} --limit-max-requests 1000 --proxy-headers --forwarded-allow-ips='*'"]

@@ -299,8 +299,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _adjust_session_same_site(self) -> Self:
-        if self.SESSION_HTTPS_ONLY and self.SESSION_SAME_SITE == "lax":
-            self.SESSION_SAME_SITE = "none"
+        if not self.SESSION_SAME_SITE:
+            self.SESSION_SAME_SITE = "lax"
         return self
 
 
@@ -378,17 +378,25 @@ class Settings(BaseSettings):
         self.validate_required()
         if not self.IS_PRODUCTION:
             return
-        if not self.DB_USER or self.DB_USER == "student_bot":
+        if not self.DB_USER or self.DB_USER in ("student_bot", "postgres", "root"):
             raise RuntimeError(
                 "APP_ENV=production, но POSTGRES_USER не задан явно "
-                "(пустой или дефолт 'student_bot' запрещён в production). "
+                "(пустой или дефолтные 'student_bot', 'postgres', 'root' запрещены в production). "
                 "Укажите имя пользователя в .env."
             )
-        if not self.DB_PASS or self.DB_PASS == "student_bot":
+        if not self.DB_PASS or self.DB_PASS in ("student_bot", "oss_bot", "password", "postgres", "root", "123456"):
             raise RuntimeError(
-                "APP_ENV=production, но POSTGRES_PASSWORD не задан явно "
-                "(пустой или дефолт 'student_bot' запрещён в production). "
-                "Укажите пароль в .env."
+                "APP_ENV=production, но POSTGRES_PASSWORD не задан явно или небезопасен. "
+                "Укажите стойкий пароль в .env."
+            )
+        weak_web_passwords = {"admin", "admin123", "password", "123456", "root", "qwerty"}
+        if self.WEB_ADMIN_PASSWORD and (
+            self.WEB_ADMIN_PASSWORD.lower() in weak_web_passwords
+            or len(self.WEB_ADMIN_PASSWORD) < 10
+        ):
+            raise RuntimeError(
+                "APP_ENV=production, но WEB_ADMIN_PASSWORD слишком простой или короче 10 символов. "
+                "Задайте сложный уникальный пароль в .env."
             )
         if not self.SESSION_SECRET_KEY or len(self.SESSION_SECRET_KEY) < 32:
             raise RuntimeError(

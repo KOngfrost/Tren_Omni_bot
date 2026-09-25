@@ -13,6 +13,7 @@ os.environ["APP_ENV"] = "development"
 os.environ["SESSION_HTTPS_ONLY"] = "false"
 
 import asyncio
+import contextlib
 
 import pytest
 import pytest_asyncio
@@ -167,3 +168,33 @@ def web_client(monkeypatch):
         yield client
 
     asyncio.run(engine.dispose())
+
+
+@pytest.fixture(autouse=True)
+def reset_maintenance_mode():
+    from core.maintenance import MAINTENANCE_FALLBACK_FILE
+    import core.maintenance as maint
+    from core.two_factor import TWO_FACTOR_FALLBACK_FILE
+    import core.two_factor as tf
+
+    maint._cached_state = None
+    maint._cached_expires_at = 0.0
+    tf._cached_state = None
+    tf._cached_expires_at = 0.0
+    if os.path.exists(MAINTENANCE_FALLBACK_FILE):
+        with contextlib.suppress(Exception):
+            os.remove(MAINTENANCE_FALLBACK_FILE)
+    if os.path.exists(TWO_FACTOR_FALLBACK_FILE):
+        with contextlib.suppress(Exception):
+            os.remove(TWO_FACTOR_FALLBACK_FILE)
+    yield
+    maint._cached_state = None
+    maint._cached_expires_at = 0.0
+    tf._cached_state = None
+    tf._cached_expires_at = 0.0
+    if os.path.exists(MAINTENANCE_FALLBACK_FILE):
+        with contextlib.suppress(Exception):
+            os.remove(MAINTENANCE_FALLBACK_FILE)
+    if os.path.exists(TWO_FACTOR_FALLBACK_FILE):
+        with contextlib.suppress(Exception):
+            os.remove(TWO_FACTOR_FALLBACK_FILE)

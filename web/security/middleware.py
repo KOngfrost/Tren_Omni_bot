@@ -39,7 +39,8 @@ def csp_nonce(kind: str = "script") -> str:
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
-    "X-XSS-Protection": "1; mode=block",
+    "X-XSS-Protection": "0",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -286,8 +287,8 @@ def sanitize_csv_field(value: str) -> str:
     # Проверяем паттерны инъекций
     for pattern_str in _CSV_INJECTION_PATTERNS:
         if re.search(pattern_str, value):
-            # Экранируем, добавляя табуляцию в начало
-            return f"	{value}"
+            # Экранируем, добавляя апостроф в начало (стандартный маркер текста в электронных таблицах)
+            return f"'{value}"
 
     return value
 
