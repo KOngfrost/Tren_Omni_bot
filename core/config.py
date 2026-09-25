@@ -1,5 +1,7 @@
 import contextlib
+import os
 import secrets
+import tempfile
 from pathlib import Path
 from typing import Any, Self
 from urllib.parse import quote_plus
@@ -19,25 +21,24 @@ load_dotenv()
 
 from core import APP_VERSION as _app_version  # noqa: E402
 
-# Файл dev-фоллбэка секрета сессий (добавлен в .gitignore)
-_DEV_SECRET_FILE = Path(__file__).resolve().parent.parent / ".session_secret"
+# Файл dev-фоллбэка секрета сессий (хранится во временной системной директории ОС, вне репозитория)
+_DEV_SECRET_FILE = Path(tempfile.gettempdir()) / "oss_bot_dev_session_secret"
 
 
 def _load_or_create_dev_secret() -> str:
-    """Dev-фоллбэк секрета сессий: файл .session_secret в корне проекта.
+    """Dev-фоллбэк секрета сессий: хранится в системной папке временных файлов ОС.
 
-    Секрет генерируется один раз и сохраняется на диск, чтобы сессии
-    веб-панели переживали перезапуск процесса в development-режиме.
+    Секрет генерируется один раз и сохраняется во временную системную папку ОС,
+    чтобы сессии веб-панели переживали перезапуск процесса в development-режиме,
+    при этом файл физически не может попасть в директорию репозитория и Git.
     В production секрет обязателен в .env — ensure_production_config()
     прервёт запуск без него.
     """
-    # Читаем существующий секрет; FileNotFoundError/OSError — создадим новый
     with contextlib.suppress(OSError):
         value = _DEV_SECRET_FILE.read_text(encoding="utf-8").strip()
         if value:
             return value
     value = secrets.token_urlsafe(64)
-    # Нет прав на запись — секрет будет новым при каждом запуске (только dev)
     with contextlib.suppress(OSError):
         _DEV_SECRET_FILE.write_text(value, encoding="utf-8")
     return value

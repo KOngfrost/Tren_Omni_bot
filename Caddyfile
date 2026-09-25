@@ -11,19 +11,15 @@
     }
 }
 
-# Публичный домен DuckDNS (Let's Encrypt SSL, веб-панель и Telegram WebApp)
-{$DOMAIN:example-bot.duckdns.org} {
+# Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом).
+# Имя домена задаётся в переменной окружения DOMAIN в файле .env (по умолчанию localhost для dev).
+{$DOMAIN:localhost} {
     import common_proxy
 }
 
-# Доступ по HTTP через NetBird VPN, localhost и MagicDNS
-http://localhost, http://127.0.0.1, http://100.64.0.1, http://oss-web-panel.example.netbird.cloud, http://oss-web-panel.example.netbird.cloud {
+# Внутренний трафик (порт 80: NetBird VPN, локальные адреса localhost/127.0.0.1)
+:80 {
     import common_proxy
 }
 
-# Доступ по HTTPS внутри NetBird VPN
-https://oss-web-panel.example.netbird.cloud, https://oss-web-panel.example.netbird.cloud {
-    tls internal
-    import common_proxy
-}
 

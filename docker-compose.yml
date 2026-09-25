@@ -244,6 +244,10 @@ services:
     logging: *default-logging
     mem_limit: 128m
     memswap_limit: 128m
+    env_file:
+      - .env
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
