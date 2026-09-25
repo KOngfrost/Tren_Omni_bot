@@ -27,8 +27,8 @@
     import protected_proxy
 }
 
-# Все запросы по HTTP (любой IP NetBird 100.x.y.z, MagicDNS и localhost)
-:80 {
+# Все запросы по HTTP (любой IP NetBird, MagicDNS и localhost без редиректа)
+http:// {
     import protected_proxy
 }
 
