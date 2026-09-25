@@ -69,6 +69,7 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=5432
+      - DB_USE_PGBOUNCER=false
     command: python -m alembic upgrade head
     depends_on:
       db:
