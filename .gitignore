@@ -77,3 +77,8 @@ test_output.txt
 test_result.txt
 test_ui_result.txt
 *.bundle
+
+# Private diagrams and handover files
+Kak_rabotaet_studencheskiy_pomoschnik.svg
+docs/system_architecture_and_button_flowchart.md
+docs/PROJECT_HANDOVER.md
