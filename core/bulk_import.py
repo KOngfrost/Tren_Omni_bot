@@ -23,6 +23,51 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
+# === Ограничения безопасности (SEC-10): защита от Zip/XML-бомб ===
+# Значения читаются из настроек окружения (.env)
+import os
+
+MAX_IMPORT_FILE_SIZE = int(os.getenv("MAX_IMPORT_FILE_SIZE", str(5 * 1024 * 1024)))
+MAX_IMPORT_ROWS = int(os.getenv("MAX_IMPORT_ROWS", "1000"))
+
+
+class ImportLimitError(ValueError):
+    """Превышен лимит размера файла или количества строк при массовом импорте (SEC-10)."""
+
+
+def _limit_error(kind: str, limit: int) -> ImportLimitError:
+    """Сформировать читаемую ошибку превышения лимита импорта."""
+    if kind == "size":
+        return ImportLimitError(
+            f"Размер файла превышает лимит {limit // (1024 * 1024)} МБ. "
+            "Разделите файл на части и загрузите их по отдельности."
+        )
+    return ImportLimitError(
+        f"В файле больше {limit} строк с данными. "
+        "Разделите файл на части и загрузите их по отдельности."
+    )
+
+
+async def read_import_upload_async(form: Any) -> tuple[bytes | None, str | None, str | None]:
+    """Прочитать загруженный файл массового импорта с лимитом размера (SEC-10).
+
+    Возвращает кортеж (file_bytes, filename, error). error не пуст, если файл
+    превышает MAX_IMPORT_FILE_SIZE: чтение прерывается на лимите + 1 байт,
+    поэтому гигантская загрузка не попадает в память целиком.
+    """
+    file_upload = form.get("file")
+    if not (
+        file_upload and hasattr(file_upload, "read") and getattr(file_upload, "filename", None)
+    ):
+        return None, None, None
+    file_bytes = await file_upload.read(MAX_IMPORT_FILE_SIZE + 1)
+    if file_bytes and len(file_bytes) > MAX_IMPORT_FILE_SIZE:
+        return None, None, (
+            f"Файл слишком большой: максимум {MAX_IMPORT_FILE_SIZE // (1024 * 1024)} МБ. "
+            "Разделите файл на части."
+        )
+    return file_bytes, file_upload.filename, None
+
 
 def _decode_bytes(file_bytes: bytes) -> str:
     """Безопасное декодирование байт с подбором кодировок."""
@@ -261,21 +306,32 @@ def parse_knowledge_rows(raw_rows: list[list[str]]) -> list[dict[str, str]]:
 def parse_file_or_text(
     file_bytes: bytes | None, filename: str | None, text_content: str | None = None
 ) -> list[list[str]]:
-    """Распарсить загруженный файл (.xlsx, .csv) или текстовый ввод в матрицу строк."""
+    """Распарсить загруженный файл (.xlsx, .csv) или текстовый ввод в матрицу строк.
+
+    SEC-10: ограничивает размер файла (MAX_IMPORT_FILE_SIZE) и число
+    считываемых строк (MAX_IMPORT_ROWS); при превышении бросает
+    ImportLimitError до исчерпания памяти.
+    """
     raw_rows: list[list[str]] = []
 
     if file_bytes and filename:
+        # SEC-10: лимит размера входного файла до передачи openpyxl/csv.
+        if len(file_bytes) > MAX_IMPORT_FILE_SIZE:
+            raise _limit_error("size", MAX_IMPORT_FILE_SIZE)
         fn = filename.lower()
         if fn.endswith((".xlsx", ".xlsm", ".xltx")):
             wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
             try:
                 ws = wb.active
                 if ws is not None:
-                    raw_rows.extend(
-                        [str(v or "").strip() for v in row]
-                        for row in ws.iter_rows(values_only=True)
-                        if any(v is not None and str(v).strip() for v in row)
-                    )
+                    # SEC-10: потоковое чтение read_only-режима с лимитом строк —
+                    # Zip/XML-бомба прерывается на MAX_IMPORT_ROWS.
+                    for row in ws.iter_rows(values_only=True):
+                        if not any(v is not None and str(v).strip() for v in row):
+                            continue
+                        if len(raw_rows) >= MAX_IMPORT_ROWS:
+                            raise _limit_error("rows", MAX_IMPORT_ROWS)
+                        raw_rows.append([str(v or "").strip() for v in row])
             finally:
                 wb.close()
             return raw_rows
@@ -288,7 +344,14 @@ def parse_file_or_text(
 
     delimiter = _detect_delimiter(text)
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
-    raw_rows.extend([c.strip() for c in row] for row in reader if any(c.strip() for c in row))
+    for row in reader:
+        cleaned = [c.strip() for c in row]
+        if not any(cleaned):
+            continue
+        # SEC-10: лимит строк для CSV/текстовой вставки.
+        if len(raw_rows) >= MAX_IMPORT_ROWS:
+            raise _limit_error("rows", MAX_IMPORT_ROWS)
+        raw_rows.append(cleaned)
     return raw_rows
 
 
@@ -322,9 +385,9 @@ def export_faq_xlsx(nodes: list[Any]) -> bytes:
     for node in nodes:
         dept_name = node.department.name if getattr(node, "department", None) else "—"
         ws.append([
-            node.id, 
-            _sanitize_excel_cell(dept_name), 
-            _sanitize_excel_cell(node.question), 
+            node.id,
+            _sanitize_excel_cell(dept_name),
+            _sanitize_excel_cell(node.question),
             _sanitize_excel_cell(node.final_answer or "")
         ])
 
@@ -359,9 +422,9 @@ def export_knowledge_xlsx(items: list[Any]) -> bytes:
     for item in items:
         dept_name = item.department.name if getattr(item, "department", None) else "—"
         ws.append([
-            item.id, 
-            _sanitize_excel_cell(dept_name), 
-            _sanitize_excel_cell(item.keywords), 
+            item.id,
+            _sanitize_excel_cell(dept_name),
+            _sanitize_excel_cell(item.keywords),
             _sanitize_excel_cell(item.answer)
         ])
 

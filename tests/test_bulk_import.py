@@ -21,6 +21,9 @@ from bots.vk.handlers.knowledge import (
     knowledge_base_handler,
 )
 from core.bulk_import import (
+    MAX_IMPORT_FILE_SIZE,
+    MAX_IMPORT_ROWS,
+    ImportLimitError,
     export_faq_xlsx,
     export_faq_xlsx_async,
     export_knowledge_xlsx,
@@ -112,6 +115,47 @@ def test_parse_file_or_text_csv():
     parsed = parse_faq_rows(raw)
     assert len(parsed) == 1
     assert parsed[0]["question"] == "Как заселиться?"
+
+
+# ---------------------------------------------------------------------------
+# SEC-10: защита от Zip/XML-бомб — лимиты размера файла и числа строк.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_file_rejects_oversized_file():
+    """Файл больше MAX_IMPORT_FILE_SIZE отклоняется до разбора (SEC-10)."""
+    with pytest.raises(ImportLimitError) as exc_info:
+        parse_file_or_text(b"x" * (MAX_IMPORT_FILE_SIZE + 1), "bomb.xlsx")
+    assert "5 МБ" in str(exc_info.value)
+
+
+def test_parse_text_rejects_too_many_rows():
+    """Текстовая вставка с числом строк больше лимита прерывается (SEC-10)."""
+    rows = "\n".join(f"Вопрос {i}?;Ответ {i}" for i in range(MAX_IMPORT_ROWS + 5))
+    with pytest.raises(ImportLimitError) as exc_info:
+        parse_file_or_text(None, None, rows)
+    assert "строк" in str(exc_info.value)
+
+
+def test_parse_xlsx_rejects_too_many_rows():
+    """xlsx с числом строк больше лимита прерывается до исчерпания памяти (SEC-10)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Вопрос", "Ответ"])
+    for i in range(MAX_IMPORT_ROWS + 5):
+        ws.append([f"Вопрос {i}?", f"Ответ {i}"])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    with pytest.raises(ImportLimitError):
+        parse_file_or_text(buf.getvalue(), "bomb.xlsx")
+
+
+def test_parse_within_limits_still_works():
+    """Вход в пределах лимитов разбирается как раньше (регрессия SEC-10)."""
+    rows = "\n".join(f"Вопрос {i}?;Ответ {i}" for i in range(50))
+    raw = parse_file_or_text(None, None, rows)
+    assert len(raw) == 50
 
 
 def test_export_faq_and_knowledge_xlsx():

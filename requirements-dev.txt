@@ -4,6 +4,12 @@ pytest-cov>=5.0.0
 ruff==0.6.9
 mypy==1.11.2
 
+# E2E-тесты интерфейса в реальном браузере (этап 5.4).
+# Установка браузера: python -m playwright install chromium
+# Без него тесты test_ui_buttons_browser.py пропускаются (skipif),
+# а не падают: в CI образ без браузера — норма.
+playwright==1.49.1
+
 # SQLite драйвер для тестовой базы данных
 aiosqlite==0.21.0
 pre-commit==4.6.2

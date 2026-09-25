@@ -2,6 +2,7 @@
 
 import logging
 import re
+from typing import Any
 
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
@@ -12,6 +13,16 @@ from bots.vk.common import (
     _main_keyboard_for,
     _main_reply_text,
     _operator_can_access,
+)
+from bots.vk.handlers.pagination import (
+    FETCH_LIMIT,
+    KIND_MY_TICKETS,
+    PAGE_SIZE,
+    clamp_page,
+    open_list,
+    page_count,
+    persist_page,
+    register_renderer,
 )
 from bots.vk.keyboards import (
     build_admin_keyboard,
@@ -39,6 +50,7 @@ from core.commands import (
 )
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
+from core.redis_client import get_redis_client
 from core.ticket_service import (
     add_student_reply,
     create_ticket,
@@ -54,6 +66,35 @@ from core.ticket_service import (
 
 logger = logging.getLogger(__name__)
 student_labeler = BotLabeler()
+
+# === Ограничение частоты подачи обращений (SEC-08) ===
+# Значения настраиваются через переменные окружения (.env)
+import os
+
+TICKET_RATE_LIMIT = int(os.getenv("VK_TICKET_RATE_LIMIT", "3"))
+TICKET_RATE_WINDOW_SECONDS = int(os.getenv("VK_TICKET_RATE_WINDOW_SECONDS", "300"))
+
+
+async def _is_ticket_rate_limited(vk_id: int) -> bool:
+    """Redis-based ограничение частоты создания обращений (SEC-08).
+
+    Фиксированное окно: атомарный INCR-счётчик с TTL (первый инкремент
+    устанавливает окно 5 минут). Работает единообразно при нескольких
+    воркерах бота. Если Redis недоступен — ограничение не применяется
+    (fail-open), чтобы сбой кэша не блокировал реальных студентов.
+    """
+    redis = await get_redis_client()
+    if redis is None:
+        return False
+    key = f"ticket_rate:{vk_id}"
+    try:
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, TICKET_RATE_WINDOW_SECONDS)
+        return count > TICKET_RATE_LIMIT
+    except Exception as e:
+        logger.warning("SEC-08: Redis недоступен, rate limit обращений не применён: %s", e)
+        return False
 
 
 @student_labeler.private_message(text=COMMANDS_START)
@@ -86,13 +127,12 @@ async def cancel_handler(message: Message):
         )
 
 
-@student_labeler.private_message(text=COMMANDS_MY_TICKETS)
-async def my_tickets_handler(message: Message):
-    """Список заявок пользователя из базы: номер, отдел, тема, дата, статус, ответ."""
-    touch_heartbeat()
-    user = await BotCore.get_or_create_user(vk_id=message.from_id)
-    await BotCore.log_action(user, "my_tickets", "Запрос списка моих заявок")
-    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, Any]) -> None:
+    """Отрисовать страницу списка заявок студента (пагинация, ЭТАП 4.1 / B4)."""
+    tickets = await get_user_tickets(message.from_id, include_completed=True, limit=FETCH_LIMIT)
+    page = clamp_page(page, len(tickets))
+    await persist_page(message.from_id, KIND_MY_TICKETS, page, meta)
+
     if not tickets:
         await message.answer(
             "У вас пока нет созданных заявок.\n\n"
@@ -101,12 +141,33 @@ async def my_tickets_handler(message: Message):
         )
         return
 
-    local_ids = list(range(1, len(tickets) + 1))
+    total_pages = page_count(len(tickets))
+    start = page * PAGE_SIZE
+    page_tickets = tickets[start : start + PAGE_SIZE]
+
+    # Сквозная локальная нумерация по всем заявкам (не по странице):
+    # «Подробнее #N» из любой страницы списка открывает ту же заявку.
     user_ticket_map = {t.id: idx for idx, t in enumerate(tickets, 1) if t.id is not None}
+    local_ids = list(range(start + 1, start + 1 + len(page_tickets)))
+
+    text = format_ticket_list(page_tickets, user_ticket_map)
+    if total_pages > 1:
+        text += f"\n\n📄 Страница {page + 1} из {total_pages}"
     await message.answer(
-        format_ticket_list(tickets, user_ticket_map),
-        keyboard=build_tickets_keyboard(local_ids),
+        text,
+        keyboard=build_tickets_keyboard(
+            local_ids, page=page, has_more=page + 1 < total_pages
+        ),
     )
+
+
+@student_labeler.private_message(text=COMMANDS_MY_TICKETS)
+async def my_tickets_handler(message: Message):
+    """Список заявок пользователя из базы: номер, отдел, тема, дата, статус, ответ."""
+    touch_heartbeat()
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    await BotCore.log_action(user, "my_tickets", "Запрос списка моих заявок")
+    await open_list(message, KIND_MY_TICKETS)
 
 
 @student_labeler.private_message(RegexRule(COMMAND_TICKET_DETAILS_PATTERN))
@@ -127,8 +188,10 @@ async def ticket_details_handler(message: Message):
     ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
 
     # 2. Если не найдено по глобальному ID — ищем по локальному номеру в последних заявках
+    # (limit совпадает с FETCH_LIMIT пагинации «Мои заявки», чтобы номера
+    # со всех страниц списка разрешались в те же заявки)
     if ticket is None:
-        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=FETCH_LIMIT)
         ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
 
     if ticket is None or ticket.id is None:
@@ -371,6 +434,16 @@ async def ticket_identity_choice_handler(message: Message):
         )
         return
 
+    # SEC-08: не более 3 обращений за 5 минут от одного VK ID.
+    if await _is_ticket_rate_limited(message.from_id):
+        await message.answer(
+            "Слишком много обращений подряд.\n\n"
+            "Лимит: не более 3 обращений за 5 минут. Пожалуйста, подождите "
+            "несколько минут и выберите режим обращения снова — описание сохранено.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+        return
+
     try:
         ticket = await create_ticket(
             topic=topic,
@@ -404,6 +477,9 @@ async def ticket_identity_choice_handler(message: Message):
         )
         await vk_bot.state_dispenser.delete(message.from_id)
 
+
+# Рендерер пагинации списка «Мои заявки» (ЭТАП 4.1 / B4)
+register_renderer(KIND_MY_TICKETS, _render_my_tickets_page)
 
 # Алиасы для обратной совместимости
 student_reply_handler = ticket_reply_handler

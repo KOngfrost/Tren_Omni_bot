@@ -207,12 +207,32 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     REPORT_EMAILS: list[str] = Field(default_factory=list)
 
+    # Domain & Web
+    DOMAIN: str = "localhost"
+    ACME_EMAIL: str = ""
+
     # Telegram Monitoring Bot (для оповещения и управления главным администратором)
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ADMIN_ID: int = 0
     TELEGRAM_ALERTS_ENABLED: bool = True
     TELEGRAM_CHECK_INTERVAL_SECONDS: int = 30
-    TELEGRAM_WEBAPP_URL: str = "https://example-bot.duckdns.org"
+    TELEGRAM_WEBAPP_URL: str = ""
+
+    # Настраиваемые лимиты и таймауты (хранятся в .env)
+    MAX_IMPORT_FILE_SIZE: int = 5 * 1024 * 1024
+    MAX_IMPORT_ROWS: int = 1000
+    VK_TICKET_RATE_LIMIT: int = 3
+    VK_TICKET_RATE_WINDOW_SECONDS: int = 300
+    CRUD_RATE_LIMIT_MAX: int = 60
+    CRUD_RATE_LIMIT_WINDOW: int = 300
+    BACKUP_ROTATION_DAYS: int = 7
+    BACKUP_DIR: str = "/var/backups/oss_bot"
+
+    @model_validator(mode="after")
+    def _resolve_webapp_url(self) -> Self:
+        if not self.TELEGRAM_WEBAPP_URL and self.DOMAIN and self.DOMAIN != "localhost":
+            self.TELEGRAM_WEBAPP_URL = f"https://{self.DOMAIN}"
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

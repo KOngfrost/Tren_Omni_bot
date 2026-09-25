@@ -107,13 +107,27 @@
         return false;
     }
 
+    /**
+     * Актуальный CSRF-токен: читается из мета-тега текущего документа
+     * перед КАЖДЫМ запросом (переживает ротацию токена), fallback —
+     * значение из глобального окна (задаёт app.js).
+     */
+    function _csrfToken() {
+        var metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag && metaTag.getAttribute('content')) {
+            window.CSRF_TOKEN = metaTag.getAttribute('content');
+        }
+        return window.CSRF_TOKEN || '';
+    }
+
     async function _apiRequest(url, options) {
         options = options || {};
         var headers = options.headers || {};
         headers['Content-Type'] = 'application/json';
         headers['Accept'] = 'application/json';
-        if (window.CSRF_TOKEN) {
-            headers['X-CSRF-Token'] = window.CSRF_TOKEN;
+        var token = _csrfToken();
+        if (token) {
+            headers['X-CSRF-Token'] = token;
         }
         try {
             var response = await fetch(url, Object.assign({}, options, { headers: headers }));
@@ -121,7 +135,12 @@
             if (!response.ok) {
                 if (contentType.includes('application/json')) {
                     var json = await response.json();
-                    return { success: false, error: json.detail || json.error || ('HTTP ' + response.status) };
+                    var detail = json.detail || json.error || ('HTTP ' + response.status);
+                    if (response.status === 403 && /csrf/i.test(String(detail))) {
+                        // Понятное сообщение вместо тихого зависания интерфейса
+                        return { success: false, error: 'Сессия обновлена, повторите действие' };
+                    }
+                    return { success: false, error: detail };
                 } else {
                     var text = await response.text();
                     return {

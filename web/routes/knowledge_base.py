@@ -20,6 +20,7 @@ from core.bulk_import import (
     generate_knowledge_template_xlsx_async,
     parse_file_or_text_async,
     parse_knowledge_rows_async,
+    read_import_upload_async,
 )
 from core.database import async_session_maker
 from core.models import Department, KnowledgeBase, Log
@@ -208,13 +209,11 @@ async def knowledge_export_xlsx(request: Request, user=Depends(require_auth)):
 async def import_knowledge_base(request: Request, user=Depends(require_writer)):
     """Массовая загрузка базы знаний из файла Excel/CSV или текстовой вставки."""
     form = await request.form()
-    file_upload = form.get("file")
-    file_bytes: bytes | None = None
-    filename: str | None = None
-
-    if file_upload and hasattr(file_upload, "read") and getattr(file_upload, "filename", None):
-        file_bytes = await file_upload.read()
-        filename = file_upload.filename
+    # SEC-10: чтение файла с лимитом размера (5 МБ).
+    file_bytes, filename, import_error = await read_import_upload_async(form)
+    if import_error:
+        request.session["flash_error"] = import_error
+        return RedirectResponse(url="/knowledge/", status_code=303)
 
     text_data = str(form.get("text_data", "")).strip()
 

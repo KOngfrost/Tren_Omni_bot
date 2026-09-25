@@ -69,9 +69,19 @@ else
     echo "  -> ВНИМАНИЕ: Файл .env не найден в /opt/oss_bot/.env или текущей директории."
 fi
 
-# --- 3. Рекомендации по безопасности SSH ---
+# --- 3. Настройка сетевого экрана (Firewall) и Fail2ban ---
 echo ""
-echo "[3/3] Памятка по безопасности SSH:"
+echo "[3/4] Настройка сетевого экрана (UFW) и Fail2ban..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/setup_firewall.sh" ]; then
+    bash "$SCRIPT_DIR/setup_firewall.sh"
+else
+    echo "  -> scripts/setup_firewall.sh не найден, пропускаем автоматическую настройку UFW."
+fi
+
+# --- 4. Рекомендации по безопасности SSH ---
+echo ""
+echo "[4/4] Памятка по безопасности SSH:"
 echo "  1. Смените пароль root:"
 echo "     passwd root"
 echo ""

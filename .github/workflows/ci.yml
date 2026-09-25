@@ -82,3 +82,55 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f Dockerfile -t oss-bot .
       - run: docker build -f Dockerfile.web -t oss-bot-web .
+
+  go-test:
+    name: Tests (Go backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: backend_go/go.sum
+      - name: go vet
+        working-directory: backend_go
+        run: go vet ./...
+      - name: go test
+        working-directory: backend_go
+        run: go test -race -cover ./...
+
+  browser-tests:
+    name: Tests (Playwright, кнопки интерфейса)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Установить Chromium для Playwright
+        run: python -m playwright install --with-deps chromium
+      - name: E2E-тесты кнопок (CSP включён)
+        env:
+          SESSION_SECRET_KEY: ci_super_secret_session_key_1234567890_test
+          APP_ENV: test
+        run: pytest -v tests/test_ui_buttons_browser.py --no-cov
+
+  pgbouncer-config:
+    name: PgBouncer SEC-12 (валидация конфигурации)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Проверить, что в pgbouncer.ini нет открытых паролей
+        run: |
+          # userlist.txt в репозитории отсутствует (.gitignore) —
+          # открытый пароль в pgbouncer.ini означал бы утечку в Git.
+          ! grep -rniE 'PASSWORD=|password' pgbouncer/pgbouncer.ini \
+            | grep -vi 'auth_user\|auth_query\|PASSFILE' \
+            || (echo "Найдено упоминание пароля в pgbouncer.ini" && exit 1)
+      - name: Проверить единственную голову миграций
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          heads=$(python -m alembic heads | grep -c '^[a-f0-9]')
+          echo "heads: $heads"
+          test "$heads" -eq 1

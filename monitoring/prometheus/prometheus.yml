@@ -13,3 +13,20 @@ scrape_configs:
         labels:
           app: "student_bot"
           role: "web-admin"
+
+  # Go API (этап 5.3). Метрики отдаёт middleware internal/metrics:
+  # oss_bot_go_api_http_requests_total, _http_request_duration_seconds,
+  # _http_requests_in_flight, _http_response_size_bytes.
+  #
+  # scrape_interval 15s короче стандартных 30-45s: Go-сервис обрабатывает
+  # в том числе healthcheck-опросы, поэтому при аварии нужна быстрая
+  # реакция алерта GoApiInstanceDown (for: 1m).
+  - job_name: "oss_bot_go_api"
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["go-api:8080"]
+        labels:
+          app: "student_bot"
+          role: "go-api"
+

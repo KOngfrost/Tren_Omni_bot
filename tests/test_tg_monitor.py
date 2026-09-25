@@ -170,7 +170,7 @@ async def test_render_status_contains_backup_button():
 
 
 @pytest.mark.asyncio
-async def test_perform_database_backup_docker_success():
+async def test_perform_database_backup_docker_success(tmp_path, monkeypatch):
     import gzip
 
     from bots.telegram.bot import perform_database_backup
@@ -179,9 +179,15 @@ async def test_perform_database_backup_docker_success():
     docker_mock = mock.AsyncMock(spec=DockerClient)
     c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
     docker_mock.list_containers.return_value = [c_db]
+    docker_mock.upload_file.return_value = True
     docker_mock.exec_command.return_value = (0, b"CREATE TABLE test (id INT);", b"")
 
     settings = get_settings()
+    monkeypatch.setattr(settings, "DB_USER", "oss_bot")
+    monkeypatch.setattr(settings, "DB_NAME", "oss_bot")
+    monkeypatch.setattr(settings, "DB_PASS", "S3cret-Pa55word")
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+
     ok, data, filename = await perform_database_backup(docker_mock, settings)
 
     assert ok is True
@@ -189,11 +195,49 @@ async def test_perform_database_backup_docker_success():
     assert filename.startswith("oss_bot_backup_")
     assert filename.endswith(".sql.gz")
     assert gzip.decompress(data) == b"CREATE TABLE test (id INT);"
-    docker_mock.exec_command.assert_called_once()
+
+    # SEC-06: пароль передаётся только временным .pgpass 0600, без env и argv
+    assert docker_mock.upload_file.await_count == 1
+    upload_call = docker_mock.upload_file.await_args
+    assert upload_call.args[0] == "oss_bot_db"
+    assert upload_call.args[1].startswith("/tmp/")
+    assert upload_call.args[2].decode() == "*:*:*:oss_bot:S3cret-Pa55word\n"
+    assert upload_call.kwargs["mode"] == 0o600
+
+    for exec_call in docker_mock.exec_command.await_args_list:
+        assert not exec_call.kwargs.get("env")
+        assert "S3cret-Pa55word" not in " ".join(exec_call.args[1])
+
+    # SEC-07: дамп остаётся в защищённом локальном каталоге
+    saved = tmp_path / filename
+    assert saved.exists()
+    assert gzip.decompress(saved.read_bytes()) == b"CREATE TABLE test (id INT);"
 
 
 @pytest.mark.asyncio
-async def test_perform_database_backup_docker_failure():
+async def test_perform_database_backup_pgpass_upload_failed(monkeypatch):
+    """SEC-06: без временного .pgpass в контейнере дамп не запускается."""
+    from bots.telegram.bot import perform_database_backup
+    from core.config import get_settings
+
+    docker_mock = mock.AsyncMock(spec=DockerClient)
+    c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
+    docker_mock.list_containers.return_value = [c_db]
+    docker_mock.upload_file.return_value = False
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "DB_PASS", "S3cret-Pa55word")
+
+    ok, data, err_msg = await perform_database_backup(docker_mock, settings)
+
+    assert ok is False
+    assert data is None
+    assert "pgpass" in err_msg
+    docker_mock.exec_command.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_perform_database_backup_docker_failure(monkeypatch):
     from bots.telegram.bot import perform_database_backup
     from core.config import get_settings
 
@@ -203,21 +247,30 @@ async def test_perform_database_backup_docker_failure():
     docker_mock.exec_command.return_value = (1, b"", b"FATAL: database does not exist")
 
     settings = get_settings()
+    # Пароль не настроен (trust-доступ) — временный .pgpass не создаётся вовсе
+    monkeypatch.setattr(settings, "DB_PASS", "")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "")
+
     ok, data, err_msg = await perform_database_backup(docker_mock, settings)
 
     assert ok is False
     assert data is None
     assert "FATAL: database does not exist" in err_msg
+    docker_mock.upload_file.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_cmd_backup_handler():
+async def test_cmd_backup_handler(tmp_path, monkeypatch):
+    import gzip
+    import hashlib
+
     from bots.telegram.bot import cmd_backup
     from core.config import get_settings
 
     docker_mock = mock.AsyncMock(spec=DockerClient)
     c_db = ContainerInfo("10", "oss_bot_db", "postgres:16", "running", "Up", "healthy", True)
     docker_mock.list_containers.return_value = [c_db]
+    docker_mock.upload_file.return_value = True
     docker_mock.exec_command.return_value = (0, b"DUMP CONTENT", b"")
 
     msg = mock.MagicMock(spec=Message)
@@ -226,13 +279,42 @@ async def test_cmd_backup_handler():
     msg.answer_document = mock.AsyncMock()
 
     settings = get_settings()
+    monkeypatch.setattr(settings, "DB_NAME", "oss_bot")
+    monkeypatch.setattr(settings, "DB_PASS", "S3cret-Pa55word")
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+
     await cmd_backup(msg, docker_mock, settings)
 
+    # SEC-07: сырой дамп с ПДн в Telegram не уходит — только текстовый отчёт
+    msg.answer_document.assert_not_called()
     msg.answer.assert_called_once()
-    msg.answer_document.assert_called_once()
-    call_kwargs = msg.answer_document.call_args[1]
-    assert "Резервная копия базы данных успешно создана" in call_kwargs["caption"]
-    assert call_kwargs["document"].filename.startswith("oss_bot_backup_")
+    status_msg.delete.assert_not_awaited()
+
+    report = status_msg.edit_text.call_args[0][0]
+    assert "Резервная копия базы данных успешно создана" in report
+    assert "SHA-256" in report
+    assert hashlib.sha256(gzip.compress(b"DUMP CONTENT")).hexdigest() in report
+    assert "не отправляется в чат" in report
+
+
+@pytest.mark.asyncio
+async def test_backup_files_have_restricted_permissions(tmp_path, monkeypatch):
+    """SEC-07: каталог резервных копий 0700, файл дампа 0600."""
+    import os
+    import stat
+
+    from bots.telegram.handlers.backup import _ensure_backup_dir, _save_local_copy
+
+    if os.name != "posix":
+        pytest.skip("Права POSIX-файлов проверяются только на Linux/macOS")
+
+    backup_dir = tmp_path / "oss_bot_backups"
+    monkeypatch.setenv("BACKUP_DIR", str(backup_dir))
+
+    path = _save_local_copy(b"dump", "oss_bot_backup_test.sql.gz")
+
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(_ensure_backup_dir()).st_mode) == 0o700
 
 
 def test_rotate_old_backups(tmp_path):

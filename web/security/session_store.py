@@ -1,11 +1,13 @@
 """Redis-backed сессионное middleware для распределённого хранения сессий с TTL."""
 
 import base64
+import hashlib
 import json
 import logging
 import secrets
 from typing import Any
 
+from cryptography.fernet import Fernet, InvalidToken
 from itsdangerous import BadSignature, Signer
 from starlette.datastructures import MutableHeaders
 from starlette.requests import HTTPConnection
@@ -17,6 +19,16 @@ from core.redis_client import get_redis_client
 logger = logging.getLogger(__name__)
 
 
+def _derive_fernet_key(secret_key: str) -> bytes:
+    """Детерминированно вывести 32-байтный Fernet-ключ из секрета сессий.
+
+    Fernet требует ключ в виде url-safe Base64 от ровно 32 байт; секрет
+    приложения произвольной длины сворачивается SHA-256.
+    """
+    digest = hashlib.sha256(secret_key.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
 class RedisSessionMiddleware:
     """Распределённое хранилище сессий на базе Redis.
 
@@ -24,7 +36,11 @@ class RedisSessionMiddleware:
       с установкой TTL (по умолчанию 24 часа), а в cookie клиента помещает подписанный ID сессии.
       Любой воркер Uvicorn может прозрачно читать и изменять сессию.
     - При недоступном Redis (или локальном запуске без Redis): автоматически переключается
-      на подписанную cookie-сессию Starlette с локальной сериализацией, обеспечивая zero-downtime.
+      на cookie-сессию с локальной сериализацией, обеспечивая zero-downtime.
+      SEC-09: данные fallback-сессии перед записью в cookie шифруются
+      симметричным шифрованием (Fernet, AES-128-CBC + HMAC-SHA256) поверх
+      подписи itsdangerous.Signer — содержимое сессии (ID пользователя,
+      отделы, роли) больше не читается из открытого Base64.
     """
 
     def __init__(
@@ -39,6 +55,7 @@ class RedisSessionMiddleware:
     ) -> None:
         self.app = app
         self.signer = Signer(secret_key)
+        self.fernet = Fernet(_derive_fernet_key(secret_key))
         self.session_cookie = session_cookie
         self.max_age = max_age or settings.SESSION_TTL
         self.path = path
@@ -46,6 +63,20 @@ class RedisSessionMiddleware:
         if https_only:
             self.security_flags += "; secure"
         self.security_flags += "; httponly"
+
+    def _decrypt_session_payload(self, token: str) -> dict[str, Any]:
+        """SEC-09: расшифровать данные fallback-cookie-сессии (Fernet).
+
+        Возвращает {} для недействительных/устаревших токенов —
+        повреждённая сессия приравнивается к отсутствующей.
+        """
+        try:
+            return json.loads(self.fernet.decrypt(token.encode("utf-8")))
+        except InvalidToken:
+            logger.debug("Не удалось расшифровать cookie-сессию (недействительный токен)")
+        except (TypeError, ValueError):
+            logger.debug("Некорректный формат расшифрованной cookie-сессии")
+        return {}
 
     async def _load_session(
         self, raw_cookie: str | None, redis: Any
@@ -61,7 +92,8 @@ class RedisSessionMiddleware:
                     if val:
                         return session_id, json.loads(val)
                 return session_id, {}
-            return None, json.loads(base64.b64decode(unsigned).decode("utf-8"))
+            # SEC-09: fallback-cookie содержит зашифрованные (Fernet) данные сессии.
+            return None, self._decrypt_session_payload(unsigned)
         except (BadSignature, Exception) as exc:
             logger.debug("Не удалось восстановить сессию: %s", exc)
             return None, {}
@@ -82,10 +114,12 @@ class RedisSessionMiddleware:
                 session_id = None
 
         if not cookie_val:
-            b64_data = base64.b64encode(json.dumps(current_session).encode("utf-8")).decode(
-                "utf-8"
-            )
-            cookie_val = self.signer.sign(b64_data.encode("utf-8")).decode("utf-8")
+            # SEC-09: данные fallback-сессии шифруются Fernet перед подписью —
+            # из cookie невозможно прочитать ID пользователя и отделы.
+            encrypted = self.fernet.encrypt(
+                json.dumps(current_session, ensure_ascii=False, default=str).encode("utf-8")
+            ).decode("utf-8")
+            cookie_val = self.signer.sign(encrypted.encode("utf-8")).decode("utf-8")
 
         return cookie_val, session_id
 

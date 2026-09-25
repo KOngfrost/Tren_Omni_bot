@@ -57,3 +57,57 @@ groups:
         annotations:
           summary: "Память Redis заполнена более чем на 85%"
           description: "Использование оперативной памяти Redis достигло {{ $value | printf \"%.2f\" }}%."
+
+      # --- Go API (этап 5.3) ---
+      # ВНИМАНИЕ: метрики Go-сервиса имеют префикс oss_bot_go_api_ и НЕ
+      # пересекаются с метриками FastAPI-панели (http_requests_total без
+      # префикса). Благодаря этому алерты ниже не срабатывают на ложных
+      # срабатываниях из-за смешивания двух сервисов в одном запросе.
+
+      - alert: GoApiInstanceDown
+        expr: up{job="oss_bot_go_api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Go API недоступен"
+          description: "Инстанс {{ $labels.instance }} не отвечает на /metrics более 1 минуты. Проверьте контейнер oss_bot_go_api (docker compose logs go-api)."
+
+      - alert: GoApiHighHttpErrorRate
+        expr: >-
+          sum(rate(oss_bot_go_api_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(oss_bot_go_api_http_requests_total[5m])) * 100 > 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Высокая доля ошибок 5xx в Go API (> 2%)"
+          description: "Уровень внутренних ошибок Go API составляет {{ $value | printf \"%.2f\" }}% за последние 5 минут."
+
+      - alert: GoApiHighHttpLatency
+        expr: >-
+          histogram_quantile(0.95,
+            sum(rate(oss_bot_go_api_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокая задержка ответов Go API (p95 > 1s)"
+          description: "95-й перцентиль времени ответа эндпоинтов Go API превышает 1 секунду: {{ $value | printf \"%.2f\" }}s."
+
+      - alert: GoApiEventLoopSaturated
+        # Устойчиво ненулевой in-flight при низком RPS означает, что
+        # обработчики не завершаются: кандидат — медленный запрос к БД
+        # через PgBouncer (transaction pooling, wait_timeout = 120s).
+        expr: >-
+          avg(oss_bot_go_api_http_requests_in_flight) > 20
+          and
+          sum(rate(oss_bot_go_api_http_requests_total[2m])) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Go API: подозрение на зависание event loop"
+          description: "В обработке держится {{ $value | printf \"%.1f\" }} запросов при RPS меньше 1. Вероятна блокировка на БД или Redis."

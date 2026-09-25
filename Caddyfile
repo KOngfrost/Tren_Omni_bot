@@ -13,6 +13,27 @@
     }
 }
 
+# Web Application Firewall (WAF) правила фильтрации вредоносных запросов
+(waf_filter) {
+    # 1. Блокировка попыток зондирования служебных файлов и панелей управления
+    @blocked_probes {
+        path /.git* /.env* /.aws* /.svn* /.htaccess* /wp-admin* /wp-login* /phpmyadmin* /actuator* /boaform* /shell* /admin.php* /config*
+    }
+    respond @blocked_probes 404
+
+    # 2. Блокировка известных сканеров уязвимостей и спам-ботов
+    @malicious_user_agents {
+        header_regexp User-Agent "(?i)(sqlmap|nikto|masscan|nmap|acunetix|dirbuster|gobuster|wpscan|censys|shodan|zgrab|jorgee)"
+    }
+    respond @malicious_user_agents 403
+
+    # 3. Блокировка атак Path Traversal
+    @path_traversal {
+        path_regexp "(?i)(\.\./|\.\.\\|%2e%2e)"
+    }
+    respond @path_traversal 400
+}
+
 (common_proxy) {
     encode zstd gzip
 
@@ -20,16 +41,30 @@
         max_size 15MB
     }
 
-    reverse_proxy web-admin:8000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    # Проксирование запросов к Go API
+    handle /api/v1/* {
+        reverse_proxy go-api:8080 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Основная веб-панель (FastAPI)
+    handle {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 }
 
 # Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом)
 {$DOMAIN:localhost} {
     import security_headers
+    import waf_filter
     import common_proxy
 }

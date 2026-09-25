@@ -13,6 +13,8 @@ type Config struct {
 	TelegramBotToken  string
 	TelegramAdminID   int64
 	TwoFactorEnabled  bool
+	CORSOrigins       string
+	AppVersion        string
 }
 
 func getEnv(key, defaultVal string) string {
@@ -35,6 +37,7 @@ func LoadConfig() *Config {
 
 	tgAdminID, _ := strconv.ParseInt(getEnv("TELEGRAM_ADMIN_ID", "0"), 10, 64)
 	twoFactorEnabled, _ := strconv.ParseBool(getEnv("TWO_FACTOR_ENABLED", "true"))
+	corsOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, http://127.0.0.1:3000, http://localhost:8000")
 
 	return &Config{
 		Port:             port,
@@ -44,5 +47,7 @@ func LoadConfig() *Config {
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramAdminID:  tgAdminID,
 		TwoFactorEnabled: twoFactorEnabled,
+		CORSOrigins:      corsOrigins,
+		AppVersion:       getEnv("APP_VERSION", "0.8.6"),
 	}
 }

@@ -150,6 +150,20 @@ window.STATUS_LABELS = {
 
 var currentActiveTicket = null;
 
+/**
+ * Актуальный CSRF-токен: берётся из мета-тега текущего документа
+ * (обновляется при любой перерисовке страницы), иначе — из значения,
+ * встроенного при первом рендере.
+ */
+function getCsrfToken() {
+    var metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (metaTag && metaTag.getAttribute('content')) {
+        return metaTag.getAttribute('content');
+    }
+    return window.CSRF_FORM_TOKEN || '';
+}
+window.getCsrfToken = getCsrfToken;
+
 function openTicket(id) {
     fetch(`/tickets/${id}`)
         .then(res => {
@@ -223,7 +237,7 @@ function openTicket(id) {
             body += '    <label class="checkbox-label" style="margin:0;"><input type="checkbox" id="chat-reply-complete"> Завершить заявку (отправить и закрыть)</label>';
             body += '    <div style="display:flex; align-items:center; gap:8px;">';
             body += '      <span class="chat-send-shortcut-hint">Ctrl + Enter</span>';
-            body += '      <button type="button" id="chat-reply-submit" class="btn btn-primary btn-small" onclick="sendTicketReply(' + ticket.id + ')">Отправить ответ</button>';
+            body += '      <button type="button" id="chat-reply-submit" class="btn btn-primary btn-small" data-reply-ticket-id="' + ticket.id + '">Отправить ответ</button>';
             body += '    </div>';
             body += '  </div>';
             body += '</div>';
@@ -231,7 +245,7 @@ function openTicket(id) {
             // Управление статусом и передача другому отделу
             body += '<div class="ticket-management-row">';
             body += '  <form method="post" action="/tickets/' + ticket.id + '/status" class="ticket-action-form">';
-            body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+            body += '    <input type="hidden" name="csrf_token" value="' + escapeHtml(getCsrfToken()) + '">';
             body += '    <label class="ticket-action-label">Статус:</label>';
             body += '    <select name="status" class="ticket-action-select">';
             window.STATUS_CHOICES.forEach(function (s) {
@@ -247,7 +261,7 @@ function openTicket(id) {
 
             if (window.CURRENT_ROLE === 'SUPERADMIN') {
                 body += '  <form method="post" action="/tickets/' + ticket.id + '/assign" class="ticket-action-form">';
-                body += '    <input type="hidden" name="csrf_token" value="' + window.CSRF_FORM_TOKEN + '">';
+                body += '    <input type="hidden" name="csrf_token" value="' + escapeHtml(getCsrfToken()) + '">';
                 body += '    <label class="ticket-action-label">Передать в:</label>';
                 body += '    <select name="department_id" class="ticket-action-select">';
                 document.querySelectorAll('#dept-filter option').forEach(function (opt) {
@@ -277,6 +291,13 @@ function openTicket(id) {
                         e.preventDefault();
                         sendTicketReply(ticket.id);
                     }
+                });
+            }
+
+            var submitBtn = document.getElementById('chat-reply-submit');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function () {
+                    sendTicketReply(ticket.id);
                 });
             }
         })
@@ -312,25 +333,37 @@ function sendTicketReply(ticketId) {
     var originalBtnText = submitBtn.textContent;
     submitBtn.textContent = 'Отправка...';
 
+    // Токен берём динамически перед отправкой (а не из значения,
+    // встроенного при первом рендере страницы)
+    var csrfToken = getCsrfToken();
+
     fetch('/tickets/' + ticketId + '/reply', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'x-csrf-token': window.CSRF_FORM_TOKEN
+            'x-csrf-token': csrfToken
         },
         body: JSON.stringify({
             message: text,
             complete: complete,
-            csrf_token: window.CSRF_FORM_TOKEN
+            csrf_token: csrfToken
         })
     })
     .then(function (res) {
         if (!res.ok) {
-            return res.json().then(function (errData) {
-                throw new Error(errData.detail || 'Ошибка отправки ответа');
-            });
+            return res.json()
+                .catch(function () { return {}; })
+                .then(function (errData) {
+                    var detail = (errData && errData.detail) ? String(errData.detail) : '';
+                    if (res.status === 403 && /csrf/i.test(detail)) {
+                        // CSRF-сессия истекла/обновилась — понятное сообщение
+                        // вместо тихого зависания интерфейса
+                        throw new Error('Сессия обновлена, повторите действие');
+                    }
+                    throw new Error(detail || 'Ошибка отправки ответа');
+                });
         }
         return res.json();
     })
@@ -413,9 +446,16 @@ function closeTicketModal() {
     currentActiveTicket = null;
 }
 
-document.querySelectorAll('[data-ticket-id]').forEach(function (button) {
-    button.addEventListener('click', function () { openTicket(button.dataset.ticketId); });
-});
+// Делегирование событий: обработчик живёт на контейнере таблицы, поэтому
+// кнопка «Открыть» работает при любых перерисовках DOM и на мобильных
+// устройствах (в отличие от одноразовой привязки к каждой кнопке).
+var ticketsTable = document.getElementById('tickets-table');
+if (ticketsTable) {
+    ticketsTable.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-ticket-id]');
+        if (button) openTicket(button.dataset.ticketId);
+    });
+}
 document.querySelector('[data-close-ticket-modal]').addEventListener('click', closeTicketModal);
 </script>
 {% endblock %}

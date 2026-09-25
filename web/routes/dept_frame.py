@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from core.database import async_session_maker
 from core.models import Department, Event, FAQNode, KnowledgeBase, Ticket, TicketStatus
 from web.dependencies import can_write, get_admin_scope, get_departments_for_user, require_auth
+from web.routes.faq import compute_faq_depths
 from web.security.csrf import get_csrf_token
 from web.templating import templates
 
@@ -90,6 +91,9 @@ async def _load_dept_context(session, dept_id: int, user: dict):
         .scalars()
         .all()
     )
+    # B14: глубина узлов — отдельный словарь (без мутации ORM-объектов),
+    # сортирует faq_items по (глубина, order_index, id).
+    faq_depths = compute_faq_depths(faq_items)
 
     events = list(
         (
@@ -110,6 +114,7 @@ async def _load_dept_context(session, dept_id: int, user: dict):
         "recent_tickets": recent_tickets,
         "kb_items": kb_items,
         "faq_items": faq_items,
+        "faq_depths": faq_depths,
         "events": events,
         "can_write": can_write(user),
     }
@@ -161,6 +166,7 @@ async def dept_frame(request: Request, dept_id: int, user=Depends(require_auth))
             "recent_tickets": context["recent_tickets"],
             "kb_items": context["kb_items"],
             "faq_items": context["faq_items"],
+            "faq_depths": context["faq_depths"],
             "events": context["events"],
             "can_write": context["can_write"],
             "departments": all_depts,

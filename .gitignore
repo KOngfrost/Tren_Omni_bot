@@ -78,6 +78,14 @@ test_result.txt
 test_ui_result.txt
 *.bundle
 
+# ============================================================
+# PgBouncer: прозрачная авторизация через PostgreSQL (SEC-12)
+# ============================================================
+# userlist.txt генерируется автоматически сервисом pgbouncer-userlist
+# (docker-compose.yml) и содержит SCRAM-SHA-256 verifier'ы пользователей.
+# В Git он попадать не должен.
+pgbouncer/userlist.txt
+
 # Private diagrams and handover files
 Kak_rabotaet_studencheskiy_pomoschnik.svg
 docs/system_architecture_and_button_flowchart.md

@@ -2,6 +2,7 @@
 
 import logging
 import re
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -14,6 +15,16 @@ from bots.vk.common import (
     _main_keyboard_for,
     _main_reply_text,
     _operator_can_access,
+)
+from bots.vk.handlers.pagination import (
+    FETCH_LIMIT,
+    KIND_ADMIN_TICKETS,
+    PAGE_SIZE,
+    clamp_page,
+    open_list,
+    page_count,
+    persist_page,
+    register_renderer,
 )
 from bots.vk.keyboards import (
     build_admin_keyboard,
@@ -86,10 +97,8 @@ async def regular_menu_handler(message: Message):
     )
 
 
-@admin_labeler.private_message(text=COMMANDS_ADMIN_TICKETS)
-async def admin_tickets_handler(message: Message):
-    """Показать оператору список активных заявок с кнопками быстрого открытия."""
-    touch_heartbeat()
+async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str, Any]) -> None:
+    """Отрисовать страницу списка активных заявок администратора (пагинация, ЭТАП 4.1 / B4)."""
     async with async_session_maker() as session:
         is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
@@ -105,7 +114,7 @@ async def admin_tickets_handler(message: Message):
             select(Ticket)
             .options(selectinload(Ticket.department), selectinload(Ticket.user))
             .order_by(Ticket.created_at.desc())
-            .limit(10)
+            .limit(FETCH_LIMIT)
         )
         if not is_super and dept_id is not None:
             stmt = stmt.where(Ticket.department_id == dept_id)
@@ -122,6 +131,9 @@ async def admin_tickets_handler(message: Message):
         total_count = await session.scalar(total_count_stmt)
         tickets = list((await session.scalars(stmt)).all())
 
+    page = clamp_page(page, len(tickets))
+    await persist_page(message.from_id, KIND_ADMIN_TICKETS, page, meta)
+
     if not tickets:
         await message.answer(
             f"Всего доступных заявок: {total_count or 0}\n"
@@ -131,13 +143,17 @@ async def admin_tickets_handler(message: Message):
         )
         return
 
-    ticket_ids = [t.id for t in tickets if t.id is not None]
+    total_pages = page_count(len(tickets))
+    start = page * PAGE_SIZE
+    page_tickets = tickets[start : start + PAGE_SIZE]
+
+    ticket_ids = [t.id for t in page_tickets if t.id is not None]
     lines = [
         f"📊 Всего заявок: {total_count or 0} · Требуют внимания: {pending_count or 0}",
         "Последние заявки:",
         "",
     ]
-    for ticket in tickets:
+    for ticket in page_tickets:
         dept_name = ticket.department.name if ticket.department else "Без отдела"
         desc = (ticket.description or "Без описания").strip()
         if len(desc) > 80:
@@ -147,8 +163,22 @@ async def admin_tickets_handler(message: Message):
         lines.append(f"   Текст: {desc}")
         lines.append("")
 
+    if total_pages > 1:
+        lines.append(f"📄 Страница {page + 1} из {total_pages}")
     lines.append("Нажмите кнопку с номером заявки ниже, чтобы открыть её и ответить:")
-    await message.answer("\n".join(lines), keyboard=build_admin_tickets_list_keyboard(ticket_ids))
+    await message.answer(
+        "\n".join(lines),
+        keyboard=build_admin_tickets_list_keyboard(
+            ticket_ids, page=page, has_more=page + 1 < total_pages
+        ),
+    )
+
+
+@admin_labeler.private_message(text=COMMANDS_ADMIN_TICKETS)
+async def admin_tickets_handler(message: Message):
+    """Показать оператору список активных заявок с кнопками быстрого открытия."""
+    touch_heartbeat()
+    await open_list(message, KIND_ADMIN_TICKETS)
 
 
 @admin_labeler.private_message(RegexRule(ADMIN_TICKET_VIEW_PATTERN))
@@ -469,6 +499,9 @@ async def admin_status_handler(message: Message):
         keyboard=build_admin_keyboard(),
     )
 
+
+# Рендерер пагинации списка заявок администратора (ЭТАП 4.1 / B4)
+register_renderer(KIND_ADMIN_TICKETS, _render_admin_tickets_page)
 
 # Алиасы для обратной совместимости
 admin_panel_handler = admin_panel

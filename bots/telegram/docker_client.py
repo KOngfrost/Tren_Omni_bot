@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
+import posixpath
 import re
+import tarfile
+import time
 from typing import Any
 
 import httpx
@@ -12,6 +16,81 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DEFAULT_SOCKET_PATH = "/var/run/docker.sock"
+
+# Заголовок фрейма мультиплексированного потока Docker (stdcopy):
+# 1 байт — тип потока, 3 байта — нули, 4 байта (big-endian) — длина данных.
+_FRAME_HEADER_SIZE = 8
+_STREAM_STDERR = 2
+# Верхняя граница длины одного фрейма. Реальные кадры логов/вывода exec
+# редко превышают несколько мегабайт; всё, что больше, — признак
+# искажённого (не мультиплексированного) потока.
+_MAX_FRAME_PAYLOAD = 64 * 1024 * 1024
+
+
+def demultiplex_stream(raw: bytes) -> tuple[list[bytes], list[bytes]]:
+    """Разобрать мультиплексированный поток Docker на части stdout и stderr.
+
+    Защищено от искажения бинарного потока: если в заголовке объявлена
+    недопустимая длина фрейма, разбор прерывается, а уже собранные данные
+    возвращаются как есть. Без такой проверки повреждённый заголовок
+    (например, при ``Tty=True`` или ответе с TTY, где поток НЕ
+    мультиплексирован и начинается с обычного текста) давал бы
+    ``payload_size`` в несколько гигабайт и либо выход за границы
+    буфера, либо — что хуже — зацикливание на ``offset``, из-за которого
+    бот зависал на таком ответе.
+
+    Возвращает (части stdout, части stderr). Если поток оказался
+    не-мультиплексированным, весь буфер возвращается в stdout.
+    """
+    stdout_parts: list[bytes] = []
+    stderr_parts: list[bytes] = []
+    offset = 0
+    total = len(raw)
+
+    while offset + _FRAME_HEADER_SIZE <= total:
+        try:
+            stream_type = raw[offset]
+            size = int.from_bytes(
+                raw[offset + 4 : offset + _FRAME_HEADER_SIZE], byteorder="big"
+            )
+        except Exception:  # pragma: no cover - защитный блок
+            logger.warning("Повреждён заголовок фрейма Docker на смещении %d", offset)
+            break
+
+        # Валидация длины фрейма: без неё битый поток приводит к зависанию
+        if size < 0 or size > _MAX_FRAME_PAYLOAD:
+            logger.warning(
+                "Недопустимая длина фрейма Docker (%d байт) на смещении %d — разбор прерван",
+                size,
+                offset,
+            )
+            break
+
+        end = offset + _FRAME_HEADER_SIZE + size
+        truncated = end > total
+        if truncated:
+            # Фрейм обрезан (поток пришёл не полностью) — берём остаток и
+            # ОБЯЗАТЕЛЬНО завершаем разбор. Без присваивания offset цикл
+            # крутился бы на том же смещении и бот зависал.
+            chunk = raw[offset + _FRAME_HEADER_SIZE :]
+        else:
+            chunk = raw[offset + _FRAME_HEADER_SIZE : end]
+            offset = end
+
+        if stream_type == _STREAM_STDERR:
+            stderr_parts.append(chunk)
+        else:
+            stdout_parts.append(chunk)
+
+        if truncated:
+            break
+
+    # Ни одного корректного фрейма разобрать не удалось — считаем поток
+    # «сырым» текстом (например, ответ с TTY без мультиплексирования).
+    if not stdout_parts and not stderr_parts and raw:
+        return [raw], []
+
+    return stdout_parts, stderr_parts
 
 
 class ContainerInfo:
@@ -168,26 +247,20 @@ class DockerClient:
                     return f"Не удалось получить логи ({res.status_code}): {res.text}"
 
                 raw_bytes = res.content
+                stdout_parts, _stderr_parts = demultiplex_stream(raw_bytes)
+
+                if not stdout_parts:
+                    return "Логи пусты."
+
+                # Демоплексирование отброшено управляющие байты заголовков
                 lines: list[str] = []
+                for part in stdout_parts:
+                    lines.append(part.decode("utf-8", errors="replace"))
 
-                # Демоплексирование потока Docker multiplexed stream (8 байт заголовок каждого фрейма)
-                offset = 0
-                total_len = len(raw_bytes)
-                while offset + 8 <= total_len:
-                    # Длина полезной нагрузки во фрейме
-                    payload_size = int.from_bytes(raw_bytes[offset + 4 : offset + 8], byteorder="big")
-                    frame_payload = raw_bytes[offset + 8 : offset + 8 + payload_size]
-                    lines.append(frame_payload.decode("utf-8", errors="replace"))
-                    offset += 8 + payload_size
-
-                # Если поток не был мультиплексирован или демоплексирование пусто
-                if not lines and raw_bytes:
-                    text = raw_bytes.decode("utf-8", errors="replace")
-                    clean_text = re.sub(r"[\x00-\x08\x0b-\x1f]", "", text)
-                    return clean_text
-
-                joined = "".join(lines).strip()
-                return joined or "Логи пусты."
+                # Если поток не был мультиплексирован — вычищаем управляющие символы
+                joined = "".join(lines)
+                clean_text = re.sub(r"[\x00-\x08\x0b-\x1f]", "", joined)
+                return clean_text.strip() or "Логи пусты."
         except Exception as e:
             logger.error("Ошибка получения логов контейнера %s: %s", name_or_id, e)
             return f"Ошибка получения логов: {e}"
@@ -234,28 +307,62 @@ class DockerClient:
                 if inspect_res.status_code == 200:
                     exit_code = inspect_res.json().get("ExitCode", 0)
 
-                stdout_parts: list[bytes] = []
-                stderr_parts: list[bytes] = []
-                offset = 0
-                total = len(raw)
-
-                while offset + 8 <= total:
-                    stream_type = raw[offset]
-                    size = int.from_bytes(raw[offset + 4 : offset + 8], byteorder="big")
-                    chunk = raw[offset + 8 : offset + 8 + size]
-                    if stream_type == 1:
-                        stdout_parts.append(chunk)
-                    elif stream_type == 2:
-                        stderr_parts.append(chunk)
-                    else:
-                        stdout_parts.append(chunk)
-                    offset += 8 + size
-
-                if not stdout_parts and not stderr_parts and raw:
-                    stdout_parts.append(raw)
+                # Безопасное демоплексирование: повреждённый заголовок фрейма
+                # не приводит к зависанию (см. demultiplex_stream)
+                stdout_parts, stderr_parts = demultiplex_stream(raw)
 
                 return exit_code, b"".join(stdout_parts), b"".join(stderr_parts)
         except Exception as e:
             logger.error("Ошибка выполнения exec в контейнере %s: %s", name_or_id, e)
             return -1, b"", str(e).encode()
+
+    async def upload_file(
+        self,
+        name_or_id: str,
+        dest_path: str,
+        content: bytes,
+        mode: int = 0o600,
+    ) -> bool:
+        """Загрузить файл в файловую систему контейнера (Docker Archive API).
+
+        Используется для передачи секретов (например, временного ``.pgpass``)
+        внутрь контейнера без раскрытия значения в переменных окружения
+        exec-процесса (``Env`` виден в ``/exec/{id}/json``) и в аргументах
+        командной строки.
+
+        Возвращает True, если архив успешно распакован в ``dest_path``.
+        """
+        if not self.is_socket_present():
+            return False
+
+        dest_dir = posixpath.dirname(dest_path) or "/"
+        archive_name = posixpath.basename(dest_path)
+
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as tar:
+            info = tarfile.TarInfo(name=archive_name)
+            info.size = len(content)
+            info.mode = mode
+            info.mtime = int(time.time())
+            tar.addfile(info, io.BytesIO(content))
+
+        try:
+            async with await self._get_client() as client:
+                res = await client.put(
+                    f"/containers/{name_or_id}/archive",
+                    params={"path": dest_dir},
+                    content=buffer.getvalue(),
+                    headers={"Content-Type": "application/x-tar"},
+                )
+                if res.status_code not in (200, 204):
+                    logger.error(
+                        "Не удалось загрузить файл в контейнер %s: %s",
+                        name_or_id,
+                        res.text[:500],
+                    )
+                    return False
+                return True
+        except Exception as e:
+            logger.error("Ошибка загрузки файла в контейнер %s: %s", name_or_id, e)
+            return False
 

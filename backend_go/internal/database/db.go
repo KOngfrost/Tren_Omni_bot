@@ -11,6 +11,12 @@ import (
 
 var Pool *pgxpool.Pool
 
+const (
+	// Число попыток первичного подключения к БД и пауза между ними.
+	dbConnectAttempts   = 3
+	dbConnectRetryDelay = time.Second
+)
+
 func ConnectDB(ctx context.Context, connString string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
@@ -27,12 +33,29 @@ func ConnectDB(ctx context.Context, connString string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ошибка подключения к postgresql pool: %w", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
-		log.Printf("Предупреждение: БД не ответила на ping сразу: %v", err)
-	} else {
-		log.Println("Успешное подключение к PostgreSQL через pgxpool")
+	// B1: если БД недоступна, возвращаем ошибку (а не «полуживой» Pool == nil),
+	// чтобы вызывающий код завершил процесс и оркестратор перезапустил контейнер.
+	var pingErr error
+	for attempt := 1; attempt <= dbConnectAttempts; attempt++ {
+		pingErr = pool.Ping(ctx)
+		if pingErr == nil {
+			break
+		}
+		log.Printf("Попытка %d/%d подключения к PostgreSQL не удалась: %v", attempt, dbConnectAttempts, pingErr)
+		if attempt < dbConnectAttempts && ctx.Err() == nil {
+			select {
+			case <-ctx.Done():
+			case <-time.After(dbConnectRetryDelay):
+			}
+		}
 	}
 
+	if pingErr != nil {
+		pool.Close()
+		return nil, fmt.Errorf("база данных недоступна после %d попыток: %w", dbConnectAttempts, pingErr)
+	}
+
+	log.Println("Успешное подключение к PostgreSQL через pgxpool")
 	Pool = pool
 	return pool, nil
 }

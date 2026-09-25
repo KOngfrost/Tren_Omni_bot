@@ -131,7 +131,7 @@
             </div>
             <div class="faq-list">
                 {% for node in faq_items %}
-                <div class="faq-item" style="margin-left: {{ node.depth * 18 }}px;">
+                <div class="faq-item" style="margin-left: {{ faq_depths.get(node.id, 0) * 18 }}px;">
                     <div class="faq-question">
                         <span>{{ node.question[:80] }}{% if node.question|length > 80 %}…{% endif %}</span>
                         {% if node.is_final %}

@@ -163,3 +163,19 @@ ADMIN_IN_PROGRESS_PATTERN = r"(?i)^В\s+обработку\s*#?\s*(\d+)$"
 # Команда отмены (отменить создание заявки/вопроса)
 COMMAND_CANCEL = "Отмена"
 COMMANDS_CANCEL = ("Отмена", "отмена", "Отменить", "отменить")
+
+# Пагинация списков в клавиатурах VK-бота (ЭТАП 4.1 / B4):
+# кнопки навигации «Ещё ➡️» и «⬅️ Назад» для просмотра всех записей
+# (обращения, разделы FAQ), а не только первых 5–6, влезающих в один экран.
+COMMAND_PAGINATION_NEXT = "Ещё ➡️"
+COMMAND_PAGINATION_PREV = "⬅️ Назад"
+COMMANDS_PAGINATION_NEXT = (
+    COMMAND_PAGINATION_NEXT,
+    "ещё ➡️",
+    "Еще ➡️",
+    "еще ➡️",
+)
+COMMANDS_PAGINATION_PREV = (
+    COMMAND_PAGINATION_PREV,
+    "⬅️ назад",
+)

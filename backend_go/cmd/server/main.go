@@ -11,6 +11,7 @@ import (
 	"student_bot/backend_go/internal/config"
 	"student_bot/backend_go/internal/database"
 	"student_bot/backend_go/internal/handlers"
+	"student_bot/backend_go/internal/metrics"
 	appRedis "student_bot/backend_go/internal/redis"
 
 	"github.com/gofiber/fiber/v2"
@@ -26,13 +27,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Подключение к БД и Redis
-	_, err := database.ConnectDB(ctx, cfg.DatabaseURL)
-	if err != nil {
-		log.Printf("Предупреждение подключения к БД: %v", err)
+	// Подключение к БД и Redis: критичные зависимости — только fail-fast.
+	// Тихий лог ошибки оставлял контейнер «полуживым» с database.Pool == nil,
+	// что приводило к паникам/ложным ответам обработчиков. Теперь процесс
+	// завершается с ошибкой, и оркестратор перезапускает контейнер
+	// (в docker-compose.yml для go-api задан restart: unless-stopped).
+	if _, err := database.ConnectDB(ctx, cfg.DatabaseURL); err != nil {
+		log.Fatalf("Критическая ошибка подключения к базе данных: %v", err)
 	}
 
-	_, _ = appRedis.ConnectRedis(ctx, cfg.RedisURL)
+	if _, err := appRedis.ConnectRedis(ctx, cfg.RedisURL); err != nil {
+		log.Fatalf("Критическая ошибка подключения к Redis: %v", err)
+	}
 
 	// Инициализация Fiber приложения с оптимизацией
 	app := fiber.New(fiber.Config{
@@ -55,13 +61,24 @@ func main() {
 		Format: "[${time}] ${status} - ${latency} ${method} ${path}\n",
 	}))
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000, http://127.0.0.1:3000, http://localhost:8000",
+		AllowOrigins:     cfg.CORSOrigins,
 		AllowCredentials: true,
 		AllowHeaders:     "Origin, Content-Type, Accept, X-CSRF-Token",
 	}))
+	// Prometheus (этап 5.3). Регистрируется после recover, чтобы паники,
+	// перехваченные recover, тоже попадали в метрики со статусом 500.
+	app.Use(metrics.Middleware())
+
+	// Эндпоинт метрик вне группы /api/v1: не проходит через CSRFProtect
+	// и не влияет на бизнес-логику. Prometheus опрашивает его по
+	// внутренней docker-сети (healthcheck в docker-compose.yml).
+	metrics.RegisterMetricsRoute(app, "/metrics")
 
 	// Маршруты API v1
 	api := app.Group("/api/v1")
+	// SEC-02: проверка X-CSRF-Token на всех POST/PUT/DELETE/PATCH
+	// эндпоинтах (double-submit cookie), генерация токена на безопасных методах.
+	api.Use(handlers.CSRFProtect())
 	api.Get("/health", handlers.HealthCheck)
 	api.Get("/stats", handlers.GetStats(cfg))
 

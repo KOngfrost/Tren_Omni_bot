@@ -50,11 +50,11 @@ _LOGIN_WINDOW_SECONDS = 15 * 60
 
 # Rate limiting для CRUD-операций админ-панели: защита от brute-force на
 # чувствительных операциях (ответ администратора, создание/передача заявок,
-# создание/удаление пользователей). Лимит: 60 операций на IP за 5 минут.
+# создание/удаление пользователей). Настраивается в .env (CRUD_RATE_LIMIT_*).
 _crud_rate_limiter = DBRateLimiter(
     table_name="crud_attempts",
-    max_requests=60,
-    window_seconds=5 * 60,
+    max_requests=settings.CRUD_RATE_LIMIT_MAX,
+    window_seconds=settings.CRUD_RATE_LIMIT_WINDOW,
 )
 
 # 0x5C — обратный слэш. Константа вместо литерала, чтобы исходник

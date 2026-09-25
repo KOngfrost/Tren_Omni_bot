@@ -82,6 +82,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Сохраняем nonce в request.state для использования в шаблонах
         request.state.script_nonce = script_nonce
         request.state.style_nonce = style_nonce
+        # Единая точка доступа для шаблонов: csp_nonce в request.state
+        # (web.templating прокидывает её в контекст каждого TemplateResponse)
+        request.state.csp_nonce = {"script": script_nonce, "style": style_nonce}
         # и в ContextVar — шаблоны могут рендериться без Request в контексте
         nonce_token = _csp_nonces.set({"script": script_nonce, "style": style_nonce})
 
@@ -228,12 +231,12 @@ class DBRateLimiter:
             return False
 
 
-# Глобальные лимитеры
-_login_rate_limiter = RateLimiter(max_requests=5, window_seconds=300)  # 5 попыток за 5 минут
-
-
+# SEC-11: In-memory RateLimiter устарел и оставлен исключительно для
+# обратной совместимости импортов. В production для защиты от подбора паролей
+# и спама запросов используется исключительно DBRateLimiter (login_attempts,
+# crud_attempts), который корректно синхронизирует лимиты между воркерами.
 def check_rate_limit(key: str, limiter: RateLimiter) -> bool:
-    """Проверить, не превышен ли лимит запросов."""
+    """Проверить, не превышен ли лимит запросов (deprecated)."""
     return limiter.is_allowed(key)
 
 

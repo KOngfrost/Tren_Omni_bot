@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -25,7 +26,78 @@ from web.security.middleware import csp_nonce
 
 # Вынесено в отдельный модуль, чтобы избежать циклического импорта:
 # web.main импортирует роутеры, а роутерам нужен только templates.
-templates = Jinja2Templates(directory="web/templates")
+
+
+def _nonce_for_request(request) -> Callable[[str], str]:
+    """Функция csp_nonce(...), привязанная к конкретному запросу.
+
+    Приоритет: request.state (надёжно — задаётся SecurityHeadersMiddleware
+    в scope и виден всем роутам) → глобальный ContextVar (fallback для
+    офлайн-рендера и тестов, где middleware не выполнялся).
+    """
+
+    def _csp_nonce(kind: str = "script") -> str:
+        if request is not None:
+            state = getattr(request, "state", None)
+            if state is not None:
+                stored = getattr(state, "csp_nonce", None)
+                if isinstance(stored, dict):
+                    value = stored.get(kind)
+                    if value:
+                        return value
+                value = getattr(state, f"{kind}_nonce", None)
+                if value:
+                    return value
+        return csp_nonce(kind)
+
+    return _csp_nonce
+
+
+class _RequestAwareTemplates(Jinja2Templates):
+    """Jinja2Templates, гарантирующий csp_nonce в контексте каждого ответа.
+
+    Любой вызов TemplateResponse (все роуты, error-хендлеры, maintenance)
+    получает в контекст функцию ``csp_nonce('script'|'style')``, которая
+    читает nonce текущего запроса из request.state. Это устраняет блокировку
+    inline-скриптов браузером при CSP с nonce, когда ContextVar неактуален.
+    """
+
+    def TemplateResponse(self, *args, **kwargs):  # API Starlette
+        request, context = self._extract_request_and_context(args, kwargs)
+        if context is not None and "csp_nonce" not in context:
+            context["csp_nonce"] = _nonce_for_request(request)
+        return super().TemplateResponse(*args, **kwargs)
+
+    @staticmethod
+    def _extract_request_and_context(args, kwargs):
+        """Нормализовать оба стиля вызова Starlette (старый и новый).
+
+        Старый: TemplateResponse(name, context) — request лежит в context.
+        Новый:  TemplateResponse(request, name, context).
+        """
+        request = None
+        context = None
+        if args:
+            if isinstance(args[0], str):
+                # Старый стиль: первый аргумент — имя шаблона
+                context = args[1] if len(args) > 1 else kwargs.get("context")
+                if isinstance(context, dict):
+                    request = context.get("request")
+            else:
+                # Новый стиль: первый аргумент — Request
+                request = args[0]
+                context = args[2] if len(args) > 2 else kwargs.get("context")
+        else:
+            context = kwargs.get("context")
+            request = kwargs.get("request")
+            if request is None and isinstance(context, dict):
+                request = context.get("request")
+        if not isinstance(context, dict):
+            context = None
+        return request, context
+
+
+templates = _RequestAwareTemplates(directory="web/templates")
 
 # Подключаем i18n-расширение для Jinja2
 templates.env.add_extension("jinja2.ext.i18n")

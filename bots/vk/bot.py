@@ -39,6 +39,7 @@ from bots.vk.handlers.faq import (
     faq_labeler,
     faq_node_handler,
 )
+from bots.vk.handlers.pagination import pagination_labeler
 from bots.vk.handlers.knowledge import (
     knowledge_base_handler,
     knowledge_handler,
@@ -150,6 +151,10 @@ vk_bot.labeler.load(events_labeler)
 vk_bot.labeler.load(student_labeler)
 vk_bot.labeler.load(admin_labeler)
 vk_bot.labeler.load(reports_labeler)
+# Пагинация списков подключается последней: кнопки «Ещё ➡️» / «⬅️ Назад»
+# общего вида, они должны обрабатываться только если не сработал
+# ни один из предметных хендлеров списков.
+vk_bot.labeler.load(pagination_labeler)
 
 
 @vk_bot.on.private_message()

@@ -82,7 +82,11 @@
                     <h3>Переименовать «{{ dept.name }}»</h3>
                     <button class="close-btn" data-close-modal="rename-modal-{{ dept.id }}">&times;</button>
                 </div>
-                <form data-ajax-form="rename-department" data-dept-id="{{ dept.id }}">
+                {# method/action — fallback на стандартный POST, если store.js
+                   заблокирован или не загрузился (см. app.js: без window.Store
+                   обработчик не вызывает preventDefault) #}
+                <form data-ajax-form="rename-department" data-dept-id="{{ dept.id }}"
+                      method="post" action="/departments/{{ dept.id }}/rename">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="form-group">
                         <label for="name-{{ dept.id }}">Новое название</label>
@@ -108,7 +112,9 @@
             <h3>Создать отдел</h3>
             <button class="close-btn" data-close-modal="create-modal">&times;</button>
         </div>
-        <form data-ajax-form="create-department">
+        {# Fallback: при недоступности store.js форма уходит стандартным POST
+           на серверный обработчик /departments/create #}
+        <form data-ajax-form="create-department" method="post" action="/departments/create">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
                 <label for="dept-name">Название отдела</label>

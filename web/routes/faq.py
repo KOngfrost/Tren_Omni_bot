@@ -20,6 +20,7 @@ from core.bulk_import import (
     generate_faq_template_xlsx_async,
     parse_faq_rows_async,
     parse_file_or_text_async,
+    read_import_upload_async,
 )
 from core.database import async_session_maker
 from core.models import Department, FAQNode, Log
@@ -39,33 +40,40 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _attach_depths(nodes: list["FAQNode"]) -> None:
-    """Проставить node.depth (глубина в дереве FAQ) для отрисовки вложенности.
+def compute_faq_depths(nodes: list["FAQNode"]) -> dict[int, int]:
+    """Вычислить глубину каждого узла FAQ-дерева (B14).
+
+    Возвращает словарь node_id → depth вместо мутации ORM-объектов через
+    транзиентное поле: словарь локален для запроса, что исключает гонку
+    данных между параллельными запросами. Дополнительно сортирует список
+    по (глубина, order_index, id) для отрисовки вложенности.
 
     Узлы без существующего родителя считаются корневыми (в БД parent_id
     обнуляется при удалении родителя — ondelete SET NULL).
     """
     by_id = {node.id: node for node in nodes}
+    depths: dict[int, int] = {}
     for node in nodes:
-        node.depth = 0 if node.parent_id not in by_id else -1  # -1 = требуется расчёт
+        depths[node.id] = 0 if node.parent_id not in by_id else -1  # -1 = требуется расчёт
 
     for _ in range(len(nodes) + 1):
         unresolved = False
         for node in nodes:
-            if node.depth == -1:
+            if depths[node.id] == -1:
                 parent = by_id.get(node.parent_id)
-                if parent is not None and parent.depth >= 0:
-                    node.depth = parent.depth + 1
+                if parent is not None and depths[parent.id] >= 0:
+                    depths[node.id] = depths[parent.id] + 1
                 else:
                     unresolved = True
         if not unresolved:
             break
 
     for node in nodes:
-        if node.depth < 0:  # защита от циклов в данных
-            node.depth = 0
+        if depths[node.id] < 0:  # защита от циклов в данных
+            depths[node.id] = 0
 
-    nodes.sort(key=lambda n: (n.depth, n.order_index, n.id))
+    nodes.sort(key=lambda n: (depths[n.id], n.order_index, n.id))
+    return depths
 
 
 @router.get("/")
@@ -88,7 +96,7 @@ async def faq_page(request: Request, user=Depends(require_auth)):
             if not is_super:
                 faq_stmt = faq_stmt.where(FAQNode.department_id == dept_id)
             faq_nodes = list((await session.execute(faq_stmt)).scalars().all())
-            _attach_depths(faq_nodes)
+            compute_faq_depths(faq_nodes)
     except Exception as e:
         db_error = True
         logger.error("Не удалось загрузить частые вопросы: %s", e)
@@ -253,13 +261,11 @@ async def faq_export_xlsx(request: Request, user=Depends(require_auth)):
 async def import_faq(request: Request, user=Depends(require_writer)):
     """Массовая загрузка частых вопросов из файла Excel/CSV или текстовой вставки."""
     form = await request.form()
-    file_upload = form.get("file")
-    file_bytes: bytes | None = None
-    filename: str | None = None
-
-    if file_upload and hasattr(file_upload, "read") and getattr(file_upload, "filename", None):
-        file_bytes = await file_upload.read()
-        filename = file_upload.filename
+    # SEC-10: чтение файла с лимитом размера (5 МБ).
+    file_bytes, filename, import_error = await read_import_upload_async(form)
+    if import_error:
+        request.session["flash_error"] = import_error
+        return RedirectResponse(url="/faq/", status_code=303)
 
     text_data = str(form.get("text_data", "")).strip()
 

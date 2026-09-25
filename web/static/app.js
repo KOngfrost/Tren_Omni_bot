@@ -4,17 +4,93 @@
 
     var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // ==========================================
+    // CSRF: динамическое чтение токена + обёртка fetch
+    // ==========================================
+
+    /**
+     * Актуальный CSRF-токен из мета-тега текущего документа.
+     * Читается перед КАЖДЫМ запросом, поэтому переживает ротацию токена
+     * и перерисовки DOM (в отличие от значения, захваченного при загрузке).
+     */
+    function getCsrfToken() {
+        var metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag && metaTag.getAttribute('content')) {
+            window.CSRF_TOKEN = metaTag.getAttribute('content');
+            return window.CSRF_TOKEN;
+        }
+        return window.CSRF_TOKEN || '';
+    }
+    window.getCsrfToken = getCsrfToken;
+
     var meta = document.querySelector('meta[name="csrf-token"]');
     if (meta && meta.getAttribute('content')) {
         window.CSRF_TOKEN = meta.getAttribute('content');
+    }
+
+    // ==========================================
+    // Double-Submit Guard: немедленная разблокировка кнопки
+    // ==========================================
+
+    /** Форма, заблокированная guard'ом в данный момент (null — нет заблокированных). */
+    var guardedForm = null;
+
+    /**
+     * Немедленно снять флаг is-submitting и разблокировать кнопку отправки.
+     * Без аргумента снимается блокировка с текущей защищённой формы.
+     */
+    function releaseSubmitGuard(form) {
+        var target = (form && form.tagName === 'FORM') ? form : guardedForm;
+        if (!target) return;
+        target.dataset.submitting = 'false';
+        target.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (btn) {
+            btn.classList.remove('is-submitting');
+            btn.removeAttribute('aria-busy');
+        });
+        if (guardedForm === target) guardedForm = null;
+    }
+    window.releaseSubmitGuard = releaseSubmitGuard;
+
+    function _hasCsrfHeader(headers) {
+        if (!headers) return false;
+        if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+            return headers.has('X-CSRF-Token');
+        }
+        var keys = Object.keys(headers);
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i].toLowerCase() === 'x-csrf-token') return true;
+        }
+        return false;
+    }
+
+    if (typeof window.fetch === 'function') {
         var originalFetch = window.fetch;
         window.fetch = function (url, options) {
             options = options || {};
-            options.headers = options.headers || {};
-            if (!options.headers['X-CSRF-Token'] && window.CSRF_TOKEN) {
-                options.headers['X-CSRF-Token'] = window.CSRF_TOKEN;
+            var token = getCsrfToken();
+            if (token && !_hasCsrfHeader(options.headers)) {
+                if (typeof Headers !== 'undefined' && options.headers instanceof Headers) {
+                    var dynamicHeaders = new Headers(options.headers);
+                    dynamicHeaders.set('X-CSRF-Token', token);
+                    options.headers = dynamicHeaders;
+                } else {
+                    options.headers = options.headers || {};
+                    options.headers['X-CSRF-Token'] = token;
+                }
             }
-            return originalFetch.call(this, url, options);
+            return originalFetch.call(this, url, options).then(
+                function (response) {
+                    // Ответ 4xx/5xx — немедленно разблокируем кнопку формы,
+                    // не дожидаясь таймаута guard'а
+                    if (response && response.status >= 400) releaseSubmitGuard(null);
+                    return response;
+                },
+                function (error) {
+                    // Сетевой сбой — немедленно разблокируем кнопку формы
+                    releaseSubmitGuard(null);
+                    throw error;
+                }
+            );
         };
     }
 
@@ -293,21 +369,28 @@
                 return false;
             }
             form.dataset.submitting = 'true';
+            guardedForm = form;
             var submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
             submitButtons.forEach(function (btn) {
                 btn.classList.add('is-submitting');
                 btn.setAttribute('aria-busy', 'true');
             });
 
+            // Страховочный таймаут: основная разблокировка происходит
+            // немедленно — при ошибке валидации (invalid), сетевом сбое
+            // или ответе 4xx/5xx (см. releaseSubmitGuard / обёртку fetch).
             setTimeout(function () {
-                form.dataset.submitting = 'false';
-                submitButtons.forEach(function (btn) {
-                    btn.classList.remove('is-submitting');
-                    btn.removeAttribute('aria-busy');
-                });
+                releaseSubmitGuard(form);
             }, 8000);
         }
     });
+
+    // Ошибка HTML5-валидации — немедленно снимаем блокировку кнопки,
+    // иначе форма останется заблокированной до таймаута guard'а
+    document.addEventListener('invalid', function (event) {
+        var form = event.target && event.target.form;
+        if (form) releaseSubmitGuard(form);
+    }, true);
 
     window.toggleAnswer = function () {
         var checkbox = document.getElementById('is_final');
@@ -471,22 +554,34 @@
         var form = event.target;
         if (!form.matches('[data-ajax-form="create-department"]')) return;
 
+        // store.js недоступен/заблокирован — НЕ перехватываем submit:
+        // форма выполняет стандартный серверный POST (method/action в шаблоне)
+        if (!window.Store) return;
+
         event.preventDefault();
         var input = form.querySelector('input[name="name"]');
-        if (!input || !input.value.trim()) return;
-
-        var name = input.value.trim();
-        if (window.Store) {
-            window.Store.createDepartment(name).then(function (result) {
-                if (result.success) {
-                    showSuccess('Отдел "' + result.data.name + '" создан');
-                    input.value = '';
-                    closeModal('create-modal');
-                } else {
-                    showError(result.error || 'Ошибка создания отдела');
-                }
-            });
+        var name = input ? input.value.trim() : '';
+        if (!name) {
+            // Ошибка валидации — немедленно снимаем guard, без ожидания таймаута
+            releaseSubmitGuard(form);
+            showError('Укажите название отдела');
+            if (input) input.focus();
+            return;
         }
+
+        window.Store.createDepartment(name).then(function (result) {
+            releaseSubmitGuard(form);
+            if (result.success) {
+                showSuccess('Отдел "' + result.data.name + '" создан');
+                if (input) input.value = '';
+                closeModal('create-modal');
+            } else {
+                showError(result.error || 'Ошибка создания отдела');
+            }
+        }).catch(function () {
+            releaseSubmitGuard(form);
+            showError('Не удалось создать отдел: ошибка сети');
+        });
     });
 
     /**
@@ -496,26 +591,38 @@
         var form = event.target;
         if (!form.matches('[data-ajax-form="rename-department"]')) return;
 
+        // store.js недоступен/заблокирован — НЕ перехватываем submit:
+        // форма выполняет стандартный серверный POST (method/action в шаблоне)
+        if (!window.Store) return;
+
         event.preventDefault();
         var deptId = form.dataset.deptId;
         var input = form.querySelector('input[name="name"]');
-        if (!input || !input.value.trim() || !deptId) return;
-
-        var name = input.value.trim();
-        if (window.Store) {
-            window.Store.renameDepartment(parseInt(deptId, 10), name).then(function (result) {
-                if (result.success) {
-                    showSuccess('Отдел переименован в "' + result.data.name + '"');
-                    // Закрыть модалку
-                    var modal = form.closest('.modal');
-                    if (modal) modal.classList.remove('active');
-                    // Обновить карточку на странице
-                    updateDepartmentCard(result.data);
-                } else {
-                    showError(result.error || 'Ошибка переименования');
-                }
-            });
+        var name = input ? input.value.trim() : '';
+        if (!name || !deptId) {
+            // Ошибка валидации — немедленно снимаем guard, без ожидания таймаута
+            releaseSubmitGuard(form);
+            showError('Укажите новое название отдела');
+            if (input) input.focus();
+            return;
         }
+
+        window.Store.renameDepartment(parseInt(deptId, 10), name).then(function (result) {
+            releaseSubmitGuard(form);
+            if (result.success) {
+                showSuccess('Отдел переименован в "' + result.data.name + '"');
+                // Закрыть модалку
+                var modal = form.closest('.modal');
+                if (modal) modal.classList.remove('active');
+                // Обновить карточку на странице
+                updateDepartmentCard(result.data);
+            } else {
+                showError(result.error || 'Ошибка переименования');
+            }
+        }).catch(function () {
+            releaseSubmitGuard(form);
+            showError('Не удалось переименовать отдел: ошибка сети');
+        });
     });
 
     /**

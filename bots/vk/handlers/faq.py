@@ -1,6 +1,7 @@
 """Хендлеры раздела «Частые вопросы» бота."""
 
 import re
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -8,6 +9,17 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
 
 from bots.vk.common import _get_department_names
+from bots.vk.handlers.pagination import (
+    FETCH_LIMIT,
+    KIND_FAQ_DEPARTMENTS,
+    KIND_FAQ_SEARCH,
+    PAGE_SIZE,
+    clamp_page,
+    open_list,
+    page_count,
+    persist_page,
+    register_renderer,
+)
 from bots.vk.keyboards import (
     build_back_nav_keyboard,
     build_faq_departments_keyboard,
@@ -39,13 +51,13 @@ async def faq_handler(message: Message):
     await message.answer(instruction_text, keyboard=keyboard)
 
 
-@faq_labeler.private_message(RegexRule(r"(?i)^Вопросы:\s*(.+)$"))
-async def faq_department_handler(message: Message):
-    """Отображение списка вопросов выбранного отдела."""
-    match = re.match(r"(?i)^Вопросы:\s*(.+)$", message.text or "")
-    if not match:
-        return
-    dept_raw = match.group(1).strip()
+async def _render_faq_department_page(message: Message, page: int, meta: dict[str, Any]) -> None:
+    """Отрисовать страницу списка вопросов отдела (пагинация, ЭТАП 4.1 / B4).
+
+    Название раздела передаётся в meta, поэтому перелистывание «Ещё ➡️»
+    перечитывает те же данные, не теряя выбранный отдел.
+    """
+    dept_raw = str(meta.get("dept") or "Все отделы")
 
     async with async_session_maker() as session:
         stmt = (
@@ -68,7 +80,10 @@ async def faq_department_handler(message: Message):
                 )
                 return
 
-        nodes = list(await session.scalars(stmt.limit(25)))
+        nodes = list(await session.scalars(stmt.limit(FETCH_LIMIT)))
+
+    page = clamp_page(page, len(nodes))
+    await persist_page(message.from_id, KIND_FAQ_DEPARTMENTS, page, meta)
 
     if not nodes:
         await message.answer(
@@ -81,18 +96,38 @@ async def faq_department_handler(message: Message):
     lines = [
         f"❓ Частые вопросы — {dept_raw}:\n",
     ]
+    total_pages = page_count(len(nodes))
+    start = page * PAGE_SIZE
+    page_nodes = nodes[start : start + PAGE_SIZE]
+
     item_ids = []
-    for idx, node in enumerate(nodes, start=1):
+    # Сквозная нумерация по всем вопросам раздела, а не по странице
+    for idx, node in enumerate(page_nodes, start=start + 1):
         item_ids.append(node.id)
         dept_prefix = f"[{node.department.name}] " if "все отделы" in dept_raw.lower() else ""
         lines.append(f"{idx}. {dept_prefix}{node.button_text or node.question} [Вопрос {node.id}]")
+
+    if total_pages > 1:
+        lines.append(f"\n📄 Страница {page + 1} из {total_pages}")
 
     lines.append(
         "\n💡 Нажмите кнопку с номером вопроса на клавиатуре или отправьте его номер (например: 1 или Вопрос 1):"
     )
 
-    keyboard = build_faq_items_keyboard(item_ids)
+    keyboard = build_faq_items_keyboard(
+        item_ids, page=page, has_more=page + 1 < total_pages
+    )
     await message.answer("\n".join(lines), keyboard=keyboard)
+
+
+@faq_labeler.private_message(RegexRule(r"(?i)^Вопросы:\s*(.+)$"))
+async def faq_department_handler(message: Message):
+    """Отображение списка вопросов выбранного отдела."""
+    match = re.match(r"(?i)^Вопросы:\s*(.+)$", message.text or "")
+    if not match:
+        return
+    dept_raw = match.group(1).strip()
+    await open_list(message, KIND_FAQ_DEPARTMENTS, {"dept": dept_raw})
 
 
 @faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопрос\s*#?|FAQ\s*#?|#)(\d+)$"))
@@ -142,14 +177,15 @@ async def faq_node_handler(message: Message):
     await message.answer("\n".join(response_lines), keyboard=keyboard)
 
 
-@faq_labeler.private_message(RegexRule(r"(?i)^Поиск\s+(.+)$"))
-async def faq_search_handler(message: Message):
-    """Поиск по частым вопросам по ключевым словам."""
-    match = re.match(r"(?i)^Поиск\s+(.+)$", message.text or "")
-    if not match:
-        return
-    query = match.group(1).strip()
-    if not query or query.isdigit():
+async def _render_faq_search_page(message: Message, page: int, meta: dict[str, Any]) -> None:
+    """Отрисовать страницу результатов поиска по FAQ (пагинация, ЭТАП 4.1 / B4)."""
+    query = str(meta.get("query") or "").strip()
+    if not query:
+        # Без поискового запроса список не восстановить — возвращаем в разделы
+        await message.answer(
+            "Поисковый запрос потерян. Выберите раздел вопросов:",
+            keyboard=build_back_nav_keyboard("К разделам вопросов"),
+        )
         return
 
     async with async_session_maker() as session:
@@ -161,9 +197,12 @@ async def faq_search_handler(message: Message):
                     FAQNode.question.ilike(f"%{query}%") | FAQNode.final_answer.ilike(f"%{query}%")
                 )
                 .order_by(FAQNode.id)
-                .limit(8)
+                .limit(FETCH_LIMIT)
             )
         )
+
+    page = clamp_page(page, len(nodes))
+    await persist_page(message.from_id, KIND_FAQ_SEARCH, page, meta)
 
     if not nodes:
         await message.answer(
@@ -173,12 +212,38 @@ async def faq_search_handler(message: Message):
         )
         return
 
+    total_pages = page_count(len(nodes))
+    start = page * PAGE_SIZE
+    page_nodes = nodes[start : start + PAGE_SIZE]
+
     lines = [f"🔍 Результаты поиска по запросу «{query}»:\n"]
     item_ids = []
-    for idx, node in enumerate(nodes, start=1):
+    for idx, node in enumerate(page_nodes, start=start + 1):
         item_ids.append(node.id)
         lines.append(f"{idx}. {node.question} [Вопрос {node.id}]")
 
+    if total_pages > 1:
+        lines.append(f"\n📄 Страница {page + 1} из {total_pages}")
+
     lines.append("\n💡 Выберите номер вопроса на клавиатуре или отправьте номер:")
-    keyboard = build_faq_items_keyboard(item_ids)
+    keyboard = build_faq_items_keyboard(
+        item_ids, page=page, has_more=page + 1 < total_pages
+    )
     await message.answer("\n".join(lines), keyboard=keyboard)
+
+
+@faq_labeler.private_message(RegexRule(r"(?i)^Поиск\s+(.+)$"))
+async def faq_search_handler(message: Message):
+    """Поиск по частым вопросам по ключевым словам."""
+    match = re.match(r"(?i)^Поиск\s+(.+)$", message.text or "")
+    if not match:
+        return
+    query = match.group(1).strip()
+    if not query or query.isdigit():
+        return
+    await open_list(message, KIND_FAQ_SEARCH, {"query": query})
+
+
+# Регистрация рендереров пагинации FAQ (ЭТАП 4.1 / B4)
+register_renderer(KIND_FAQ_DEPARTMENTS, _render_faq_department_page)
+register_renderer(KIND_FAQ_SEARCH, _render_faq_search_page)

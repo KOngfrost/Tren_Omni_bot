@@ -6,6 +6,20 @@ def _chunk_buttons(buttons: list, size: int = 2) -> list[list]:
     return [buttons[i : i + size] for i in range(0, len(buttons), size)]
 
 
+def _pagination_nav_row(page: int, has_more: bool) -> list[tuple[str, str]]:
+    """Ряд навигации пагинации: «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1 / B4).
+
+    Возвращается пустой список на первой/последней странице, чтобы
+    не занимать место бесполезными кнопками.
+    """
+    row: list[tuple[str, str]] = []
+    if page > 0:
+        row.append(("⬅️ Назад", "secondary"))
+    if has_more:
+        row.append(("Ещё ➡️", "secondary"))
+    return row
+
+
 def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) -> str:
     """Сформировать JSON-структуру клавиатуры VK."""
     return json.dumps(
@@ -54,14 +68,26 @@ def build_admin_keyboard() -> str:
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
 
 
-def build_admin_tickets_list_keyboard(ticket_ids: list[int], max_buttons: int = 6) -> str:
-    """Клавиатура списка заявок для администратора: кнопки открытия конкретных заявок."""
+def build_admin_tickets_list_keyboard(
+    ticket_ids: list[int],
+    max_buttons: int = 6,
+    *,
+    page: int = 0,
+    has_more: bool = False,
+) -> str:
+    """Клавиатура списка заявок для администратора: кнопки открытия конкретных заявок.
+
+    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
+    """
     buttons: list[tuple[str, str]] = [
         (f"Заявка #{tid}", "primary") for tid in ticket_ids[:max_buttons]
     ]
-    buttons.append(("Заявки администратора", "secondary"))
-    buttons.append(("Админ", "negative"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+    rows = _chunk_buttons(buttons, 2)
+    nav_row = _pagination_nav_row(page, has_more)
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([("Заявки администратора", "secondary"), ("Админ", "negative")])
+    return _format_keyboard(rows, one_time=False)
 
 
 def build_admin_ticket_actions_keyboard(ticket_id: int, is_completed: bool = False) -> str:
@@ -127,11 +153,24 @@ def build_anonymous_choice_keyboard() -> str:
     )
 
 
-def build_tickets_keyboard(ticket_ids: list[int], max_buttons: int = 5) -> str:
-    """Клавиатура со списком заявок: кнопка «Подробнее #N» на каждую заявку (до max_buttons)."""
+def build_tickets_keyboard(
+    ticket_ids: list[int],
+    max_buttons: int = 5,
+    *,
+    page: int = 0,
+    has_more: bool = False,
+) -> str:
+    """Клавиатура со списком заявок: кнопка «Подробнее #N» на каждую заявку (до max_buttons).
+
+    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
+    """
     buttons = [(f"Подробнее #{ticket_id}", "secondary") for ticket_id in ticket_ids[:max_buttons]]
-    buttons.append(("Меню", "primary"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    rows = _chunk_buttons(buttons, 2)
+    nav_row = _pagination_nav_row(page, has_more)
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([("Меню", "primary")])
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_faq_departments_keyboard(departments: list[str]) -> str:
@@ -142,14 +181,26 @@ def build_faq_departments_keyboard(departments: list[str]) -> str:
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
 
 
-def build_faq_items_keyboard(item_ids: list[int], max_buttons: int = 6) -> str:
-    """Клавиатура номеров вопросов для быстрого открытия в один клик."""
+def build_faq_items_keyboard(
+    item_ids: list[int],
+    max_buttons: int = 6,
+    *,
+    page: int = 0,
+    has_more: bool = False,
+) -> str:
+    """Клавиатура номеров вопросов для быстрого открытия в один клик.
+
+    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
+    """
     buttons: list[tuple[str, str]] = [
         (f"Вопрос {item_id}", "secondary") for item_id in item_ids[:max_buttons]
     ]
-    buttons.append(("К разделам вопросов", "primary"))
-    buttons.append(("Меню", "negative"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    rows = _chunk_buttons(buttons, 2)
+    nav_row = _pagination_nav_row(page, has_more)
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([("К разделам вопросов", "primary"), ("Меню", "negative")])
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_knowledge_departments_keyboard(departments: list[str]) -> str:

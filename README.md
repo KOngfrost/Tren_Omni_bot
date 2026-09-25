@@ -1,11 +1,11 @@
-# OSS Bot — Студенческий Помощник v0.8.5
+# OSS Bot — Студенческий Помощник v0.8.6
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-compose_v2-2496ED.svg)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-412%2F412%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-437%2F437%20passed-brightgreen.svg)](tests/)
 [![Security](https://img.shields.io/badge/security-Go_Fiber_%7C_Caddy_SSL-success.svg)](docs/SETUP_FROM_SCRATCH.md)
-[![Version](https://img.shields.io/badge/version-0.8.5-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.6-blue.svg)](CHANGELOG.md)
 
 **OSS Bot** — современная защищённая омниканальная платформа для приёма, автоматической маршрутизации и обработки студенческих обращений в университете.
 

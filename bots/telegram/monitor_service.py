@@ -84,11 +84,38 @@ class MonitorService:
         await self._check_system_resources()
         await self._check_scheduled_backup()
 
+    def _prune_previous_states(self, current_names: set[str]) -> int:
+        """Удалить из _previous_states записи удалённых контейнеров.
+
+        Возвращает количество удалённых записей. Вызывается каждый цикл
+        проверки: без очистки словарь утекал бы по мере пересоздания
+        контейнеров с новыми именами (docker compose, деплой, миграции).
+        """
+        if not self._previous_states:
+            return 0
+        removed = [name for name in self._previous_states if name not in current_names]
+        for name in removed:
+            del self._previous_states[name]
+        if removed:
+            logger.debug(
+                "Монитор: удалено %d устаревших состояний контейнеров (%s)",
+                len(removed),
+                ", ".join(removed),
+            )
+        return len(removed)
+
     async def _check_containers(self) -> None:
         """Проверить статусы контейнеров и отправить уведомления о сбоях/восстановлении."""
         containers = await self.docker_client.list_containers(all=True)
         if not containers:
             return
+
+        # Удаляем состояния контейнеров, которых больше нет (B8 / ЭТАП 4.2).
+        # Без этого словарь _previous_states рос бесконечно: каждый пересозданный
+        # контейнер (docker compose up -d, деплой, миграции) оставлял после себя
+        # запись, и перезапуск с тем же именем уже не распознавался как
+        # «новый» сервис — алерт о восстановлении не приходил.
+        self._prune_previous_states({c.name for c in containers})
 
         for c in containers:
             # Игнорируем сервисы однократных миграций (Alembic)
@@ -175,17 +202,25 @@ class MonitorService:
         logger.info("Запуск автоматического планового резервного копирования БД...")
         try:
             from bots.telegram.bot import perform_database_backup
+            from bots.telegram.handlers.backup import compute_sha256
 
             ok, data, filename = await perform_database_backup(self.docker_client, self.settings)
             if ok and data:
                 size_mb = len(data) / (1024 * 1024)
-                logger.info("Автоматический бэкап успешно создан: %s (%.2f МБ)", filename, size_mb)
+                digest = compute_sha256(data)
+                logger.info(
+                    "Автоматический бэкап успешно создан: %s (%.2f МБ, SHA-256 %s)",
+                    filename,
+                    size_mb,
+                    digest,
+                )
                 if self.alerts_enabled and self.admin_id > 0:
                     msg = (
                         f"💾 <b>Автоматический бэкап БД создан успешно</b>\n\n"
                         f"📁 <b>Файл:</b> <code>{filename}</code>\n"
                         f"📦 <b>Размер:</b> {size_mb:.2f} МБ\n"
-                        f"🕒 <b>Хранение:</b> сохранено локально с ротацией 7 дней."
+                        f"🔐 <b>SHA-256:</b> <code>{digest}</code>\n"
+                        f"🕒 <b>Хранение:</b> сохранено локально (права 0600) с ротацией 7 дней."
                     )
                     with contextlib.suppress(Exception):
                         await self.bot.send_message(chat_id=self.admin_id, text=msg, parse_mode="HTML")

@@ -27,6 +27,32 @@ services:
       retries: 5
       start_period: 30s
 
+  # SEC-12: генерация pgbouncer/userlist.txt.
+  # Разовая задача, завершается ДО старта pgbouncer. Читает готовый
+  # SCRAM-SHA-256 verifier из pg_authid и кладёт его в общий том с
+  # правами 0600. Открытые пароли при этом нигде не хранятся.
+  pgbouncer-userlist:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oss_bot_pgbouncer_userlist
+    restart: "no"
+    logging: *default-logging
+    mem_limit: 128m
+    memswap_limit: 128m
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USE_PGBOUNCER=false
+    volumes:
+      - pgbouncer_config:/etc/pgbouncer
+    command: python scripts/generate_pgbouncer_userlist.py --out /etc/pgbouncer/userlist.txt
+    depends_on:
+      db:
+        condition: service_healthy
+
   pgbouncer:
     image: edoburu/pgbouncer:latest
     container_name: oss_bot_pgbouncer
@@ -34,28 +60,42 @@ services:
     logging: *default-logging
     mem_limit: 64m
     memswap_limit: 64m
+    # Свой pgbouncer.ini с auth_query (SEC-12). При наличии смонтированного
+    # файла автогенерация конфига в entrypoint НЕ выполняется, поэтому все
+    # параметры пула обязаны быть заданы явно — они и заданы в pgbouncer/.
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - pgbouncer_config:/etc/pgbouncer
     environment:
+      # Подстановки ${...} в pgbouncer.ini выполняет entrypoint образа.
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_USER=${POSTGRES_USER:?POSTGRES_USER is required}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - DB_NAME=${POSTGRES_DB:?POSTGRES_DB is required}
-      - LISTEN_PORT=6432
-      - POOL_MODE=transaction
-      - AUTH_TYPE=scram-sha-256
-      - MAX_CLIENT_CONN=300
-      - DEFAULT_POOL_SIZE=25
-      - MIN_POOL_SIZE=5
-      - RESERVE_POOL_SIZE=5
-      - SERVER_RESET_QUERY=DISCARD ALL
+      # Служебная роль для auth_query: её verifier лежит в userlist.txt,
+      # а право EXECUTE на pgbouncer.get_auth выдаёт миграция b4c5d6e7f8a.
+      - AUTH_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      # Нужен только для healthcheck: psql входит через сам пул.
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=${POSTGRES_DB:?POSTGRES_DB is required}
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
+      # psql идёт через сам пул: проверяются не только порт и процесс,
+      # но и успешная аутентификация SCRAM и работоспособность auth_query.
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$${POSTGRES_PASSWORD}"
+          psql -h 127.0.0.1 -p 6432 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+          -tAc 'SELECT 1' | grep -q 1 || exit 1
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
+      pgbouncer-userlist:
+        condition: service_completed_successfully
 
   migrate:
     build:
@@ -91,7 +131,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.5}
+      - APP_VERSION=${APP_VERSION:-0.8.6}
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -139,7 +179,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.4.1}
+      - APP_VERSION=${APP_VERSION:-0.8.6}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -172,6 +212,19 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000, http://127.0.0.1:3000, http://localhost:8000}
+    # Healthcheck (этап 5.2): HTTP GET /api/v1/health.
+    # Проба идёт по реальному TCP+HTTP, поэтому ловит не только падение
+    # процесса, но и зависание event loop (процесс жив, а не отвечает).
+    # Docker сам перезапустит контейнер после 3 неудач подряд.
+    # Образ backend_go/Dockerfile основан на alpine, где wget есть в busybox,
+    # поэтому curl доустанавливать не нужно.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
@@ -204,6 +257,10 @@ services:
     depends_on:
       web-admin:
         condition: service_healthy
+      # go-api должен пройти healthcheck (этап 5.2) до старта Prometheus:
+      # иначе первые скрейпы дают ложные алерты GoApiInstanceDown.
+      go-api:
+        condition: service_healthy
 
   tg-monitor:
     build:
@@ -221,7 +278,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.5}
+      - APP_VERSION=${APP_VERSION:-0.8.6}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/backups/oss_bot:/var/backups/oss_bot
@@ -244,6 +301,7 @@ services:
       - .env
     environment:
       - DOMAIN=${DOMAIN:-localhost}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
     ports:
       - "80:80"
       - "443:443"
@@ -261,3 +319,7 @@ volumes:
   prometheus_data:
   caddy_data:
   caddy_config:
+  # Конфигурация PgBouncer и генерируемый userlist.txt (SEC-12).
+  # Отдельный том: userlist.txt пишется одноразовым сервисом
+  # pgbouncer-userlist, а читается постоянно работающим pgbouncer.
+  pgbouncer_config:
