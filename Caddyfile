@@ -20,39 +20,11 @@
         max_size 15MB
     }
 
-    # API запросы проксируются на бэкенд (Python / Go Fiber)
-    handle /api/* {
-        reverse_proxy web-admin:8000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    handle /auth/* {
-        reverse_proxy web-admin:8000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    handle /webhooks/* {
-        reverse_proxy web-admin:8000 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # React SPA: раздача статики напрямую Caddy с кэшированием и fallback на index.html
-    handle {
-        root * /var/www/frontend/dist
-        try_files {path} /index.html
-        file_server
+    reverse_proxy web-admin:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
     }
 }
 

@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-compose_v2-2496ED.svg)](https://www.docker.com/)
 [![Tests](https://img.shields.io/badge/tests-412%2F412%20passed-brightgreen.svg)](tests/)
-[![Security](https://img.shields.io/badge/security-Go_Fiber_%7C_React_19_%7C_Caddy_SSL-success.svg)](docs/SETUP_FROM_SCRATCH.md)
+[![Security](https://img.shields.io/badge/security-Go_Fiber_%7C_Caddy_SSL-success.svg)](docs/SETUP_FROM_SCRATCH.md)
 [![Version](https://img.shields.io/badge/version-0.8.5-blue.svg)](CHANGELOG.md)
 
 **OSS Bot** — современная защищённая омниканальная платформа для приёма, автоматической маршрутизации и обработки студенческих обращений в университете.
