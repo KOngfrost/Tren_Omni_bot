@@ -27,8 +27,8 @@
     import protected_proxy
 }
 
-# Все запросы по HTTP (любой IP NetBird, MagicDNS и localhost без редиректа)
-http:// {
+# Все запросы по HTTP (IP NetBird, localhost и MagicDNS)
+http://localhost, http://127.0.0.1, http://100.64.0.1, http://oss-web-panel.example.netbird.cloud, http://oss-web-panel.example.netbird.cloud {
     import protected_proxy
 }
 
