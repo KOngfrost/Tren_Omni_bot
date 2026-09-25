@@ -35,10 +35,15 @@ async def test_settings_toggle_2fa_permissions(monkeypatch):
     from web.dependencies import require_auth
     from web.security.csrf import CSRFMiddleware
 
+    orig_dispatch = CSRFMiddleware.dispatch
+
     async def mock_csrf_dispatch(self, request, call_next):
+        if "csrf_token" not in request.session:
+            request.session["csrf_token"] = "mock_csrf_token"
         return await call_next(request)
 
     monkeypatch.setattr(CSRFMiddleware, "dispatch", mock_csrf_dispatch)
+    app.middleware_stack = None
 
     # 1. Попытка отключения без роли SUPERADMIN (обычный админ отдела)
     def mock_dept_admin():
@@ -49,54 +54,56 @@ async def test_settings_toggle_2fa_permissions(monkeypatch):
             "department_id": 1,
         }
 
-    app.dependency_overrides[require_auth] = mock_dept_admin
+    try:
+        app.dependency_overrides[require_auth] = mock_dept_admin
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.post("/settings/2fa", data={"enabled": "false", "csrf_token": "mock"})
-        assert res.status_code == 403
-        assert "403" in res.text
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post("/settings/2fa", data={"enabled": "false", "csrf_token": "mock"})
+            assert res.status_code == 403
 
-        res_json = await client.post(
-            "/settings/2fa",
-            data={"enabled": "false"},
-            headers={"Accept": "application/json"},
-        )
-        assert res_json.status_code == 403
-        assert "суперадминистратора" in res_json.json()["detail"]
+            res_json = await client.post(
+                "/settings/2fa",
+                data={"enabled": "false"},
+                headers={"Accept": "application/json"},
+            )
+            assert res_json.status_code == 403
+            assert "суперадминистратора" in res_json.json()["detail"]
 
-    # 2. Успешное переключение под суперадминистратором
-    def mock_superadmin():
-        return {
-            "username": "chief_admin",
-            "role": "SUPERADMIN",
-            "web_user_id": 1,
-            "department_id": None,
-        }
+        # 2. Успешное переключение под суперадминистратором
+        def mock_superadmin():
+            return {
+                "username": "chief_admin",
+                "role": "SUPERADMIN",
+                "web_user_id": 1,
+                "department_id": None,
+            }
 
-    app.dependency_overrides[require_auth] = mock_superadmin
+        app.dependency_overrides[require_auth] = mock_superadmin
 
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # AJAX запрос на отключение
-        res_ajax = await client.post(
-            "/settings/2fa",
-            data={"enabled": "false"},
-            headers={"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
-        )
-        assert res_ajax.status_code == 200
-        data = res_ajax.json()
-        assert data["success"] is True
-        assert data["enabled"] is False
-        assert await is_two_factor_enabled() is False
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # AJAX запрос на отключение
+            res_ajax = await client.post(
+                "/settings/2fa",
+                data={"enabled": "false"},
+                headers={"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            )
+            assert res_ajax.status_code == 200
+            data = res_ajax.json()
+            assert data["success"] is True
+            assert data["enabled"] is False
+            assert await is_two_factor_enabled() is False
 
-        # Форм-запрос на включение
-        res_form = await client.post(
-            "/settings/2fa",
-            data={"enabled": "true"},
-            follow_redirects=False,
-        )
-        assert res_form.status_code == 303
-        assert res_form.headers["location"] == "/settings/"
-        assert await is_two_factor_enabled() is True
-
-    app.dependency_overrides.clear()
+            # Форм-запрос на включение
+            res_form = await client.post(
+                "/settings/2fa",
+                data={"enabled": "true"},
+                follow_redirects=False,
+            )
+            assert res_form.status_code == 303
+            assert res_form.headers["location"] == "/settings/"
+            assert await is_two_factor_enabled() is True
+    finally:
+        app.dependency_overrides.clear()
+        CSRFMiddleware.dispatch = orig_dispatch
+        app.middleware_stack = None

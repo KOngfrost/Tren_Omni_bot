@@ -1,25 +1,63 @@
+# Глобальные опции Caddy
 {
-    auto_https disable_redirects
+    email {$ACME_EMAIL:admin@example.com}
 }
 
-(common_proxy) {
-    reverse_proxy web-admin:8000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+(security_headers) {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "0"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
     }
 }
 
-# Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом).
-# Имя домена задаётся в переменной окружения DOMAIN в файле .env (по умолчанию localhost для dev).
+(common_proxy) {
+    encode zstd gzip
+
+    request_body {
+        max_size 15MB
+    }
+
+    # API запросы проксируются на бэкенд (Python / Go Fiber)
+    handle /api/* {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle /auth/* {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle /webhooks/* {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # React SPA: раздача статики напрямую Caddy с кэшированием и fallback на index.html
+    handle {
+        root * /var/www/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+# Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом)
 {$DOMAIN:localhost} {
+    import security_headers
     import common_proxy
 }
-
-# Внутренний трафик (порт 80: NetBird VPN, локальные адреса localhost/127.0.0.1)
-:80 {
-    import common_proxy
-}
-
-

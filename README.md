@@ -1,11 +1,11 @@
-# OSS Bot — Студенческий Помощник v0.8.4.1
+# OSS Bot — Студенческий Помощник v0.8.5
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/docker-compose_v2-2496ED.svg)](https://www.docker.com/)
-[![Tests](https://img.shields.io/badge/tests-63%2F63%20passed-brightgreen.svg)](tests/)
-[![Security](https://img.shields.io/badge/security-NetBird_VPN_%7C_Zero_Attack_Surface-success.svg)](docs/SETUP_FROM_SCRATCH.md)
-[![Version](https://img.shields.io/badge/version-0.8.4.1-blue.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-412%2F412%20passed-brightgreen.svg)](tests/)
+[![Security](https://img.shields.io/badge/security-Go_Fiber_%7C_React_19_%7C_Caddy_SSL-success.svg)](docs/SETUP_FROM_SCRATCH.md)
+[![Version](https://img.shields.io/badge/version-0.8.5-blue.svg)](CHANGELOG.md)
 
 **OSS Bot** — современная защищённая омниканальная платформа для приёма, автоматической маршрутизации и обработки студенческих обращений в университете.
 
@@ -94,17 +94,17 @@ docker compose ps
 Запуск полного комплекта тестов:
 ```bash
 pytest -v
-# Результат: 63 passed
+# Результат: 412 passed
 ```
 
 ---
 
 ## 🛡️ Безопасность
 
-* **Zero Public Attack Surface:** Веб-панель заблокирована для публичного интернета правилом `abort` в Caddyfile и доступна только авторизованным машинам в сети NetBird.
-* **HSTS & Headers:** `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, защита от фрейминга.
-* **Пароли и сессии:** Хеширование паролей Argon2id, куки с `SameSite=Lax`, защита от перебора (rate limiting на уровне IP).
-* **Секреты:** Файлы конфигурации `.env`, приватные ключи и дампы базы данных исключены из репозитория через `.gitignore`.
+* **Zero Trust & Hardened Edge:** Caddy Reverse Proxy с автоматическим HTTPS (Let's Encrypt), HSTS, защитой от DDoS и ограничением размера тела запроса (15MB).
+* **HSTS & Headers:** `Strict-Transport-Security: max-age=31536000`, `X-Content-Type-Options: nosniff`, защита от clickjacking через CSP `frame-ancestors`.
+* **Пароли и сессии:** Хеширование паролей Argon2id, куки с `SameSite=Lax`, двухфакторная аутентификация (2FA) с динамическим управлением, защита от брутфорса (Rate Limiting).
+* **Секреты:** Файлы конфигурации `.env`, приватные ключи и дампы исключены из репозитория через `.gitignore`.
 
 ---
 

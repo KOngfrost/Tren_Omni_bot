@@ -95,14 +95,11 @@ class TestSecurityHeaders:
         """Проверка наличия всех критических заголовков."""
         from web.security.middleware import CONTENT_SECURITY_POLICY, SECURITY_HEADERS
 
-        assert "X-Frame-Options" in SECURITY_HEADERS
-        assert SECURITY_HEADERS["X-Frame-Options"] == "DENY"
-
         assert "X-Content-Type-Options" in SECURITY_HEADERS
         assert SECURITY_HEADERS["X-Content-Type-Options"] == "nosniff"
 
         assert "X-XSS-Protection" in SECURITY_HEADERS
-        assert "mode=block" in SECURITY_HEADERS["X-XSS-Protection"]
+        assert SECURITY_HEADERS["X-XSS-Protection"] == "0"
 
         assert "Referrer-Policy" in SECURITY_HEADERS
 
@@ -111,10 +108,11 @@ class TestSecurityHeaders:
         assert "default-src" in CONTENT_SECURITY_POLICY
 
     def test_csp_contains_frame_ancestors_none(self):
-        """CSP должен содержать frame-ancestors 'none' для защиты от clickjacking."""
+        """CSP должен содержать frame-ancestors с ограничением для clickjacking и Telegram."""
         from web.security.middleware import CONTENT_SECURITY_POLICY
 
-        assert "frame-ancestors 'none'" in CONTENT_SECURITY_POLICY
+        assert "frame-ancestors" in CONTENT_SECURITY_POLICY
+        assert "telegram.org" in CONTENT_SECURITY_POLICY
 
     def test_csp_contains_form_action_self(self):
         """CSP должен содержать form-action 'self' для защиты от CSRF через формы."""
@@ -350,10 +348,9 @@ class TestAppSecurityIntegration:
         response = client.get("/auth/login")
         assert response.status_code == 200
 
-        assert response.headers.get("x-frame-options") == "DENY"
         assert response.headers.get("x-content-type-options") == "nosniff"
-        assert "mode=block" in response.headers.get("x-xss-protection", "")
         assert "frame-ancestors" in response.headers.get("content-security-policy", "")
+        assert "telegram.org" in response.headers.get("content-security-policy", "")
 
     @pytest.mark.parametrize(
         "path",

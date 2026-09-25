@@ -197,11 +197,16 @@ async def test_report_run_deduplication(db_session_maker):
 
 
 async def test_send_report_to_vk_uploads_bytes_and_sends_document(monkeypatch):
+    import os
     from core import reporting
 
     class FakeUploader:
         async def upload(self, file_source, peer_id, title):
-            assert file_source == b"report-bytes"
+            if isinstance(file_source, str) and os.path.exists(file_source):
+                with open(file_source, "rb") as f:
+                    assert f.read() == b"report-bytes"
+            else:
+                assert file_source == b"report-bytes"
             assert peer_id == 123
             assert title == "report.xlsx"
             return "doc-attachment"

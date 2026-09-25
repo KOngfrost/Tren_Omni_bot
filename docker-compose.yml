@@ -10,8 +10,8 @@ services:
     container_name: oss_bot_db
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 256m
-    memswap_limit: 256m
+    mem_limit: 512m
+    memswap_limit: 512m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -91,7 +91,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.4.1}
+      - APP_VERSION=${APP_VERSION:-0.8.5}
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -108,41 +108,13 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-
-  netbird:
-    image: netbirdio/netbird:latest
-    container_name: oss_bot_netbird
-    restart: unless-stopped
-    logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    environment:
-      - NB_SETUP_KEY=${NETBIRD_SETUP_KEY:-}
-      - NB_MANAGEMENT_URL=${NETBIRD_MANAGEMENT_URL:-https://api.netbird.io:443}
-      - NB_HOSTNAME=oss-web-panel
-      - NB_LOG_LEVEL=info
-    volumes:
-      - netbird_data:/etc/netbird
-    healthcheck:
-      test: ["CMD", "netbird", "status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
   redis:
     image: redis:7-alpine
     container_name: oss_bot_redis
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 64m
-    memswap_limit: 64m
+    mem_limit: 384m
+    memswap_limit: 384m
     command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -181,6 +153,30 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  go-api:
+    build:
+      context: ./backend_go
+      dockerfile: Dockerfile
+    container_name: oss_bot_go_api
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 128m
+    memswap_limit: 128m
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - DB_HOST=pgbouncer
+      - DB_PORT=6432
+    depends_on:
+      db:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -225,7 +221,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.4.1}
+      - APP_VERSION=${APP_VERSION:-0.8.5}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/backups/oss_bot:/var/backups/oss_bot
@@ -253,6 +249,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/var/www/frontend/dist:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -261,7 +258,6 @@ services:
 
 volumes:
   postgres_data:
-  netbird_data:
   redis_data:
   prometheus_data:
   caddy_data:

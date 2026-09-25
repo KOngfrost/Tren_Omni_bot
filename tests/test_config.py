@@ -43,12 +43,18 @@ def test_dev_environment_is_not_production():
     assert settings.IS_PRODUCTION is False
 
 
-def test_trusted_proxies_empty_by_default():
-    assert set() == settings.TRUSTED_PROXIES
+def test_trusted_proxies_empty_by_default(monkeypatch):
+    Settings = _settings_env_only(monkeypatch)
+    monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
+    fresh = Settings()
+    assert fresh.TRUSTED_PROXIES == set()
 
 
 def test_session_https_only_default_false():
-    assert settings.SESSION_HTTPS_ONLY is False
+    from core.config import Settings
+
+    fresh = Settings(_env_file=None)
+    assert fresh.SESSION_HTTPS_ONLY is False
 
 
 # --- Ошибка #17: строгая и прозрачная валидация конфигурации ---

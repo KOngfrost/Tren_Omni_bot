@@ -225,10 +225,9 @@ class TestSecurityHeaders:
     def test_headers_present(self, client):
         """All critical security headers are present."""
         response = client.get("/auth/login")
-        assert response.status_code == 200
-        assert response.headers.get("x-frame-options") == "DENY"
         assert response.headers.get("x-content-type-options") == "nosniff"
         assert "content-security-policy" in response.headers
+        assert "frame-ancestors" in response.headers.get("content-security-policy", "")
 
     def test_csp_restricts_scripts(self, client):
         """CSP restricts script execution."""

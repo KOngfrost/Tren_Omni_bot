@@ -287,8 +287,8 @@ def sanitize_csv_field(value: str) -> str:
     # Проверяем паттерны инъекций
     for pattern_str in _CSV_INJECTION_PATTERNS:
         if re.search(pattern_str, value):
-            # Экранируем, добавляя апостроф в начало (стандартный маркер текста в электронных таблицах)
-            return f"'{value}"
+            # Экранируем, добавляя знак табуляции в начало (стандартный маркер текста в электронных таблицах)
+            return f"\t{value}"
 
     return value
 
