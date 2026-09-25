@@ -23,12 +23,12 @@
     import protected_proxy
 }
 
-# Локальный защищённый доступ по NetBird MagicDNS, NetBird IP и localhost
-http://oss-web-panel.example.netbird.cloud, http://100.64.0.2, http://localhost {
+# Все запросы по HTTP (любой IP NetBird 100.x.y.z, MagicDNS и localhost)
+:80 {
     import protected_proxy
 }
 
-https://oss-web-panel.example.netbird.cloud {
+https://oss-web-panel.example.netbird.cloud, https://oss-web-panel.example.netbird.cloud {
     tls internal
     import protected_proxy
 }
