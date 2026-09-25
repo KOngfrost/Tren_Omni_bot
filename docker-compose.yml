@@ -116,7 +116,7 @@ services:
     logging: *default-logging
     mem_limit: 128m
     memswap_limit: 128m
-    hostname: oss-web-panel
+    network_mode: host
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
