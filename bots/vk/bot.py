@@ -159,12 +159,11 @@ vk_bot.labeler.load(pagination_labeler)
 
 @vk_bot.on.private_message()
 async def fallback_handler(message: Message):
-    """Возвращает пользователя в основное меню для неизвестных сообщений."""
+    """Игнорирует произвольные сообщения без команд.
+
+    Бот триггерится только на специальные команды и кнопки из меню.
+    """
     touch_heartbeat()
-    await message.answer(
-        "Я не распознал команду. Выберите действие в меню:",
-        keyboard=await _main_keyboard_for(message.from_id),
-    )
 
 
 __all__ = [
