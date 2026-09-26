@@ -1,9 +1,9 @@
-# Схема базы данных OSS Bot (PostgreSQL 16)
+# 🗄️ Схема базы данных OSS Bot (v0.8.7)
 
-> **Версия схемы:** 0.8.4.1  
-> **Диалект СУБД:** PostgreSQL 16 (с расширением `pg_trgm`)  
+> **Версия схемы данных:** 0.8.7  
+> **СУБД:** PostgreSQL 16 (с расширением `pg_trgm`)  
 > **Диспетчер миграций:** Alembic  
-> **Пул соединений:** PgBouncer (режим `transaction pooling`)
+> **Пул соединений:** PgBouncer (режим `transaction pooling`, порт `6432`)
 
 ---
 
@@ -20,11 +20,11 @@ erDiagram
     
     users ||--o{ tickets : "user_id (RESTRICT)"
     users ||--o{ subscriptions : "user_id (CASCADE)"
-    users ||--o{ event_registrations : "user_id (CASCADE)"
+    users ||--o{ registrations : "user_id (CASCADE)"
 
     tickets ||--o{ ticket_messages : "ticket_id (CASCADE)"
 
-    events ||--o{ event_registrations : "event_id (CASCADE)"
+    events ||--o{ registrations : "event_id (CASCADE)"
 
     faq_nodes ||--o{ faq_nodes : "parent_id (SET NULL)"
 
@@ -32,22 +32,22 @@ erDiagram
 
     departments {
         int id PK
-        varchar_255 name UK
+        varchar name UK
     }
 
     users {
         int id PK
         bigint vk_id UK
-        varchar_255 full_name
-        varchar_100 dormitory
+        varchar full_name
+        varchar dormitory
         timestamp created_at
     }
 
     admins {
         int id PK
         bigint vk_id UK
-        varchar_50 role
-        varchar_255 comment
+        varchar role
+        varchar comment
         timestamp created_at
     }
 
@@ -55,9 +55,9 @@ erDiagram
         int id PK
         int user_id FK
         int department_id FK
-        varchar_255 topic
+        varchar topic
         text description
-        varchar_50 status
+        varchar status
         text response_text
         boolean is_anonymous
         boolean auto_closed
@@ -68,92 +68,57 @@ erDiagram
     ticket_messages {
         int id PK
         int ticket_id FK
-        varchar_50 author_type
-        varchar_100 author_name
+        varchar author_type
+        varchar author_name
         text message
         timestamp created_at
     }
 
     web_users {
         int id PK
-        varchar_100 username UK
-        varchar_255 password_hash
-        varchar_50 role
+        varchar username UK
+        varchar password_hash
+        varchar role
         int department_id FK
         int admin_id FK
         boolean is_active
         timestamp created_at
     }
 
-    knowledge_base {
-        int id PK
-        int department_id FK
-        text keywords
-        text answer
-        timestamp created_at
-    }
-
-    faq_nodes {
-        int id PK
-        int department_id FK
-        int parent_id FK
-        text question
-        text final_answer
-        int order_index
-        boolean is_final
-    }
-
     events {
         int id PK
         int department_id FK
-        varchar_255 title
+        varchar title
         text description
         timestamp event_date
         timestamp created_at
     }
 
-    event_registrations {
+    registrations {
         int id PK
         int event_id FK
         int user_id FK
         timestamp registered_at
     }
 
-    subscriptions {
+    partnership_requests {
         int id PK
-        int user_id FK
-        int department_id FK
-    }
-
-    logs {
-        int id PK
-        varchar_100 action
-        text details
+        varchar company_name
+        varchar contact_name
+        varchar contact_email
+        varchar contact_phone
+        text proposal_text
+        varchar status
         timestamp created_at
-    }
-
-    login_attempts {
-        int id PK
-        varchar_45 ip_address
-        int attempts
-        timestamp last_attempt
-        timestamp blocked_until
-    }
-
-    crud_attempts {
-        int id PK
-        varchar_45 ip_address
-        int attempts
-        timestamp window_start
     }
 
     vk_outbox {
         int id PK
-        bigint peer_id
-        text message
+        bigint user_id
+        text message_text
+        varchar status
         int retry_count
         timestamp created_at
-        timestamp claimed_at
     }
 ```
 
@@ -161,100 +126,133 @@ erDiagram
 
 ## 2. Описание таблиц
 
-### 2.1. `departments` (Отделы и направления)
-Справочник структурных подразделений (Профком, Общежития, Учебный отдел и др.).
-* `id` (INTEGER, PK, autoincrement): Уникальный номер.
-* `name` (VARCHAR(255), UNIQUE, NOT NULL): Название подразделения.
+### 2.1. Основные пользователи и организационная структура
 
-### 2.2. `users` (Студенты / Пользователи ВКонтакте)
-Профили студентов, взаимодействующих с ботом.
-* `id` (INTEGER, PK, autoincrement): Идентификатор пользователя.
-* `vk_id` (BIGINT, UNIQUE, NOT NULL): Числовой VK ID профиля студента.
-* `full_name` (VARCHAR(255), NULL): Имя и фамилия из профиля VK.
-* `dormitory` (VARCHAR(100), NULL): Номер или адрес общежития.
-* `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT now()): Дата первого обращения.
+#### `departments` — Подразделения Студенческого совета
+Хранит перечень отделов (Жилищно-бытовой, Культурно-массовый, Информационный, Корпоративный).
+- `id` (INTEGER, PK) — уникальный номер.
+- `name` (VARCHAR, UNIQUE) — наименование отдела.
 
-### 2.3. `admins` (Администраторы VK)
-Справочник администраторов сообщества ВКонтакте.
-* `id` (INTEGER, PK, autoincrement): Идентификатор.
-* `vk_id` (BIGINT, UNIQUE, NOT NULL): VK ID администратора.
-* `role` (VARCHAR(50), NOT NULL): Роль (`admin`, `superadmin`).
-* `comment` (VARCHAR(255), NULL): Примечание (ФИО, должность).
-* `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT now()).
+#### `users` — Профили студентов (пользователей бота)
+- `id` (INTEGER, PK) — внутренний идентификатор.
+- `vk_id` (BIGINT, UNIQUE) — числовой ID пользователя ВКонтакте.
+- `full_name` (VARCHAR) — имя и фамилия (из профиля ВК).
+- `dormitory` (VARCHAR) — общежитие и комната (при наличии).
+- `created_at` (TIMESTAMP) — дата первой регистрации в боте.
 
-### 2.4. `tickets` (Заявки / Обращения студентов)
-Центральная таблица тикет-системы.
-* `id` (INTEGER, PK, autoincrement): Номер заявки.
-* `user_id` (INTEGER, FK -> `users.id`, ON DELETE RESTRICT): Автор.
-* `department_id` (INTEGER, FK -> `departments.id`, ON DELETE RESTRICT, NULL): Назначенный отдел.
-* `topic` (VARCHAR(255), NOT NULL): Тема обращения.
-* `description` (TEXT, NOT NULL): Подробный текст (до 3000 символов).
-* `status` (VARCHAR(50), NOT NULL, DEFAULT 'NEW'): Статус жизненного цикла.
-* `response_text` (TEXT, NULL): Последний официальный ответ.
-* `is_anonymous` (BOOLEAN, DEFAULT FALSE): Флаг скрытия автора.
-* `auto_closed` (BOOLEAN, DEFAULT FALSE): Закрыта ли автоматически.
-* `created_at`, `updated_at` (TIMESTAMP WITH TIME ZONE).
+#### `admins` — VK-администраторы бота
+- `id` (INTEGER, PK) — первичный ключ.
+- `vk_id` (BIGINT, UNIQUE) — ID ВКонтакте с правами администратора бота.
+- `role` (VARCHAR) — роль в боте (`ADMIN`, `SUPERADMIN`).
+- `comment` (VARCHAR) — служебное примечание / должность.
+- `created_at` (TIMESTAMP) — дата назначения.
 
-### 2.5. `ticket_messages` (История переписки по заявке)
-Каждое сообщение студента, администратора или системное событие.
-* `id` (INTEGER, PK, autoincrement).
-* `ticket_id` (INTEGER, FK -> `tickets.id`, ON DELETE CASCADE).
-* `author_type` (VARCHAR(50), NOT NULL): `USER`, `ADMIN`, `SYSTEM`.
-* `author_name` (VARCHAR(100), NULL): Имя отправителя.
-* `message` (TEXT, NOT NULL): Текст сообщения.
-* `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT now()).
-
-### 2.6. `web_users` (Пользователи веб-панели управления)
-Учётные записи операторов и супервайзеров.
-* `id` (INTEGER, PK, autoincrement).
-* `username` (VARCHAR(100), UNIQUE, NOT NULL): Логин.
-* `password_hash` (VARCHAR(255), NOT NULL): Хеш пароля (Argon2id / bcrypt).
-* `role` (VARCHAR(50), NOT NULL): `SUPERADMIN` или `DEPARTMENT_ADMIN`.
-* `department_id` (INTEGER, FK -> `departments.id`, ON DELETE SET NULL, NULL): Привязка к отделу (IDOR-изоляция).
-* `admin_id` (INTEGER, FK -> `admins.id`, ON DELETE SET NULL, NULL): Привязка к VK для получения 2FA-кодов.
-* `is_active` (BOOLEAN, DEFAULT TRUE): Флаг активности.
-* `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT now()).
-
-### 2.7. `knowledge_base` (База знаний)
-Статьи и инструкции для мгновенного поиска по ключевым словам.
-* `id` (INTEGER, PK, autoincrement).
-* `department_id` (INTEGER, FK -> `departments.id`, ON DELETE CASCADE, NULL).
-* `keywords` (TEXT, NOT NULL): Ключевые слова через запятую.
-* `answer` (TEXT, NOT NULL): Текст инструкции.
-* `created_at` (TIMESTAMP WITH TIME ZONE, DEFAULT now()).
-
-### 2.8. `faq_nodes` (Иерархическое дерево FAQ)
-Категории и ответы на типовые вопросы в VK-боте.
-* `id` (INTEGER, PK, autoincrement).
-* `department_id` (INTEGER, FK -> `departments.id`, ON DELETE CASCADE).
-* `parent_id` (INTEGER, FK -> `faq_nodes.id`, ON DELETE SET NULL, NULL): Родительский узел.
-* `question` (TEXT, NOT NULL): Текст вопроса/категории.
-* `final_answer` (TEXT, NULL): Ответ (если узел конечный).
-* `order_index` (INTEGER, DEFAULT 0): Позиция при сортировке.
-* `is_final` (BOOLEAN, DEFAULT FALSE): Признак конечного ответа.
-
-### 2.9. `events` & `event_registrations` (Мероприятия и записи)
-* `events`: `id`, `department_id` (FK, SET NULL), `title`, `description`, `event_date`, `created_at`.
-* `event_registrations`: `id`, `event_id` (FK, CASCADE), `user_id` (FK, CASCADE), `registered_at`. Уникальная пара (`event_id`, `user_id`).
-
-### 2.10. `vk_outbox` (Надёжная доставка сообщений / Паттерн Outbox)
-* `id` (INTEGER, PK).
-* `peer_id` (BIGINT, NOT NULL): Адресат в VK.
-* `message` (TEXT, NOT NULL): Текст сообщения.
-* `retry_count` (INTEGER, DEFAULT 0): Счётчик попыток.
-* `created_at`, `claimed_at` (TIMESTAMP WITH TIME ZONE).
-
-### 2.11. `login_attempts` & `crud_attempts` & `logs` (Безопасность и аудит)
-* `login_attempts`: фиксация неудачных входов по IP с блокировкой (`blocked_until`).
-* `crud_attempts`: лимит опасных мутирующих действий (не более 20 за 5 минут на IP).
-* `logs`: аудит всех действий администраторов (`action`, `details`, `created_at`).
+#### `web_users` — Пользователи веб-панели управления
+- `id` (INTEGER, PK) — первичный ключ.
+- `username` (VARCHAR, UNIQUE) — логин для авторизации.
+- `password_hash` (VARCHAR) — хеш пароля (Argon2id / bcrypt).
+- `role` (VARCHAR) — роль доступа (`SUPERADMIN` или `DEPARTMENT_ADMIN`).
+- `department_id` (INTEGER, FK) — курируемый отдел (для операторов).
+- `admin_id` (INTEGER, FK) — ссылка на VK-администратора (для 2FA).
+- `is_active` (BOOLEAN) — признак активности аккаунта.
+- `created_at` (TIMESTAMP) — дата регистрации.
 
 ---
 
-## 3. Индексы и производительность
-1. **GIN-индексы `pg_trgm`**: Полнотекстовый нечёткий поиск без задержек по `tickets.topic`, `tickets.description`, `tickets.response_text`, `users.full_name`, `knowledge_base.keywords`.
-2. **B-Tree индексы**:
-   - `idx_tickets_department_status`: быстрый фильтр по отделу и статусу заявки.
-   - `idx_ticket_messages_ticket_id`: мгновенная загрузка истории диалога.
-   - `idx_login_attempts_ip_blocked`: быстрая проверка блокировки IP.
-   - `idx_outbox_unprocessed`: выборка неотправленных сообщений `WHERE claimed_at IS NULL`.
+### 2.2. Обращения и переписка
+
+#### `tickets` — Заявки студентов
+- `id` (INTEGER, PK) — номер тикета (отображается как `#142`).
+- `user_id` (INTEGER, FK) — автор заявки (`NULL` для полностью анонимных).
+- `department_id` (INTEGER, FK) — ответственный отдел.
+- `topic` (VARCHAR) — тема обращения.
+- `description` (TEXT) — подробное описание проблемы (до 3000 символов).
+- `status` (VARCHAR) — статус заявки (`Новое`, `В обработке`, `Выполнено` и др.).
+- `response_text` (TEXT) — финальный текст официального ответа.
+- `is_anonymous` (BOOLEAN) — флаг анонимного обращения.
+- `auto_closed` (BOOLEAN) — закрыта ли заявка автоматически по тайм-ауту.
+- `created_at` / `updated_at` (TIMESTAMP) — метки времени создания и обновления.
+
+#### `ticket_messages` — Хронология сообщений тикета
+- `id` (INTEGER, PK) — ID сообщения.
+- `ticket_id` (INTEGER, FK) — привязка к тикету.
+- `author_type` (VARCHAR) — `USER`, `ADMIN` или `SYSTEM`.
+- `author_name` (VARCHAR) — имя автора сообщения.
+- `message` (TEXT) — текст реплики.
+- `created_at` (TIMESTAMP) — время отправки.
+
+---
+
+### 2.3. Мероприятия и контент
+
+#### `events` — Афиша мероприятий
+- `id` (INTEGER, PK) — идентификатор события.
+- `department_id` (INTEGER, FK) — отдел-организатор.
+- `title` (VARCHAR) — название мероприятия.
+- `description` (TEXT) — подробное описание и программа.
+- `event_date` (TIMESTAMP) — дата и время проведения.
+- `created_at` (TIMESTAMP) — дата публикации.
+
+#### `registrations` — Записи студентов на события
+- `id` (INTEGER, PK) — номер регистрации.
+- `event_id` (INTEGER, FK) — мероприятие.
+- `user_id` (INTEGER, FK) — зарегистрировавшийся студент.
+- `registered_at` (TIMESTAMP) — время записи.
+
+#### `faq_nodes` — Интерактивное дерево частых вопросов (FAQ)
+- `id` (INTEGER, PK) — первичный ключ узла.
+- `department_id` (INTEGER, FK) — привязка к отделу.
+- `parent_id` (INTEGER, FK) — родительский узел (для многоуровневых меню).
+- `question` (TEXT) — текст вопроса на кнопке.
+- `final_answer` (TEXT) — ответ бота при переходе к этому узлу.
+- `order_index` (INTEGER) — порядок сортировки кнопок.
+- `is_final` (BOOLEAN) — терминальный ли это узел дерева.
+
+#### `knowledge_base` — База знаний и типовые ответы
+- `id` (INTEGER, PK) — ID статьи.
+- `department_id` (INTEGER, FK) — профильный отдел.
+- `keywords` (TEXT) — ключевые слова для поиска.
+- `answer` (TEXT) — подробный текст регламента/статьи.
+- `created_at` (TIMESTAMP) — время создания.
+
+#### `partnership_requests` — Партнёрские заявки
+- `id` (INTEGER, PK) — номер запроса.
+- `company_name` (VARCHAR) — наименование организации-партнёра.
+- `contact_name` (VARCHAR) — контактное лицо.
+- `contact_email` (VARCHAR) — email.
+- `contact_phone` (VARCHAR) — телефон.
+- `telegram_contact` (VARCHAR) — Telegram.
+- `proposal_text` (TEXT) — текст предложения.
+- `status` (VARCHAR) — статус рассмотрения.
+- `created_at` / `updated_at` (TIMESTAMP).
+
+---
+
+### 2.4. Безопасность, Outbox и служебные таблицы
+
+#### `vk_outbox` — Очередь гарантированной отправки сообщений (Transactional Outbox)
+- `id` (INTEGER, PK) — идентификатор сообщения в очереди.
+- `user_id` (BIGINT) — VK ID получателя.
+- `message_text` (TEXT) — текст сообщения.
+- `status` (VARCHAR) — `pending`, `sent`, `failed`.
+- `retry_count` (INTEGER) — количество попыток отправки.
+- `scheduled_at` (TIMESTAMP) — время следующей попытки.
+- `created_at` / `sent_at` (TIMESTAMP).
+
+#### `logs` — Журнал аудита действий
+- `id` (INTEGER, PK) — номер записи аудита.
+- `admin_id` (INTEGER) — ID администратора (или 0 для системных событий).
+- `action` (VARCHAR) — тип операции (вход, ответ, сброс пароля).
+- `details` (TEXT) — контекст события (ID сущности, изменённые поля).
+- `ip_address` (VARCHAR) — IP-адрес инициатора.
+- `created_at` (TIMESTAMP) — метка времени.
+
+#### `login_attempts` и `crud_attempts` — Защита от перебора и флуда
+- Таблицы распределённого ограничения частоты запросов (`DBRateLimiter`).
+- Фиксируют IP-адрес, окно попыток и время временной блокировки.
+
+#### `dynamic_settings` — Динамические параметры конфигурации
+- `key` (VARCHAR, PK) — ключ параметра (например, `TWO_FACTOR_ENABLED`).
+- `value_json` (JSONB / TEXT) — значение параметра.
+- `description` (TEXT) — описание назначения настройки.
+- `updated_at` (TIMESTAMP) — время изменения.
