@@ -96,11 +96,13 @@ def safe_next_path(raw: object) -> str | None:
 
 
 def remember_next(request: Request, raw: object) -> None:
-    """Запомнить (или сбросить) адрес возврата после входа."""
+    """Запомнить адрес возврата после входа (сохраняет прежний, если raw не передан)."""
+    if raw is None:
+        return
     path = safe_next_path(raw)
     if path:
         request.session[NEXT_SESSION_KEY] = path
-    else:
+    elif isinstance(raw, str) and not raw.strip():
         request.session.pop(NEXT_SESSION_KEY, None)
 
 
@@ -130,6 +132,11 @@ def bootstrap_session_still_valid(user: dict) -> bool:
     (BOOTSTRAP_ALLOWED=False), креды удалили/изменили в .env или username
     сессии больше не совпадает с активной конфигурацией.
     """
+    if user.get("telegram_id"):
+        return bool(
+            settings.TELEGRAM_ADMIN_ID > 0
+            and user.get("telegram_id") == settings.TELEGRAM_ADMIN_ID
+        )
     if not settings.BOOTSTRAP_ALLOWED:
         return False
     if not _credentials_configured():
@@ -193,8 +200,8 @@ def _get_client_ip(request: Request) -> str:
 async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
     """Сколько неудачных попыток входа за окно.
 
-    При недоступности БД мягко деградирует: возвращает 0, чтобы сбой базы
-    не блокировал вход всем сразу (учётки при этом проверяются fail-closed).
+    При недоступности БД проверяет резервный счётчик в Redis, чтобы предотвратить
+    обход rate limit при намеренной перегрузке базы данных (BUG-14).
     """
     cutoff = datetime.now(UTC) - timedelta(seconds=_LOGIN_WINDOW_SECONDS)
     try:
@@ -207,7 +214,16 @@ async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
         )
         return int(count or 0)
     except Exception:
-        logger.warning("Rate-limit: не удалось прочитать попытки входа из БД")
+        logger.warning("Rate-limit: не удалось прочитать попытки входа из БД, проверяем Redis fallback")
+        try:
+            from core.redis_client import get_redis
+            redis = get_redis()
+            if redis:
+                val = await redis.get(f"failed_login_count:{ip}")
+                if val:
+                    return int(val)
+        except Exception:
+            pass
         return 0
 
 
@@ -217,11 +233,17 @@ async def _is_rate_limited(session: AsyncSession, ip: str) -> bool:
 
 
 async def _record_failed_attempt(ip: str) -> None:
-    """Зафиксировать неудачную попытку входа.
+    """Зафиксировать неудачную попытку входа в БД и Redis fallback."""
+    try:
+        from core.redis_client import get_redis
+        redis = get_redis()
+        if redis:
+            key = f"failed_login_count:{ip}"
+            await redis.incr(key)
+            await redis.expire(key, _LOGIN_WINDOW_SECONDS)
+    except Exception:
+        pass
 
-    Очистка устаревших записей вынесена в фоновую задачу
-    core/rate_limit_cleanup.py, чтобы не нагружать горячий путь.
-    """
     try:
         async with core_db.async_session_maker() as session:
             session.add(LoginAttempt(ip=ip, success=False))
@@ -232,6 +254,14 @@ async def _record_failed_attempt(ip: str) -> None:
 
 async def _clear_attempts(ip: str) -> None:
     """Сбросить лимит после успешного входа."""
+    try:
+        from core.redis_client import get_redis
+        redis = get_redis()
+        if redis:
+            await redis.delete(f"failed_login_count:{ip}")
+    except Exception:
+        pass
+
     try:
         async with core_db.async_session_maker() as session:
             await session.execute(delete(LoginAttempt).where(LoginAttempt.ip == ip))
@@ -251,13 +281,32 @@ async def _log_action(action: str, details: str) -> None:
 
 
 async def _notify_superadmin(details: str) -> None:
-    """Уведомить суперадминистратора о подозрительной активности."""
+    """Уведомить суперадминистратора о подозрительной активности (с fallback на Telegram)."""
     logger.warning("Подозрительная активность: %s", details)
+    notified = False
     if settings.VK_REPORT_ADMIN_ID:
-        await send_vk_message(
-            settings.VK_REPORT_ADMIN_ID,
-            f"⚠️ Веб-админка: подозрительная активность\n{details}",
-        )
+        try:
+            await send_vk_message(
+                settings.VK_REPORT_ADMIN_ID,
+                f"⚠️ Веб-админка: подозрительная активность\n{details}",
+            )
+            notified = True
+        except Exception:
+            logger.exception("Не удалось отправить VK-уведомление администратору")
+
+    if not notified and settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_ADMIN_ID > 0:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": settings.TELEGRAM_ADMIN_ID,
+                        "text": f"⚠️ Веб-админка: подозрительная активность\n{details}",
+                    },
+                )
+        except Exception:
+            logger.exception("Не удалось отправить Telegram-уведомление администратору")
 
 
 # ==========================================
@@ -430,11 +479,9 @@ async def _authenticate(
             )
             two_factor_on = await is_two_factor_enabled()
             is_qa_user = (
-                web_user.admin_id is None
-                or web_user.expires_at is not None
+                web_user.expires_at is not None
                 or web_user.username.startswith("qa_")
                 or web_user.username.startswith("test_")
-                or "qa" in web_user.username.lower()
             )
             if two_factor_on and not vk_admin_id:
                 if is_qa_user:

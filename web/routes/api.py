@@ -414,7 +414,7 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                 if len(preview) > 90:
                     preview = preview[:90] + "..."
                 created_str = (
-                    t.created_at.strftime("%d.%m %H:%M") if t.created_at else ""
+                    f"{t.created_at.strftime('%d.%m %H:%M')} МСК" if t.created_at else ""
                 )
 
                 if is_reply:
@@ -456,7 +456,7 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                     p_text = (p.proposal_text or "").strip()
                     if len(p_text) > 90:
                         p_text = p_text[:90] + "..."
-                    p_time = p.created_at.strftime("%d.%m %H:%M") if p.created_at else ""
+                    p_time = f"{p.created_at.strftime('%d.%m %H:%M')} МСК" if p.created_at else ""
                     partner_title = p.user_name or p.contact_info or f"Заявка #{p.id}"
                     items.append({
                         "id": p.id,

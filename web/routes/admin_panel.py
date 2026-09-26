@@ -11,6 +11,7 @@
 from datetime import datetime, timedelta, timezone
 import logging
 import secrets
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -107,10 +108,21 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "flash_success": request.session.pop("flash_success", None),
             "flash_error": request.session.pop("flash_error", None),
             "csrf_token": get_csrf_token(request),
-            "created_credentials": request.session.pop("created_credentials", None),
+            "created_credentials": _pop_fresh_created_credentials(request.session),
             "session_id": request.state.session_id,
         },
     )
+
+
+def _pop_fresh_created_credentials(session: dict) -> dict | None:
+    """Извлечь одноразовые учетные данные нового администратора с ограничением по времени (TTL 5 мин)."""
+    creds = session.pop("created_credentials", None)
+    if not isinstance(creds, dict):
+        return None
+    created_at = creds.get("created_at", 0)
+    if time.time() - created_at > 300:
+        return None
+    return creds
 
 
 @router.post("/qa")
@@ -203,7 +215,11 @@ async def add_admin(request: Request, user=Depends(require_auth)):
                 else:
                     duration_str = "бессрочный доступ"
                 request.session["flash_success"] = f"Временный/QA администратор '{username}' успешно создан ({duration_str})."
-                request.session["created_credentials"] = {"username": username, "password": password}
+                request.session["created_credentials"] = {
+                    "username": username,
+                    "password": password,
+                    "created_at": time.time(),
+                }
                 return RedirectResponse(url="/admin/admins/", status_code=302)
             else:
                 # Постоянный администратор с VK ID
@@ -236,7 +252,11 @@ async def add_admin(request: Request, user=Depends(require_auth)):
                     password_hash=hash_password(password),
                 )
                 request.session["flash_success"] = "Администратор успешно добавлен"
-                request.session["created_credentials"] = {"username": username, "password": password}
+                request.session["created_credentials"] = {
+                    "username": username,
+                    "password": password,
+                    "created_at": time.time(),
+                }
                 return RedirectResponse(url="/admin/admins/", status_code=302)
     except ValueError as e:
         request.session["flash_error"] = str(e)
@@ -255,22 +275,6 @@ def _parse_vk_id(form) -> int:
         raise ValueError("VK ID должен быть числом") from None
 
 
-def _validate_add_admin_form(form) -> str | None:
-    """Валидация формы. Возвращает сообщение об ошибке или None."""
-    try:
-        _parse_vk_id(form)
-    except ValueError:
-        return "VK ID должен быть числом"
-
-    role: str = form.get("role", "admin")
-    if role not in ("admin", "superadmin"):
-        return "Неизвестная роль администратора"
-
-    password: str = str(form.get("password", "")).strip()
-    if password and len(password) < 8:
-        return "Пароль должен быть не короче 8 символов"
-
-    return None
 
 
 def user_get_department_id(user: dict) -> int | None:

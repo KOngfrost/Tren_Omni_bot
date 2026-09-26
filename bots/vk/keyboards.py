@@ -234,7 +234,7 @@ def build_events_keyboard(event_ids: list[int] | None = None) -> str:
         (f"Записаться #{eid}", "secondary") for eid in (event_ids or [])[:6]
     ]
     rows = _chunk_buttons(buttons, 2)
-    rows.append([("Отмена", "negative")])
+    rows.append([("Меню", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
 

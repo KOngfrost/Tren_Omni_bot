@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -162,6 +163,7 @@ app.add_middleware(
 app.add_middleware(CSRFMiddleware)
 
 # 2.5. Режим технических работ (перехватывает запросы при включенном обслуживании)
+app.add_middleware(MaintenanceMiddleware)
 
 
 # 3. Redis-backed сессия с безопасными настройками и TTL (для CSRF и auth)
@@ -194,7 +196,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Content-Length и обходит проверку заголовка. Выполняется раньше CSRF и
 # сессии, но внутри SecurityHeadersMiddleware — чтобы отказ 413 тоже
 # получал безопасные заголовки.
-_REQUEST_MAX_BODY_SIZE = 10 * 1024 * 1024
+_REQUEST_MAX_BODY_SIZE = 15 * 1024 * 1024
 app.add_middleware(RequestSizeLimitMiddleware, max_body_size=_REQUEST_MAX_BODY_SIZE)
 
 
@@ -278,6 +280,11 @@ async def add_department_name(request: Request, call_next):
     """Загружает department_name и список отделов пользователя из БД (с кэшем)."""
     session = request.scope.get("session", {})
     request.state.session_id = session.get("session_id")
+    # Очистка просроченных created_credentials из сессии (TTL 5 минут)
+    creds = session.get("created_credentials")
+    if isinstance(creds, dict) and time.time() - creds.get("created_at", 0) > 300:
+        session.pop("created_credentials", None)
+
     # Пропускаем статические файлы, healthcheck, auth и API-запросы
     if any(
         request.url.path.startswith(prefix) for prefix in _SKIP_MIDDLEWARE_PREFIXES
@@ -331,44 +338,62 @@ async def add_department_name(request: Request, call_next):
             request.state.user_departments = user_departments
             request.state.dept_id = dept_id
 
-            # Раздельные счётчики для бейджей навигации и центра уведомлений
+            # Раздельные счётчики для бейджей навигации и центра уведомлений (с кэшированием TTL=20s)
             request.state.new_tickets_count = 0
             request.state.student_replies_count = 0
             request.state.new_partnerships_count = 0
             request.state.total_notifications_count = 0
             try:
-                from sqlalchemy import and_, func, or_, select
-                from core.models import PartnershipRequest, Ticket, TicketStatus
-                async with async_session_maker() as count_session:
-                    is_super_count, user_dept_id = await get_admin_scope(count_session, user)
-                    t_base_scope = [Ticket.status == TicketStatus.NEW]
-                    if not is_super_count and user_dept_id:
-                        t_base_scope.append(Ticket.department_id == user_dept_id)
+                counts_cache_key = f"notif_counts:{web_user_id or user.get('username')}"
+                cached_counts = await cache_get(counts_cache_key)
+                if cached_counts is not None:
+                    request.state.new_tickets_count = cached_counts.get("new_tickets_count", 0)
+                    request.state.student_replies_count = cached_counts.get("student_replies_count", 0)
+                    request.state.new_partnerships_count = cached_counts.get("new_partnerships_count", 0)
+                    request.state.total_notifications_count = cached_counts.get("total_notifications_count", 0)
+                else:
+                    from sqlalchemy import and_, func, or_, select
+                    from core.models import PartnershipRequest, Ticket, TicketStatus
+                    async with async_session_maker() as count_session:
+                        is_super_count, user_dept_id = await get_admin_scope(count_session, user)
+                        t_base_scope = [Ticket.status == TicketStatus.NEW]
+                        if not is_super_count and user_dept_id:
+                            t_base_scope.append(Ticket.department_id == user_dept_id)
 
-                    new_t_scope = t_base_scope + [or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
-                    request.state.new_tickets_count = (
-                        await count_session.scalar(select(func.count(Ticket.id)).where(*new_t_scope))
-                    ) or 0
-
-                    reply_t_scope = t_base_scope + [and_(Ticket.response_text.is_not(None), Ticket.response_text != "")]
-                    request.state.student_replies_count = (
-                        await count_session.scalar(select(func.count(Ticket.id)).where(*reply_t_scope))
-                    ) or 0
-
-                    if is_super_count:
-                        request.state.new_partnerships_count = (
-                            await count_session.scalar(
-                                select(func.count(PartnershipRequest.id)).where(
-                                    PartnershipRequest.status == "new"
-                                )
-                            )
+                        new_t_scope = t_base_scope + [or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
+                        request.state.new_tickets_count = (
+                            await count_session.scalar(select(func.count(Ticket.id)).where(*new_t_scope))
                         ) or 0
 
-                    request.state.total_notifications_count = (
-                        request.state.new_tickets_count +
-                        request.state.student_replies_count +
-                        request.state.new_partnerships_count
-                    )
+                        reply_t_scope = t_base_scope + [and_(Ticket.response_text.is_not(None), Ticket.response_text != "")]
+                        request.state.student_replies_count = (
+                            await count_session.scalar(select(func.count(Ticket.id)).where(*reply_t_scope))
+                        ) or 0
+
+                        if is_super_count:
+                            request.state.new_partnerships_count = (
+                                await count_session.scalar(
+                                    select(func.count(PartnershipRequest.id)).where(
+                                        PartnershipRequest.status == "new"
+                                    )
+                                )
+                            ) or 0
+
+                        request.state.total_notifications_count = (
+                            request.state.new_tickets_count +
+                            request.state.student_replies_count +
+                            request.state.new_partnerships_count
+                        )
+                        await cache_set(
+                            counts_cache_key,
+                            {
+                                "new_tickets_count": request.state.new_tickets_count,
+                                "student_replies_count": request.state.student_replies_count,
+                                "new_partnerships_count": request.state.new_partnerships_count,
+                                "total_notifications_count": request.state.total_notifications_count,
+                            },
+                            ttl=20,
+                        )
             except Exception:
                 logger.debug("Не удалось загрузить счетчики для middleware", exc_info=True)
     except Exception:
@@ -380,7 +405,6 @@ async def add_department_name(request: Request, call_next):
 
 
 # === Глобальный обработчик ошибок — без раскрытия деталей ===
-app.add_middleware(MaintenanceMiddleware)
 
 
 
@@ -668,7 +692,7 @@ async def health():
         return {
             "status": "ok",
             "time_sync": time_sync,
-            "bootstrap_mode": None if bootstrap is None else bootstrap["bootstrap_mode"],
+            "bootstrap_mode": None if bootstrap is None else bootstrap.get("bootstrap_mode"),
             "bootstrap": bootstrap,
         }
     except Exception:

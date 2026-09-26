@@ -149,8 +149,9 @@
      * Экранировать HTML для безопасной вставки.
      */
     function escapeHtml(text) {
+        if (!text && text !== 0) return '';
         var div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = String(text);
         return div.innerHTML;
     }
 
@@ -460,8 +461,8 @@
     };
 
     window.togglePasswordVisibility = function (btn) {
-        var input = document.getElementById('password');
         if (!btn) btn = document.querySelector('.toggle-password');
+        var input = btn ? (btn.closest('.password-input-wrapper') ? btn.closest('.password-input-wrapper').querySelector('input') : document.getElementById('password')) : document.getElementById('password');
         if (!input || !btn) return;
         if (input.type === 'password') {
             input.type = 'text';
@@ -693,24 +694,46 @@
         var deptName = btn.dataset.deptName;
         if (!deptId) return;
 
-        if (!window.confirm('Удалить отдел "' + (deptName || '') + '"? Удалить можно только пустой отдел.')) return;
+        var confirmMsg = 'Удалить отдел "' + (deptName || '') + '"? Удалить можно только пустой отдел.';
 
-        if (window.Store) {
-            window.Store.deleteDepartment(parseInt(deptId, 10)).then(function (result) {
-                if (result.success) {
-                    showSuccess('Отдел удалён');
-                    // Удалить карточку из DOM
-                    var card = document.querySelector('[data-dept-card="' + deptId + '"]');
-                    if (card) {
-                        card.style.transition = 'opacity 0.3s, transform 0.3s';
-                        card.style.opacity = '0';
-                        card.style.transform = 'scale(0.9)';
-                        setTimeout(function () { card.remove(); }, 300);
+        function executeDelete() {
+            if (window.Store) {
+                window.Store.deleteDepartment(parseInt(deptId, 10)).then(function (result) {
+                    if (result.success) {
+                        showSuccess('Отдел удалён');
+                        // Удалить карточку из DOM
+                        var card = document.querySelector('[data-dept-card="' + deptId + '"]');
+                        if (card) {
+                            card.style.transition = 'opacity 0.3s, transform 0.3s';
+                            card.style.opacity = '0';
+                            card.style.transform = 'scale(0.9)';
+                            setTimeout(function () { card.remove(); }, 300);
+                        }
+                    } else {
+                        showError(result.error || 'Ошибка удаления');
                     }
-                } else {
-                    showError(result.error || 'Ошибка удаления');
-                }
+                });
+            }
+        }
+
+        if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.showConfirm === 'function') {
+            window.Telegram.WebApp.showConfirm(confirmMsg, function (confirmed) {
+                if (confirmed) executeDelete();
             });
+        } else if (window.confirm(confirmMsg)) {
+            executeDelete();
+        }
+    });
+
+    /**
+     * Индикатор загрузки при переходе по страницам пагинации (UX feedback)
+     */
+    document.addEventListener('click', function (e) {
+        var pageLink = e.target.closest('.page-link, .pagination-btn:not(.disabled)');
+        if (pageLink && pageLink.href && !pageLink.hasAttribute('download')) {
+            pageLink.classList.add('loading');
+            pageLink.style.opacity = '0.6';
+            pageLink.style.pointerEvents = 'none';
         }
     });
 
@@ -782,18 +805,6 @@
         }
     }
 
-    /**
-     * Вспомогательная функция безопасного экранирования HTML
-     */
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
 
     /**
      * Счётчики уведомлений навигации и Центр уведомлений (раздельные счётчики и прямые ссылки)
@@ -810,6 +821,11 @@
         var tagReplies = document.getElementById('tag-student-replies');
         var tagPart = document.getElementById('tag-partnerships');
         var notifWrapper = document.getElementById('notifications-wrapper');
+
+        // Не запускать опрос счётчиков на публичных страницах (логин, правила и т.д.)
+        if (!ticketsBadge && !repliesBadge && !partBadge && !totalBadge && !notifBtn) {
+            return;
+        }
 
         var directTicketUrl = null;
         var directReplyUrl = null;
@@ -877,9 +893,23 @@
             });
         }
 
+        var counterIntervalId = null;
+        var counterAbortController = null;
+
         function updateCounters() {
-            fetch('/api/counters')
+            if (document.hidden) return;
+            if (counterAbortController) {
+                try { counterAbortController.abort(); } catch (e) {}
+            }
+            if (window.AbortController) {
+                counterAbortController = new AbortController();
+            }
+            fetch('/api/counters', { signal: counterAbortController ? counterAbortController.signal : undefined })
                 .then(function (res) {
+                    if (res.status === 401) {
+                        if (counterIntervalId) clearInterval(counterIntervalId);
+                        return null;
+                    }
                     return res.ok ? res.json() : null;
                 })
                 .then(function (result) {
@@ -985,12 +1015,19 @@
                         }
                     }
                 })
-                .catch(function () {});
+                .catch(function (err) {
+                    if (err && err.name === 'AbortError') return;
+                });
         }
 
-        // Первичная загрузка и периодический опрос каждые 20 секунд
+        // Первичная загрузка и периодический опрос каждые 20 секунд с проверкой видимости
         updateCounters();
-        setInterval(updateCounters, 20000);
+        counterIntervalId = setInterval(updateCounters, 20000);
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                updateCounters();
+            }
+        });
     }
 
     if (document.readyState === 'loading') {

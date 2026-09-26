@@ -406,6 +406,10 @@ class PartnershipRequest(Base):
     __tablename__ = "partnership_requests"
     __table_args__ = (
         Index("ix_partnership_requests_status_created", "status", "created_at"),
+        CheckConstraint(
+            "status IN ('new', 'contacted', 'closed')",
+            name="ck_partnership_requests_status",
+        ),
     )
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)

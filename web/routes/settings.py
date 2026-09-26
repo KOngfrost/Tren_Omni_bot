@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from core import PROJECT_VERSION
+from core.config import settings
 from core.two_factor import is_two_factor_enabled, set_two_factor_mode
 from web.dependencies import require_auth
 from web.security.csrf import get_csrf_token
@@ -68,13 +69,14 @@ async def update_theme(
         request.session["flash_success"] = "Настройки оформления успешно сохранены."
         response = RedirectResponse(url="/settings/", status_code=303)
 
+    cookie_secure = bool(settings.SESSION_HTTPS_ONLY or settings.IS_PRODUCTION)
     response.set_cookie(
         key="app_theme",
         value=theme,
         max_age=31536000,
         path="/",
         samesite="lax",
-        secure=False,
+        secure=cookie_secure,
         httponly=False,
     )
     response.set_cookie(
@@ -83,7 +85,7 @@ async def update_theme(
         max_age=31536000,
         path="/",
         samesite="lax",
-        secure=False,
+        secure=cookie_secure,
         httponly=False,
     )
     return response

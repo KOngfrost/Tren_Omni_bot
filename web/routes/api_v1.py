@@ -135,6 +135,15 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
                 detail="Неверный логин или пароль",
             )
 
+        from core.maintenance import is_maintenance_mode
+        if await is_maintenance_mode():
+            user_role = str(user_data.get("role", "")).upper()
+            if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="На платформе ведутся технические работы. Доступ разрешён только суперадминистраторам.",
+                )
+
         if user_data.get("needs_2fa"):
             vk_admin_id = user_data.get("vk_admin_id")
             if not vk_admin_id:
@@ -213,10 +222,22 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
     async with async_session_maker() as session:
         if user_data.get("web_user_id") is not None:
             web_user = await session.get(WebUser, user_data["web_user_id"])
-            if not web_user or not web_user.is_active:
+            if not web_user or not web_user.is_active or web_user.is_expired:
                 await otp_store.cancel(request)
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись не активна")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись не активна или срок действия истёк")
             user_data["role"] = web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value
+            user_data["department_id"] = web_user.department_id
+            user_data["username"] = web_user.username
+
+    from core.maintenance import is_maintenance_mode
+    if await is_maintenance_mode():
+        user_role = str(user_data.get("role", "")).upper()
+        if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
+            await otp_store.cancel(request)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="На платформе ведутся технические работы. Доступ разрешён только суперадминистраторам.",
+            )
 
     await otp_store.cancel(request)
     request.session["user"] = user_data

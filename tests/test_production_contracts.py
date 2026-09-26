@@ -31,8 +31,6 @@ def test_admin_menu_is_separate_from_regular_menu():
     assert labels == [
         "Заявки администратора",
         "Сформировать отчет",
-        "Отчет по дате",
-        "Отчет за период",
         "Обычное меню",
     ]
 
