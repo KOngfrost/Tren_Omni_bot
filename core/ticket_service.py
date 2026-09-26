@@ -163,6 +163,73 @@ async def get_user_ticket_by_id(vk_id: int, ticket_id: int) -> Ticket | None:
         return await session.scalar(stmt)
 
 
+async def get_user_ticket_local_number(
+    user_id: int, ticket_id: int, session: AsyncSession | None = None
+) -> int:
+    """Получить персональный (локальный) порядковый номер заявки для пользователя (1, 2, 3...)."""
+    async def _query(s: AsyncSession) -> int:
+        stmt = (
+            select(func.count(Ticket.id))
+            .where(Ticket.user_id == user_id, Ticket.id <= ticket_id)
+        )
+        count = await s.scalar(stmt)
+        return count if count and count > 0 else 1
+
+    if session is not None:
+        return await _query(session)
+    async with async_session_maker() as s:
+        return await _query(s)
+
+
+async def get_user_tickets_mapping(vk_id: int) -> dict[int, int]:
+    """Словарь соответствия {global_ticket_id: local_number} для пользователя."""
+    async with async_session_maker() as session:
+        user = await session.scalar(select(User).where(User.vk_id == vk_id))
+        if not user:
+            return {}
+        stmt = (
+            select(Ticket.id)
+            .where(Ticket.user_id == user.id)
+            .order_by(Ticket.id.asc())
+        )
+        ticket_ids = list((await session.scalars(stmt)).all())
+        return {tid: idx + 1 for idx, tid in enumerate(ticket_ids)}
+
+
+async def get_user_ticket_by_local_number(
+    vk_id: int, local_num: int
+) -> tuple[Ticket | None, int]:
+    """Найти заявку пользователя по её локальному порядковому номеру (1-indexed)."""
+    if local_num <= 0:
+        return None, local_num
+    async with async_session_maker() as session:
+        user = await session.scalar(select(User).where(User.vk_id == vk_id))
+        if not user:
+            return None, local_num
+        stmt = (
+            select(Ticket)
+            .options(selectinload(Ticket.department), selectinload(Ticket.user))
+            .where(Ticket.user_id == user.id)
+            .order_by(Ticket.id.asc())
+            .offset(local_num - 1)
+            .limit(1)
+        )
+        ticket = await session.scalar(stmt)
+        return ticket, local_num
+
+
+async def resolve_user_ticket(vk_id: int, num: int) -> tuple[Ticket | None, int]:
+    """Разрешить номер заявки: сначала как локальный номер пользователя, затем фоллбэк на глобальный ID."""
+    ticket, local_num = await get_user_ticket_by_local_number(vk_id, num)
+    if ticket is not None:
+        return ticket, local_num
+    ticket = await get_user_ticket_by_id(vk_id, num)
+    if ticket is not None and ticket.user_id is not None and ticket.id is not None:
+        computed_local = await get_user_ticket_local_number(ticket.user_id, ticket.id)
+        return ticket, computed_local
+    return None, num
+
+
 async def get_ticket_messages(ticket_id: int) -> list[TicketMessage]:
     """Получить историю переписки по заявке."""
     async with async_session_maker() as session:
@@ -249,12 +316,16 @@ async def reply_to_ticket(
         # 5. Откладываем VK-уведомление в ту же транзакцию (outbox)
         scheduled = False
         if not ticket.is_anonymous and ticket.user and ticket.user.vk_id:
+            local_num = await get_user_ticket_local_number(
+                ticket.user_id, ticket.id, session=session
+            )
+            dept_name = ticket.department.name if ticket.department else "—"
             add_outbox_message(
                 session,
                 ticket.user.vk_id,
                 (
-                    f"Ответ на вашу заявку #{ticket.id} "
-                    f"({ticket.department.name if ticket.department else '—'}):\n\n{message}"
+                    f"Ответ на вашу заявку #{local_num} "
+                    f"({dept_name}):\n\n{message}"
                 ),
             )
             scheduled = True
@@ -308,10 +379,13 @@ async def change_ticket_status(
         )
         scheduled = False
         if not ticket.is_anonymous and ticket.user and ticket.user.vk_id:
+            local_num = await get_user_ticket_local_number(
+                ticket.user_id, ticket.id, session=session
+            )
             add_outbox_message(
                 session,
                 ticket.user.vk_id,
-                f"Статус вашей заявки #{ticket.id} изменён: {status_label(ticket.status)}",
+                f"Статус вашей заявки #{local_num} изменён: {status_label(ticket.status)}",
             )
             scheduled = True
 
@@ -396,13 +470,18 @@ def format_ticket_list(
     return "\n".join(lines)
 
 
-def format_ticket_details(ticket: Ticket, messages: list[TicketMessage]) -> str:
+def format_ticket_details(
+    ticket: Ticket,
+    messages: list[TicketMessage],
+    local_id: int | None = None,
+) -> str:
     """Подробная карточка заявки с историей переписки."""
     created = ticket.created_at.strftime("%d.%m.%Y %H:%M") if ticket.created_at else "—"
     dept = ticket.department.name if ticket.department else "—"
+    display_id = local_id if local_id is not None else ticket.id
 
     lines = [
-        f"Заявка #{ticket.id}",
+        f"Заявка #{display_id}",
         f"Отдел: {dept}",
         f"Тема: {ticket.topic or 'Без темы'}",
         f"Статус: {status_label(ticket.status)}",

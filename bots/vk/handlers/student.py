@@ -69,8 +69,11 @@ from core.ticket_service import (
     format_ticket_list,
     get_ticket_messages,
     get_user_ticket_by_id,
+    get_user_ticket_local_number,
     get_user_tickets,
+    get_user_tickets_mapping,
     reply_to_ticket,
+    resolve_user_ticket,
     status_label,
 )
 
@@ -162,10 +165,11 @@ async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, A
     start = page * PAGE_SIZE
     page_tickets = tickets[start : start + PAGE_SIZE]
 
-    # Используем реальные номера заявок t.id, чтобы номер везде (#7) совпадал
-    ticket_ids = [t.id for t in page_tickets if t.id is not None]
+    mapping = await get_user_tickets_mapping(message.from_id)
+    # Используем персональные локальные номера (#1, #2, ...)
+    ticket_ids = [mapping.get(t.id, 1) for t in page_tickets if t.id is not None]
 
-    text = format_ticket_list(page_tickets, user_ticket_map=None)
+    text = format_ticket_list(page_tickets, user_ticket_map=mapping)
     if total_pages > 1:
         text += f"\n\n📄 Страница {page + 1} из {total_pages}"
     await message.answer(
@@ -192,20 +196,15 @@ async def ticket_details_handler(message: Message):
     match = re.search(r"(\d+)", message.text or "")
     if not match:
         await message.answer(
-            "Укажите номер заявки, например: «Подробнее #12» или «#12».",
+            "Укажите номер заявки, например: «Подробнее #1» или «#1».",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
     parsed_id = int(match.group(1))
 
-    # 1. Сначала ищем по глобальному ID заявки пользователя
-    ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
-
-    # 2. Если не найдено по глобальному ID — ищем по локальному номеру в последних заявках
-    if ticket is None:
-        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=FETCH_LIMIT)
-        ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
+    # Находим заявку по персональному локальному номеру пользователя
+    ticket, local_num = await resolve_user_ticket(message.from_id, parsed_id)
 
     if ticket is None or ticket.id is None:
         await message.answer(
@@ -215,14 +214,14 @@ async def ticket_details_handler(message: Message):
         return
 
     history = await get_ticket_messages(ticket.id)
-    details = format_ticket_details(ticket, history)
+    details = format_ticket_details(ticket, history, local_id=local_num)
     details += (
         f"\n\n💬 Чтобы задать уточняющий вопрос или дополнить заявку, отправьте:\n"
-        f"«Ответ #{ticket.id}: ваш текст»"
+        f"«Ответ #{local_num}: ваш текст»"
     )
     await message.answer(
         details,
-        keyboard=build_tickets_keyboard([ticket.id]),
+        keyboard=build_tickets_keyboard([local_num]),
     )
 
 
@@ -237,7 +236,7 @@ async def ticket_number_direct_handler(message: Message):
         await ticket_details_handler(message)
         return
 
-    ticket = await get_user_ticket_by_id(message.from_id, raw_num)
+    ticket, _ = await resolve_user_ticket(message.from_id, raw_num)
     if ticket is not None:
         await ticket_details_handler(message)
         return
@@ -254,10 +253,7 @@ async def ticket_reply_handler(message: Message):
 
     # 1. Сначала проверяем, является ли отправитель автором этой заявки (студентом)
     # Если автор заявки отправляет «Ответ #N: ...», это ВСЕГДА вопрос или дополнение от студента!
-    user_ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
-    if user_ticket is None:
-        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
-        user_ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
+    user_ticket, local_num = await resolve_user_ticket(message.from_id, parsed_id)
 
     if user_ticket is not None and user_ticket.id is not None:
         result = await add_student_reply(user_ticket.id, message.from_id, reply_text)
@@ -268,9 +264,9 @@ async def ticket_reply_handler(message: Message):
             )
             return
         await message.answer(
-            f"Ваш вопрос/ответ добавлен к заявке #{user_ticket.id}.\n"
+            f"Ваш вопрос/ответ добавлен к заявке #{local_num}.\n"
             f"Ответственный отдел уведомлён, статус обновлён.",
-            keyboard=build_tickets_keyboard([user_ticket.id]),
+            keyboard=build_tickets_keyboard([local_num]),
         )
         return
 
@@ -564,6 +560,11 @@ async def ticket_identity_choice_handler(message: Message):
             department_name=department,
         )
 
+        if ticket.user_id is not None and ticket.id is not None:
+            local_num = await get_user_ticket_local_number(ticket.user_id, ticket.id)
+        else:
+            local_num = 1
+
         department_name = department or "Без отдела (Общий)"
         answer_tail = (
             "Администратор сможет ответить вам в этом диалоге."
@@ -572,7 +573,7 @@ async def ticket_identity_choice_handler(message: Message):
         )
         await message.answer(
             f"Ваше обращение принято.\n\n"
-            f"Номер обращения: #{ticket.id}\n"
+            f"Номер обращения: #{local_num}\n"
             f"Раздел: {department_name}\n"
             f"Статус: {status_label(ticket.status)}\n\n"
             f"{answer_tail}",

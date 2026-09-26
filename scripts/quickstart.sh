@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}       🚀 OSS Bot — Быстрый старт системы (v0.8.8.2)        ${NC}"
+echo -e "${BLUE}       🚀 OSS Bot — Быстрый старт системы (v0.8.8.3)        ${NC}"
 echo -e "${BLUE}============================================================${NC}"
 
 # 1. Проверка наличия Docker и Docker Compose
@@ -67,4 +67,5 @@ echo -e "Метрики Prometheus: http://localhost:8000/metrics"
 echo -e "Для создания первого суперадминистратора выполните:"
 echo -e "  docker compose exec web python scripts/init_superadmin.py --login admin"
 echo -e "${GREEN}============================================================${NC}"
+
 

@@ -1,6 +1,6 @@
-﻿# ⚡ Отчёт о нагрузочном тестировании и производительности (v0.8.8.2)
+﻿# ⚡ Отчёт о нагрузочном тестировании и производительности (v0.8.8.3)
 
-> **Версия системы:** 0.8.8.2  
+> **Версия системы:** 0.8.8.3  
 > **Инструмент тестирования:** [Locust 2.31+](https://locust.io/) (`tests/load/locustfile.py`)  
 > **Конфигурация тестового стенда:** 4 vCPU (AMD EPYC), 8 GB RAM, NVMe SSD, Docker Compose c PgBouncer и Redis 7.
 
@@ -54,4 +54,5 @@ locust -f tests/load/locustfile.py --headless -u 100 -r 10 -t 2m --host http://l
 locust -f tests/load/locustfile.py --host http://localhost:8000
 # Откройте в браузере: http://localhost:8089
 ```
+
 
