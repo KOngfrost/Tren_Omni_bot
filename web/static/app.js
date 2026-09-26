@@ -226,6 +226,45 @@
         });
     }
 
+    function syncAdminModalFields() {
+        var adminTypeSelect = document.getElementById('admin_type');
+        if (adminTypeSelect) {
+            var val = adminTypeSelect.value;
+            var vkFields = document.getElementById('vk_fields');
+            var tempFields = document.getElementById('temp_fields');
+            var vkInput = document.getElementById('vk_id');
+            if (val === 'temp') {
+                if (vkFields) vkFields.style.display = 'none';
+                if (tempFields) tempFields.style.display = 'block';
+                if (vkInput) vkInput.removeAttribute('required');
+            } else {
+                if (vkFields) vkFields.style.display = 'block';
+                if (tempFields) tempFields.style.display = 'none';
+                if (vkInput) vkInput.setAttribute('required', 'required');
+            }
+        }
+        var durationPresetSelect = document.getElementById('duration_preset');
+        if (durationPresetSelect) {
+            var val = durationPresetSelect.value;
+            var customField = document.getElementById('custom_duration_field');
+            var customInput = document.getElementById('custom_hours');
+            if (val === 'custom') {
+                if (customField) customField.style.display = 'block';
+                if (customInput) customInput.setAttribute('required', 'required');
+            } else {
+                if (customField) customField.style.display = 'none';
+                if (customInput) customInput.removeAttribute('required');
+            }
+        }
+    }
+    window.syncAdminModalFields = syncAdminModalFields;
+
+    document.addEventListener('change', function (e) {
+        if (e.target && (e.target.id === 'admin_type' || e.target.id === 'duration_preset')) {
+            syncAdminModalFields();
+        }
+    });
+
     function openModal(id) {
         var modal = document.getElementById(id);
         if (modal) {
@@ -234,6 +273,9 @@
             }
             modal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            if (id === 'modal') {
+                syncAdminModalFields();
+            }
         }
     }
     function closeModal(id) {

@@ -217,7 +217,7 @@
             
             <div class="form-group">
                 <label for="admin_type">Тип учетной записи</label>
-                <select id="admin_type" name="admin_type" onchange="toggleAdminType(this.value)">
+                <select id="admin_type" name="admin_type">
                     <option value="vk" selected>С привязкой к VK ID (постоянный доступ + бот)</option>
                     <option value="temp">Временный / QA (без VK ID, настраиваемый срок)</option>
                 </select>
@@ -241,7 +241,7 @@
             <div id="temp_fields" style="display: none;">
                 <div class="form-group">
                     <label for="duration_preset">Срок действия доступа</label>
-                    <select id="duration_preset" name="duration_preset" onchange="toggleCustomDuration(this.value)">
+                    <select id="duration_preset" name="duration_preset">
                         <option value="1">1 час</option>
                         <option value="6">6 часов</option>
                         <option value="12">12 часов</option>
@@ -288,31 +288,11 @@
     </div>
 </div>
 
-<script>
-function toggleAdminType(val) {
-    var vkFields = document.getElementById('vk_fields');
-    var tempFields = document.getElementById('temp_fields');
-    var vkInput = document.getElementById('vk_id');
-    if (val === 'temp') {
-        if (vkFields) vkFields.style.display = 'none';
-        if (tempFields) tempFields.style.display = 'block';
-        if (vkInput) vkInput.removeAttribute('required');
-    } else {
-        if (vkFields) vkFields.style.display = 'block';
-        if (tempFields) tempFields.style.display = 'none';
-        if (vkInput) vkInput.setAttribute('required', 'required');
+<script nonce="{{ csp_nonce('script') }}">
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.syncAdminModalFields) {
+        window.syncAdminModalFields();
     }
-}
-function toggleCustomDuration(val) {
-    var customField = document.getElementById('custom_duration_field');
-    var customInput = document.getElementById('custom_hours');
-    if (val === 'custom') {
-        if (customField) customField.style.display = 'block';
-        if (customInput) customInput.setAttribute('required', 'required');
-    } else {
-        if (customField) customField.style.display = 'none';
-        if (customInput) customInput.removeAttribute('required');
-    }
-}
+});
 </script>
 {% endblock %}
