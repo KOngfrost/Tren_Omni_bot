@@ -7,10 +7,9 @@ def _chunk_buttons(buttons: list, size: int = 2) -> list[list]:
 
 
 def _pagination_nav_row(page: int, has_more: bool) -> list[tuple[str, str]]:
-    """Ряд навигации пагинации: «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1 / B4).
+    """Ряд навигации пагинации: «⬅️ Назад» / «Ещё ➡️».
 
-    Возвращается пустой список на первой/последней странице, чтобы
-    не занимать место бесполезными кнопками.
+    Все кнопки навигации белые (secondary).
     """
     row: list[tuple[str, str]] = []
     if page > 0:
@@ -21,7 +20,13 @@ def _pagination_nav_row(page: int, has_more: bool) -> list[tuple[str, str]]:
 
 
 def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) -> str:
-    """Сформировать JSON-структуру клавиатуры VK."""
+    """Сформировать JSON-структуру клавиатуры VK.
+
+    Цветовые правила проекта:
+    - Все обычные кнопки: белые (secondary).
+    - Кнопка админа: зелёная (positive).
+    - Кнопка отмены: красная (negative).
+    """
     return json.dumps(
         {
             "one_time": one_time,
@@ -38,48 +43,56 @@ def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) 
 
 
 def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = None) -> str:
-    """Построить основную клавиатуру с ключевыми разделами бота."""
-    buttons: list[tuple[str, str]] = [
-        ("Создать заявку", "positive"),
-        ("Мои заявки", "primary"),
-        ("Частые вопросы", "secondary"),
-        ("База знаний", "secondary"),
-        ("Мероприятия", "primary"),
-        ("Партнёрство", "secondary"),
+    """Построить основную клавиатуру с ключевыми разделами бота.
+
+    Кнопки расположены аккуратными рядами:
+    - Ряд 1: Создать заявку / Мои заявки (белые)
+    - Ряд 2: Частые вопросы / База знаний (белые)
+    - Ряд 3: Мероприятия / Партнёрство (белые)
+    - Ряд 4 (для администратора): Админ (зелёная)
+    """
+    rows: list[list[tuple[str, str]]] = [
+        [("Создать заявку", "secondary"), ("Мои заявки", "secondary")],
+        [("Частые вопросы", "secondary"), ("База знаний", "secondary")],
+        [("Мероприятия", "secondary"), ("Партнёрство", "secondary")],
     ]
     if is_admin:
-        buttons.append(("Админ", "positive"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+        rows.append([("Админ", "positive")])
+    return _format_keyboard(rows, one_time=False)
 
 
 def build_ticket_department_keyboard(departments: list[str]) -> str:
-    """Клавиатура выбора отдела при создании заявки (включая вариант 'Без отдела')."""
-    buttons: list[tuple[str, str]] = [(dept, "primary") for dept in departments]
-    buttons.append(("Без отдела", "secondary"))
-    buttons.append(("Отмена", "negative"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    """Клавиатура выбора отдела при создании заявки (включая вариант 'Без отдела').
+
+    - Отделы разбиты по 2 в ряд (белые).
+    - 'Без отдела' на отдельной строке (белая).
+    - 'Отмена' на отдельной строке внизу (красная).
+    """
+    dept_buttons: list[tuple[str, str]] = [(dept, "secondary") for dept in departments]
+    rows = _chunk_buttons(dept_buttons, 2)
+    rows.append([("Без отдела", "secondary")])
+    rows.append([("Отмена", "negative")])
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_admin_keyboard() -> str:
-    buttons = [
-        ("Заявки администратора", "primary"),
-        ("Сформировать отчет", "positive"),
-        ("Отчет по дате", "secondary"),
-        ("Отчет за период", "secondary"),
-        ("Обычное меню", "secondary"),
+    """Панель администратора: все действия белые, возврат в меню белый."""
+    rows: list[list[tuple[str, str]]] = [
+        [("Заявки администратора", "secondary"), ("Сформировать отчет", "secondary")],
+        [("Отчет по дате", "secondary"), ("Отчет за период", "secondary")],
+        [("Обычное меню", "secondary")],
     ]
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+    return _format_keyboard(rows, one_time=False)
 
 
 def build_admin_report_types_keyboard() -> str:
     """Клавиатура выбора типа отчёта: за сегодня, за определённое число, за период."""
-    buttons = [
-        ("За сегодня", "positive"),
-        ("За определённое число", "primary"),
-        ("За период", "primary"),
-        ("Отмена", "negative"),
+    rows: list[list[tuple[str, str]]] = [
+        [("За сегодня", "secondary"), ("За определённое число", "secondary")],
+        [("За период", "secondary")],
+        [("Отмена", "negative")],
     ]
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_admin_tickets_list_keyboard(
@@ -89,31 +102,28 @@ def build_admin_tickets_list_keyboard(
     page: int = 0,
     has_more: bool = False,
 ) -> str:
-    """Клавиатура списка заявок для администратора: кнопки открытия конкретных заявок.
-
-    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
-    """
+    """Клавиатура списка заявок для администратора: кнопки открытия конкретных заявок."""
     buttons: list[tuple[str, str]] = [
-        (f"Заявка #{tid}", "primary") for tid in ticket_ids[:max_buttons]
+        (f"Заявка #{tid}", "secondary") for tid in ticket_ids[:max_buttons]
     ]
     rows = _chunk_buttons(buttons, 2)
     nav_row = _pagination_nav_row(page, has_more)
     if nav_row:
         rows.append(nav_row)
-    rows.append([("Заявки администратора", "secondary"), ("Админ", "negative")])
+    rows.append([("Заявки администратора", "secondary"), ("Админ", "positive")])
     return _format_keyboard(rows, one_time=False)
 
 
 def build_admin_ticket_actions_keyboard(ticket_id: int, is_completed: bool = False) -> str:
     """Клавиатура действий над заявкой: быстрый ответ, смена статуса, история."""
     rows: list[list[tuple[str, str]]] = [
-        [(f"Ответить #{ticket_id}", "primary"), (f"История #{ticket_id}", "secondary")]
+        [(f"Ответить #{ticket_id}", "secondary"), (f"История #{ticket_id}", "secondary")]
     ]
     if is_completed:
         rows.append([(f"В обработку #{ticket_id}", "secondary")])
     else:
-        rows.append([(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "positive")])
-    rows.append([("Заявки администратора", "primary"), ("Админ", "negative")])
+        rows.append([(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "secondary")])
+    rows.append([("Заявки администратора", "secondary"), ("Админ", "positive")])
     return _format_keyboard(rows, one_time=False)
 
 
@@ -121,8 +131,8 @@ def build_admin_reply_cancel_keyboard(ticket_id: int) -> str:
     """Клавиатура отмены ввода ответа на заявку."""
     return _format_keyboard(
         [
-            [("Отмена", "negative")],
             [(f"Заявка #{ticket_id}", "secondary")],
+            [("Отмена", "negative")],
         ],
         one_time=True,
     )
@@ -130,16 +140,7 @@ def build_admin_reply_cancel_keyboard(ticket_id: int) -> str:
 
 def build_cancel_keyboard() -> str:
     """Клавиатура с кнопкой отмены."""
-    return json.dumps(
-        {
-            "one_time": True,
-            "buttons": [
-                [
-                    {"action": {"type": "text", "label": "Отмена"}, "color": "negative"},
-                ]
-            ],
-        }
-    )
+    return _format_keyboard([[("Отмена", "negative")]], one_time=True)
 
 
 # Алиас для обратной совместимости
@@ -148,31 +149,13 @@ build_admin_cancel_keyboard = build_cancel_keyboard
 
 def build_anonymous_choice_keyboard() -> str:
     """Клавиатура выбора анонимности с обязательной кнопкой отмены."""
-    return json.dumps(
-        {
-            "one_time": True,
-            "buttons": [
-                [
-                    {
-                        "action": {"type": "text", "label": "Остаться не анонимным"},
-                        "color": "primary",
-                    },
-                ],
-                [
-                    {
-                        "action": {"type": "text", "label": "Остаться анонимным"},
-                        "color": "secondary",
-                    },
-                ],
-                [
-                    {
-                        "action": {"type": "text", "label": "Отмена"},
-                        "color": "negative",
-                    },
-                ],
-            ],
-        },
-        ensure_ascii=False,
+    return _format_keyboard(
+        [
+            [("Остаться не анонимным", "secondary")],
+            [("Остаться анонимным", "secondary")],
+            [("Отмена", "negative")],
+        ],
+        one_time=True,
     )
 
 
@@ -183,25 +166,23 @@ def build_tickets_keyboard(
     page: int = 0,
     has_more: bool = False,
 ) -> str:
-    """Клавиатура со списком заявок: кнопка «Подробнее #N» на каждую заявку (до max_buttons).
-
-    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
-    """
+    """Клавиатура со списком заявок: кнопка «Подробнее #N» на каждую заявку (до max_buttons)."""
     buttons = [(f"Подробнее #{ticket_id}", "secondary") for ticket_id in ticket_ids[:max_buttons]]
     rows = _chunk_buttons(buttons, 2)
     nav_row = _pagination_nav_row(page, has_more)
     if nav_row:
         rows.append(nav_row)
-    rows.append([("Меню", "primary")])
+    rows.append([("Меню", "secondary")])
     return _format_keyboard(rows, one_time=True)
 
 
 def build_faq_departments_keyboard(departments: list[str]) -> str:
     """Клавиатура выбора отдела для просмотра частых вопросов."""
-    buttons: list[tuple[str, str]] = [(f"Вопросы: {dept}", "secondary") for dept in departments]
-    buttons.append(("Вопросы: Все отделы", "primary"))
-    buttons.append(("Меню", "negative"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    dept_buttons: list[tuple[str, str]] = [(f"Вопросы: {dept}", "secondary") for dept in departments]
+    rows = _chunk_buttons(dept_buttons, 2)
+    rows.append([("Вопросы: Все отделы", "secondary")])
+    rows.append([("Отмена", "negative")])
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_faq_items_keyboard(
@@ -211,10 +192,7 @@ def build_faq_items_keyboard(
     page: int = 0,
     has_more: bool = False,
 ) -> str:
-    """Клавиатура номеров вопросов для быстрого открытия в один клик.
-
-    page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
-    """
+    """Клавиатура номеров вопросов для быстрого открытия в один клик."""
     start_num = page * max_buttons + 1
     buttons: list[tuple[str, str]] = [
         (f"{start_num + i}", "secondary") for i, item_id in enumerate(item_ids[:max_buttons])
@@ -223,7 +201,8 @@ def build_faq_items_keyboard(
     nav_row = _pagination_nav_row(page, has_more)
     if nav_row:
         rows.append(nav_row)
-    rows.append([("К разделам вопросов", "primary"), ("Меню", "negative")])
+    rows.append([("К разделам вопросов", "secondary")])
+    rows.append([("Отмена", "negative")])
     return _format_keyboard(rows, one_time=True)
 
 
@@ -231,38 +210,39 @@ def build_knowledge_departments_keyboard(
     departments: list[str], topics: list[str] | None = None
 ) -> str:
     """Клавиатура выбора отдела для просмотра материалов базы знаний."""
-    buttons: list[tuple[str, str]] = [(f"База: {dept}", "secondary") for dept in departments]
-    buttons.append(("База: Без отдела", "secondary"))
-    buttons.append(("База: Все материалы", "primary"))
+    dept_buttons: list[tuple[str, str]] = [(f"База: {dept}", "secondary") for dept in departments]
+    rows = _chunk_buttons(dept_buttons, 2)
     if topics:
-        for t in topics[:4]:
-            buttons.append((f"Тема: {t}", "secondary"))
-    buttons.append(("Меню", "negative"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+        topic_buttons: list[tuple[str, str]] = [(f"Тема: {t}", "secondary") for t in topics[:4]]
+        rows.extend(_chunk_buttons(topic_buttons, 2))
+    rows.append([("База: Без отдела", "secondary"), ("База: Все материалы", "secondary")])
+    rows.append([("Отмена", "negative")])
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_back_nav_keyboard(back_label: str = "К разделам вопросов") -> str:
     """Клавиатура возврата назад."""
-    buttons = [
-        [(back_label, "primary")],
-        [("Меню", "secondary")],
+    rows = [
+        [(back_label, "secondary")],
+        [("Отмена", "negative")],
     ]
-    return _format_keyboard(buttons, one_time=True)
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_events_keyboard(event_ids: list[int] | None = None) -> str:
     """Клавиатура мероприятий с кнопками быстрой записи в один клик и возвратом в меню."""
     buttons: list[tuple[str, str]] = [
-        (f"Записаться #{eid}", "positive") for eid in (event_ids or [])[:6]
+        (f"Записаться #{eid}", "secondary") for eid in (event_ids or [])[:6]
     ]
-    buttons.append(("Меню", "secondary"))
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+    rows = _chunk_buttons(buttons, 2)
+    rows.append([("Отмена", "negative")])
+    return _format_keyboard(rows, one_time=False)
 
 
 def build_knowledge_suggest_keyboard() -> str:
     """Клавиатура с кнопкой создания заявки после предложения статьи из базы знаний."""
-    buttons = [
-        ("Создать заявку", "positive"),
-        ("Отмена", "negative"),
+    rows = [
+        [("Создать заявку", "secondary")],
+        [("Отмена", "negative")],
     ]
-    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
+    return _format_keyboard(rows, one_time=True)

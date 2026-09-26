@@ -11,6 +11,7 @@
         <div class="page-desc">Управление доступом: суперадмины имеют полный доступ, администраторы — в рамках отдела</div>
     </div>
     <div class="actions">
+        <button class="btn btn-secondary" data-open-modal="modal-qa">Создать QA-админа (без VK ID)</button>
         <button class="btn btn-success" data-open-modal="modal">Добавить админа</button>
     </div>
 </div>
@@ -154,6 +155,44 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if qa_users %}
+    <div class="page-header" style="margin-top: 2rem;">
+        <div>
+            <h2>QA-администраторы (без VK ID)</h2>
+            <div class="page-desc">Тестовые аккаунты веб-панели для ручного тестирования и QA</div>
+        </div>
+    </div>
+    <div class="admins-grid">
+        {% for qa_user in qa_users %}
+        <div class="admin-card">
+            <div class="admin-card-top">
+                <div class="admin-avatar">QA</div>
+                <div class="admin-card-top-info">
+                    <div class="admin-name">{{ qa_user.username }}</div>
+                    <div class="admin-vk">Без привязки к VK</div>
+                </div>
+            </div>
+            <div class="admin-card-meta">
+                <span class="badge badge-warning">QA аккаунт</span>
+                <span class="admin-dept">{{ qa_user.department.name if qa_user.department else ('Полный доступ' if qa_user.role.value == 'superadmin' else 'Без отдела') }}</span>
+            </div>
+            <div class="admin-card-footer">
+                <span class="admin-login">Роль: {{ 'Суперадмин' if qa_user.role.value == 'superadmin' else 'Админ отдела' }}</span>
+                <div class="admin-card-actions">
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] and qa_user.id != user.get('web_user_id') %}
+                    <form method="post" action="/admin/admins/web-users/{{ qa_user.id }}/delete"
+                          data-confirm="Удалить тестового QA-администратора {{ qa_user.username }}?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn btn-danger btn-small">Удалить</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 </div>
 
 <!-- Modal -->
@@ -200,6 +239,44 @@
                 </select>
             </div>
             <button type="submit" class="btn btn-success btn-full">Добавить</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal QA -->
+<div id="modal-qa" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Создать QA-администратора (без VK ID)</h3>
+            <button class="close-btn" data-close-modal="modal-qa">&times;</button>
+        </div>
+        <form method="POST" action="/admin/admins/qa">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label for="qa_username">Логин веб-панели</label>
+                <input type="text" id="qa_username" name="username" autocomplete="off" placeholder="Например: qa_tester (префикс qa_ добавится автоматически)">
+            </div>
+            <div class="form-group">
+                <label for="qa_password">Пароль веб-панели</label>
+                <input type="password" id="qa_password" name="password" autocomplete="new-password" minlength="8" placeholder="Минимум 8 символов (или пусто для генерации)">
+            </div>
+            <div class="form-group">
+                <label for="qa_department_id">Отдел (опционально)</label>
+                <select id="qa_department_id" name="department_id">
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="">— Без привязки / Все отделы —</option>{% endif %}
+                    {% for d in departments %}
+                    <option value="{{ d.id }}" {% if selected_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="qa_role">Роль</label>
+                <select id="qa_role" name="role" required>
+                    <option value="admin">Администратор отдела</option>
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="superadmin">Суперадмин</option>{% endif %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-secondary btn-full">Создать QA-админа</button>
         </form>
     </div>
 </div>

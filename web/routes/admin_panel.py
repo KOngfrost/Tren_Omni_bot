@@ -75,9 +75,16 @@ async def admins_page(request: Request, user=Depends(require_auth)):
                     Admin.id,
                 )
             )
+            # Загружаем также тестовых веб-пользователей без привязки к VK ID (для QA)
+            qa_stmt = (
+                select(WebUser)
+                .options(selectinload(WebUser.department))
+                .where(WebUser.admin_id.is_(None))
+                .order_by(WebUser.id)
+            )
             if not is_super:
-                admins_stmt = admins_stmt.where(Admin.department_id == dept_id)
-            admins = list((await session.execute(admins_stmt)).scalars().all())
+                qa_stmt = qa_stmt.where(WebUser.department_id == dept_id)
+            qa_users = list((await session.execute(qa_stmt)).scalars().all())
     except Exception as e:
         db_error = True
         logger.error("Не удалось загрузить администраторов: %s", e)
@@ -88,6 +95,7 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "request": request,
             "user": user,
             "admins": admins,
+            "qa_users": qa_users,
             "departments": departments,
             "db_error": db_error,
             "active": "admins",
@@ -98,6 +106,64 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "session_id": request.state.session_id,
         },
     )
+
+
+@router.post("/qa")
+async def add_qa_admin(request: Request, user=Depends(require_auth)):
+    """Создание тестового QA-администратора без VK ID."""
+    await require_crud_rate_limit(request)
+    form = await request.form()
+
+    role_str = str(form.get("role", "admin")).strip().lower()
+    if role_str == "superadmin" and not is_superadmin(user):
+        request.session["flash_error"] = "Только суперадмин может создавать тестового суперадмина"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    username = sanitize_html(str(form.get("username", "")).strip())
+    if not username:
+        username = f"qa_test_{secrets.token_hex(4)}"
+    elif not username.startswith("qa_") and not username.startswith("test_"):
+        username = f"qa_{username}"
+
+    password = str(form.get("password", "")).strip()
+    if not password:
+        password = secrets.token_urlsafe(12)
+    elif len(password) < 8:
+        request.session["flash_error"] = "Пароль должен быть не короче 8 символов"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    raw_dept_id = form.get("department_id")
+    dept_id = int(raw_dept_id) if raw_dept_id and str(raw_dept_id).strip() else None
+    if not is_superadmin(user):
+        dept_id = user_get_department_id(user)
+
+    web_role = WebRole.SUPERADMIN if role_str == "superadmin" else WebRole.DEPARTMENT_ADMIN
+
+    try:
+        async with async_session_maker() as session:
+            existing = await session.scalar(select(WebUser).where(WebUser.username == username))
+            if existing:
+                request.session["flash_error"] = f"Логин '{username}' уже занят"
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            qa_web_user = WebUser(
+                username=username,
+                password_hash=hash_password(password),
+                role=web_role,
+                department_id=dept_id,
+                admin_id=None,
+                is_active=True,
+            )
+            session.add(qa_web_user)
+            await session.commit()
+    except Exception:
+        logger.exception("Не удалось создать QA-администратора")
+        request.session["flash_error"] = "Не удалось сохранить QA-пользователя. Попробуйте позже."
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    request.session["flash_success"] = f"Тестовый QA-администратор '{username}' успешно создан (без привязки к VK ID)."
+    request.session["created_credentials"] = {"username": username, "password": password}
+    return RedirectResponse(url="/admin/admins/", status_code=302)
 
 
 @router.post("/")

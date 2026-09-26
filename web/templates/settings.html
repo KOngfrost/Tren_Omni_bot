@@ -114,7 +114,7 @@
                 Сохранить настройки
             </button>
             <span id="saveStatus" class="settings-save-status">
-                ✓ Настройки применены
+                Настройки применены
             </span>
         </div>
     </form>
@@ -235,7 +235,7 @@
         function showNotice() {
             if (saveStatus) {
                 saveStatus.style.display = 'inline-block';
-                saveStatus.textContent = '✓ Настройки применены';
+                saveStatus.textContent = 'Настройки применены';
                 setTimeout(() => {
                     saveStatus.style.display = 'none';
                 }, 2500);
