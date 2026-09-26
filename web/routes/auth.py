@@ -527,7 +527,7 @@ async def login(request: Request):
                     user_role,
                 )
                 request.session["flash_error"] = (
-                    "На платформе ведутся технические работы. Вход разрешён только для суперадминистраторов."
+                    "На платформе ведутся технические работы. Пожалуйста, повторите попытку позже."
                 )
                 return RedirectResponse(url="/auth/login", status_code=302)
 
@@ -713,7 +713,7 @@ async def two_factor_verify(
         if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
             await otp_store.cancel(request)
             request.session["flash_error"] = (
-                "На платформе ведутся технические работы. Вход разрешён только для суперадминистраторов."
+                "На платформе ведутся технические работы. Пожалуйста, повторите попытку позже."
             )
             return RedirectResponse(url="/auth/login", status_code=302)
 
