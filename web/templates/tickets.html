@@ -457,5 +457,17 @@ if (ticketsTable) {
     });
 }
 document.querySelector('[data-close-ticket-modal]').addEventListener('click', closeTicketModal);
+
+// Автооткрытие карточки заявки по параметру ?open=ID или #ticket-ID
+try {
+    var urlParams = new URLSearchParams(window.location.search);
+    var autoOpenId = urlParams.get('open');
+    if (!autoOpenId && window.location.hash && window.location.hash.startsWith('#ticket-')) {
+        autoOpenId = window.location.hash.replace('#ticket-', '');
+    }
+    if (autoOpenId && /^\d+$/.test(autoOpenId)) {
+        openTicket(autoOpenId);
+    }
+} catch (e) {}
 </script>
 {% endblock %}

@@ -12,7 +12,8 @@ import logging
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
 from core.models import (
@@ -362,33 +363,134 @@ async def api_delete_department(dept_id: int, request: Request, user=Depends(req
 
 @router.get("/counters")
 async def api_get_counters(request: Request, user=Depends(require_auth)):
-    """Получить количество новых заявок и новых партнёрских предложений для текущего пользователя."""
-    new_tickets = 0
-    new_partnerships = 0
+    """Получить детальные раздельные счётчики и список активных заявок/ответов/партнёрств."""
+    new_tickets_count = 0
+    student_replies_count = 0
+    new_partnerships_count = 0
+    items: list[dict] = []
+
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
-            scope = [Ticket.status == TicketStatus.NEW]
-            if not is_super and dept_id:
-                scope.append(Ticket.department_id == dept_id)
 
-            new_tickets = (
-                await session.scalar(select(func.count(Ticket.id)).where(*scope))
+            base_scope = [Ticket.status == TicketStatus.NEW]
+            if not is_super and dept_id:
+                base_scope.append(Ticket.department_id == dept_id)
+
+            new_scope = base_scope + [or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
+            reply_scope = base_scope + [and_(Ticket.response_text.is_not(None), Ticket.response_text != "")]
+
+            new_tickets_count = (
+                await session.scalar(select(func.count(Ticket.id)).where(*new_scope))
+            ) or 0
+
+            student_replies_count = (
+                await session.scalar(select(func.count(Ticket.id)).where(*reply_scope))
             ) or 0
 
             if is_super:
-                new_partnerships = (
+                new_partnerships_count = (
                     await session.scalar(
                         select(func.count(PartnershipRequest.id)).where(
                             PartnershipRequest.status == "new"
                         )
                     )
                 ) or 0
+
+            # Загружаем конкретные элементы для выпадающего списка уведомлений
+            stmt = (
+                select(Ticket)
+                .options(selectinload(Ticket.department), selectinload(Ticket.user))
+                .where(*base_scope)
+                .order_by(Ticket.updated_at.desc(), Ticket.created_at.desc())
+                .limit(10)
+            )
+            tickets = list((await session.scalars(stmt)).all())
+
+            for t in tickets:
+                is_reply = bool(t.response_text and t.response_text.strip())
+                dept_name = t.department.name if t.department else "Общий отдел"
+                preview = (t.description or "").strip()
+                if len(preview) > 90:
+                    preview = preview[:90] + "..."
+                created_str = (
+                    t.created_at.strftime("%d.%m %H:%M") if t.created_at else ""
+                )
+
+                if is_reply:
+                    items.append({
+                        "id": t.id,
+                        "type": "student_reply",
+                        "type_label": "Ответ студента",
+                        "title": f"Ответ по заявке #{t.id}",
+                        "icon": "💬",
+                        "badge_class": "badge-reply",
+                        "department": dept_name,
+                        "text": preview or "Студент направил дополнение к заявке",
+                        "time": created_str,
+                        "url": f"/tickets/?open={t.id}",
+                    })
+                else:
+                    items.append({
+                        "id": t.id,
+                        "type": "new_ticket",
+                        "type_label": "Новая заявка",
+                        "title": f"Заявка #{t.id}",
+                        "icon": "🔥",
+                        "badge_class": "badge-ticket",
+                        "department": dept_name,
+                        "text": preview or (t.topic or "Новое обращение"),
+                        "time": created_str,
+                        "url": f"/tickets/?open={t.id}",
+                    })
+
+            if is_super:
+                pstmt = (
+                    select(PartnershipRequest)
+                    .where(PartnershipRequest.status == "new")
+                    .order_by(PartnershipRequest.created_at.desc())
+                    .limit(5)
+                )
+                partnerships = list((await session.scalars(pstmt)).all())
+                for p in partnerships:
+                    p_text = (p.proposal_text or "").strip()
+                    if len(p_text) > 90:
+                        p_text = p_text[:90] + "..."
+                    p_time = p.created_at.strftime("%d.%m %H:%M") if p.created_at else ""
+                    partner_title = p.user_name or p.contact_info or f"Заявка #{p.id}"
+                    items.append({
+                        "id": p.id,
+                        "type": "partnership",
+                        "type_label": "Партнёрство",
+                        "title": f"Партнёрство: {partner_title}",
+                        "icon": "🤝",
+                        "badge_class": "badge-partner",
+                        "department": "Партнёрство",
+                        "text": p_text or "Новое партнёрское предложение",
+                        "time": p_time,
+                        "url": "/partnerships/",
+                    })
+
     except Exception:
         logger.exception("API: не удалось получить счетчики")
         return api_error("Ошибка получения счетчиков", 500)
 
+    total = new_tickets_count + student_replies_count + new_partnerships_count
+
+    first_new_ticket = next((i for i in items if i["type"] == "new_ticket"), None)
+    first_reply = next((i for i in items if i["type"] == "student_reply"), None)
+
     return api_success({
-        "new_tickets": new_tickets,
-        "new_partnerships": new_partnerships,
+        "total": total,
+        "total_notifications": total,
+        "new_tickets": new_tickets_count,
+        "new_tickets_count": new_tickets_count,
+        "student_replies": student_replies_count,
+        "student_replies_count": student_replies_count,
+        "new_partnerships": new_partnerships_count,
+        "new_partnerships_count": new_partnerships_count,
+        "new_ticket_direct_url": first_new_ticket["url"] if (new_tickets_count == 1 and first_new_ticket) else "/tickets/?status=new",
+        "student_reply_direct_url": first_reply["url"] if (student_replies_count == 1 and first_reply) else "/tickets/?status=new",
+        "partnership_direct_url": "/partnerships/",
+        "items": items,
     })
