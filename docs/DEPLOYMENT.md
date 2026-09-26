@@ -48,12 +48,16 @@ sudo systemctl restart docker
 
 ### 1.4. Firewall
 
-Наружу открыт только SSH (22/tcp). Порты PostgreSQL (5432) и панели (8000)
-в интернет НЕ публикуются - панель доступна через Tailscale.
+Наружу открыты порты SSH (22/tcp) и Caddy (80/tcp, 443/tcp, 443/udp). Внутренние порты PostgreSQL (5432), Redis (6379), PgBouncer (6432) и сервиса панели (8000) закрыты внутри Docker-сети.
 
 ```bash
-ufw allow 22/tcp
-ufw enable
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp comment 'SSH'
+ufw allow 80/tcp comment 'Caddy HTTP'
+ufw allow 443/tcp comment 'Caddy HTTPS'
+ufw allow 443/udp comment 'Caddy HTTP3'
+ufw --force enable
 ```
 
 ## 2. Установка проекта
@@ -109,7 +113,7 @@ chmod 600 .env
 | `VK_BOT_TOKEN` | Токен сообщества VK (Управление -> Работа с API -> Ключи доступа) |
 | `ADMIN_VK_IDS` | VK ID администраторов через запятую |
 | `SESSION_SECRET_KEY` | Секрет сессий веб-панели |
-| `TAILSCALE_AUTH_KEY` | Auth key Tailscale (https://login.tailscale.com/admin/settings/keys) |
+| `CADDY_DOMAIN` | Доменное имя сервера для Caddy (например, `example-bot.duckdns.org`) |
 | `REPORT_TIME` | Время ежедневного отчёта (HH:MM), по умолчанию 09:00 |
 | `APP_TIMEZONE` | Часовой пояс отчётов, по умолчанию Europe/Moscow |
 | `SENTRY_DSN` | (Опционально) DSN проекта Sentry для мониторинга ошибок |
@@ -139,7 +143,6 @@ curl -s http://localhost:8000/health        # {"status":"ok"} (с самого �
 > - Если сборка обрывается с `connection refused` или таймаутом при загрузке базовых образов, скачайте их предварительно:
 >   ```bash
 >   docker pull python:3.11-slim-bookworm
->   docker pull tailscale/tailscale:latest
 >   ```
 > - Если сборка подвисает на параллельных шагах BuildKit:
 >   ```bash
@@ -147,46 +150,21 @@ curl -s http://localhost:8000/health        # {"status":"ok"} (с самого �
 >   docker compose up -d
 >   ```
 
-Tailscale-контейнер поднимается вместе со стеком автоматически. Схема БД
-изменяется только через Alembic (контейнер `migrate`).
+Схема БД изменяется только через Alembic (контейнер `migrate`).
 
-## 5. Доступ к панели (Tailscale)
+## 5. Доступ к панели (Caddy, TLS и WAF)
 
-Веб-панель работает в общей compose-сети (как bot/db) и НЕ публикуется на хост:
-Tailscale-контейнер проксирует HTTPS на неё по имени сервиса (`http://web-admin:8000`).
-Чтобы открыть доступ по HTTPS, выполните один раз:
+Веб-панель работает в общей compose-сети и маршрутизируется через шлюз **Caddy**:
+- Caddy автоматически получает и обновляет бесплатные TLS/HTTPS-сертификаты Let's Encrypt / ZeroSSL.
+- Встроенный модуль Web Application Firewall (WAF) фильтрует сканеры уязвимостей (sqlmap, nikto, dirbuster), попытки path traversal и зондирование служебных файлов (`.git`, `.env`).
+- Панель доступна по защищённому адресу:
+  `https://<ваш_домен>/` (например, `https://example-bot.duckdns.org/`).
+- Для API v1 запросы направляются к сервису `go-api:8080`, для панели управления — к `web-admin:8000`.
 
+Проверка статуса шлюза Caddy:
 ```bash
-chmod +x scripts/setup_tailscale.sh
-./scripts/setup_tailscale.sh
+docker compose logs --tail 100 caddy
 ```
-
-Скрипт:
-1. Запускает стек и ждёт регистрации Tailscale-узла `oss-web-panel`.
-2. Включает `tailscale serve` (HTTPS).
-3. Выставляет `SESSION_HTTPS_ONLY=true` в `.env` и перезапускает панель.
-
-После этого панель доступна внутри tailnet:
-
-```
-https://oss-web-panel.<tailnet>.ts.net/
-```
-
-`<tailnet>` - имя вашей Tailscale-сети (видно в Tailscale Admin Console).
-
-Для Windows-серверов используйте `scripts/setup_tailscale.ps1`.
-
-Диагностика Tailscale:
-
-```bash
-docker compose logs --tail 200 tailscale
-docker compose exec tailscale tailscale status
-docker compose exec tailscale tailscale serve status
-```
-
-Если регистрация не удалась (ошибка `register request`): проверьте интернет и
-DNS в docker-сети, срок действия Auth key, затем обновите ключ в `.env` и
-пересоздайте контейнеры: `docker compose up -d --force-recreate tailscale`.
 
 ## 6. Первые администраторы
 
@@ -294,13 +272,13 @@ docker compose build && docker compose up -d
 ## 10. Мониторинг и диагностика
 
 ```bash
-docker compose ps                          # статус всех сервисов (db, redis, bot, web-admin, tailscale)
+docker compose ps                          # статус всех сервисов (db, redis, bot, web-admin, caddy)
 curl -s http://localhost:8000/health       # healthcheck веб-панели и БД
 curl -s http://localhost:8000/metrics      # метрики Prometheus (запросы, задержки, ошибки)
-docker compose exec oss_bot_redis redis-cli ping # проверка Redis (ожидается PONG)
+docker compose exec redis redis-cli ping   # проверка Redis (ожидается PONG)
 docker compose logs --tail 100 bot         # логи бота
 docker compose logs --tail 100 web-admin   # логи панели
-docker compose exec tailscale tailscale status
+docker compose logs --tail 50 caddy        # логи Caddy / WAF
 ```
 
 - **Sentry**: при указании `SENTRY_DSN` все необработанные исключения автоматически отправляются в Sentry с полным стектрейсом, окружением и контекстом запроса.
@@ -312,7 +290,7 @@ docker compose exec tailscale tailscale status
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt
-pytest --cov=core --cov=web --cov=bots   # запуск 240 тестов с замером покрытия (>= 60%)
+pytest --cov=core --cov=web --cov=bots   # запуск 437+ тестов с замером покрытия (>= 60%)
 ruff check .                              # проверка линтером
 ruff format --check .                     # проверка форматирования
 mypy core web scripts bots                # строгая статическая типизация

@@ -162,7 +162,7 @@ app.add_middleware(
 app.add_middleware(CSRFMiddleware)
 
 # 2.5. Режим технических работ (перехватывает запросы при включенном обслуживании)
-app.add_middleware(MaintenanceMiddleware)
+
 
 # 3. Redis-backed сессия с безопасными настройками и TTL (для CSRF и auth)
 # ДОЛЖЕН выполняться ДО CSRFMiddleware,
@@ -339,6 +339,8 @@ async def add_department_name(request: Request, call_next):
 
 
 # === Глобальный обработчик ошибок — без раскрытия деталей ===
+app.add_middleware(MaintenanceMiddleware)
+
 
 
 def _is_browser_request(request: Request) -> bool:

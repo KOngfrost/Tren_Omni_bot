@@ -495,7 +495,9 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             if path.startswith("/auth/"):
                 return await call_next(request)
 
-            user = request.session.get("user") if hasattr(request, "session") else None
+            # Safely access session only if SessionMiddleware is present
+            session_data = request.scope.get("session", {})
+            user = session_data.get("user")
             is_superadmin = (
                 isinstance(user, dict)
                 and user.get("role") in ("SUPERADMIN", "superadmin")
