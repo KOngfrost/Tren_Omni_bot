@@ -354,7 +354,7 @@ async def test_setup_bot_commands_and_menu_button():
 
     bot_mock = mock.AsyncMock()
     admin_id = 998877
-    webapp_url = "https://example-bot.duckdns.org"
+    webapp_url = "https://bot.example.com"
 
     await setup_bot_commands(bot_mock, admin_id=admin_id, webapp_url=webapp_url)
 
@@ -387,10 +387,10 @@ async def test_setup_bot_commands_and_menu_button():
 def test_main_reply_keyboard_webapp_button():
     from bots.telegram.keyboards import get_main_reply_keyboard
 
-    kb = get_main_reply_keyboard(webapp_url="https://example-bot.duckdns.org")
+    kb = get_main_reply_keyboard(webapp_url="https://bot.example.com")
     assert kb.keyboard[0][0].text == "📱 Веб-панель"
     assert kb.keyboard[0][0].web_app is not None
-    assert kb.keyboard[0][0].web_app.url == "https://example-bot.duckdns.org"
+    assert kb.keyboard[0][0].web_app.url == "https://bot.example.com"
 
 
 

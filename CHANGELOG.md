@@ -151,13 +151,13 @@
     - `bots/telegram/keyboards.py`: компоненты Reply и Inline клавиатур с нативной поддержкой кнопок Telegram Mini App (`WebAppInfo`).
     - `bots/telegram/handlers/`: специализированные роутеры для базовых команд (`base.py`), статуса сервера (`status.py`), техработ (`maintenance.py`), двухфакторной аутентификации (`two_factor.py`), управления контейнерами (`containers.py`) и резервного копирования (`backup.py`).
     - `bots/telegram/bot.py`: точка сборки и фабрика бота с обратной совместимостью для тестов и внешних модулей.
-- **Поддержка Telegram Mini App (TMA) через DuckDNS**:
-  - Интегрирован домен `example-bot.duckdns.org` (настраиваемый параметр `TELEGRAM_WEBAPP_URL`).
+- **Поддержка Telegram Mini App (TMA) через публичный домен**:
+  - Интегрирована поддержка защищённого домена панели (настраиваемый параметр `TELEGRAM_WEBAPP_URL`).
   - Постоянная кнопка меню чата Telegram (`MenuButtonWebApp`) для запуска веб-панели в 1 клик рядом со строкой ввода.
   - Кнопка `📱 Веб-панель` на главной клавиатуре и в карточках команд `/start`, `/help`, `/status`, `/panel`.
   - `web/security/middleware.py`: обновлены CSP и заголовки фреймов (`frame-ancestors 'self' https://*.telegram.org https://telegram.org;`), позволяющие Telegram Web и WebView встраивать веб-панель без блокировок.
   - `web/templates/base.html`: подключен Telegram WebApp JS SDK с автоматическим разворачиванием окна (`ready()`, `expand()`).
-  - `Caddyfile` & `docker-compose.yml`: добавлен сервис Caddy с автоматическим получением и продлением Let's Encrypt SSL-сертификатов на портах 80/443 для `example-bot.duckdns.org`.
+  - `Caddyfile` & `docker-compose.yml`: добавлен сервис Caddy с автоматическим получением и продлением Let's Encrypt SSL-сертификатов на портах 80/443.
 - **Очистка и регистрация меню слэш-команд**:
   - `setup_bot_commands`: автоматический сброс старых команд из кэша Telegram (`delete_my_commands`) и регистрация строгого набора команд (`status`, `panel`, `restart`, `logs`, `backup`, `maintenance`, `2fa`, `help`) с русскоязычными описаниями в области чата администратора.
 

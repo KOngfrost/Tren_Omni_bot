@@ -1133,7 +1133,7 @@ def generate_logs():
             <text x="36" y="24" fill="#7D7D8F" font-size="13">25.09 13:54:30</text>
             <text x="180" y="24" fill="#FFFFFF" font-size="13">Успешная авторизация 2FA в веб-панель</text>
             <text x="520" y="24" fill="#FF4D9D" font-size="13">admin</text>
-            <text x="740" y="24" fill="#B8B8C8" font-size="13">100.64.0.1 (NetBird)</text>
+            <text x="740" y="24" fill="#B8B8C8" font-size="13">10.0.0.1 (VPN)</text>
             <text x="920" y="24" fill="#10B981" font-size="13">SUCCESS</text>
             <line x1="20" y1="46" x2="1098" y2="46" stroke="#1D1D28"/>
         </g>
@@ -1143,7 +1143,7 @@ def generate_logs():
             <text x="36" y="24" fill="#7D7D8F" font-size="13">25.09 13:52:12</text>
             <text x="180" y="24" fill="#FFFFFF" font-size="13">Ответ куратора в тикете #1042</text>
             <text x="520" y="24" fill="#FF4D9D" font-size="13">admin</text>
-            <text x="740" y="24" fill="#B8B8C8" font-size="13">100.64.0.1 (NetBird)</text>
+            <text x="740" y="24" fill="#B8B8C8" font-size="13">10.0.0.1 (VPN)</text>
             <text x="920" y="24" fill="#10B981" font-size="13">SUCCESS</text>
             <line x1="20" y1="46" x2="1098" y2="46" stroke="#1D1D28"/>
         </g>
@@ -1157,7 +1157,7 @@ def generate_logs():
         <rect width="358" height="74" rx="12" fill="#121217" stroke="#20202C" stroke-width="1"/>
         <text x="16" y="24" fill="#7D7D8F" font-size="11">25.09 13:54</text>
         <text x="16" y="44" fill="#FFFFFF" font-size="12" font-weight="600">Вход 2FA: admin</text>
-        <text x="16" y="62" fill="#10B981" font-size="11">NetBird VPN • 100.64.0.1</text>
+        <text x="16" y="62" fill="#10B981" font-size="11">Защищённая сеть • 10.0.0.1</text>
     </g>
     """
     mob = mobile_shell("Журнал", "settings", mob_content)
@@ -1187,8 +1187,8 @@ def generate_settings():
             <circle cx="47" cy="270" r="11" fill="#7D7D8F"/>
             <text x="105" y="275" fill="#7D7D8F" font-size="13">Отключён (система работает в штатном режиме)</text>
 
-            <text x="32" y="330" fill="#FFFFFF" font-size="15" font-weight="700">4. Защищённый контур NetBird VPN</text>
-            <text x="32" y="355" fill="#10B981" font-size="13">● Подключено: 100.64.0.1 (oss-web-panel.example.netbird.cloud)</text>
+            <text x="32" y="330" fill="#FFFFFF" font-size="15" font-weight="700">4. Защищённый контур</text>
+            <text x="32" y="355" fill="#10B981" font-size="13">● Защищено: Caddy WAF + Let's Encrypt TLS</text>
 
             <rect x="32" y="490" width="220" height="46" rx="10" fill="url(#primaryGrad)"/>
             <text x="65" y="519" fill="#FFFFFF" font-size="14" font-weight="700">Сохранить настройки</text>
