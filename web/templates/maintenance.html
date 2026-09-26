@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Технические работы — OSS Bot</title>
-    <meta name="description" content="На платформе OSS Bot ведутся плановые технические работы. Приём и обработка обращений временно приостановлены.">
+    <title>{% if maintenance_active is defined and not maintenance_active %}Сервисы работают — OSS Bot{% else %}Технические работы — OSS Bot{% endif %}</title>
+    <meta name="description" content="{% if maintenance_active is defined and not maintenance_active %}Все сервисы платформы OSS Bot работают в штатном режиме.{% else %}На платформе OSS Bot ведутся плановые технические работы. Приём и обработка веб-обращений временно приостановлены.{% endif %}">
     
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
@@ -47,8 +47,8 @@
         }
         .maint-card {
             width: 100%;
-            max-width: 540px;
-            background: var(--bg-card, rgba(26, 29, 39, 0.75));
+            max-width: 560px;
+            background: var(--bg-card, rgba(26, 29, 39, 0.85));
             border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
             border-radius: 20px;
             padding: 40px 32px;
@@ -67,16 +67,25 @@
             height: 80px;
             margin: 0 auto 20px;
             border-radius: 50%;
-            background: rgba(245, 158, 11, 0.12);
-            border: 1px solid rgba(245, 158, 11, 0.25);
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
         }
-        .maint-icon-wrap svg {
+        .maint-icon-wrap.active-maint {
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .maint-icon-wrap.active-maint svg {
             color: #f59e0b;
             animation: wrenchPulse 3s ease-in-out infinite;
+        }
+        .maint-icon-wrap.online-status {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+        .maint-icon-wrap.online-status svg {
+            color: #10b981;
         }
         @keyframes wrenchPulse {
             0%, 100% { transform: scale(1) rotate(0deg); }
@@ -92,10 +101,17 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+        .maint-badge.badge-warning {
             background: rgba(245, 158, 11, 0.15);
             color: #f59e0b;
             border: 1px solid rgba(245, 158, 11, 0.3);
-            margin-bottom: 16px;
+        }
+        .maint-badge.badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
         }
         .maint-dot {
             width: 7px;
@@ -104,6 +120,11 @@
             background: #f59e0b;
             box-shadow: 0 0 8px #f59e0b;
             animation: pulseDot 2s infinite;
+        }
+        .maint-dot.dot-success {
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+            animation: none;
         }
         @keyframes pulseDot {
             0%, 100% { opacity: 1; transform: scale(1); }
@@ -121,6 +142,31 @@
             line-height: 1.6;
             color: var(--text-secondary, #94a3b8);
             margin: 0 0 24px;
+        }
+        .maint-user-section {
+            background: rgba(37, 99, 235, 0.08);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            border-radius: 14px;
+            padding: 18px 20px;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+        .maint-user-section-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #3b82f6;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .maint-user-section-desc {
+            font-size: 13.5px;
+            line-height: 1.55;
+            color: var(--text-secondary, #94a3b8);
+            margin-bottom: 14px;
         }
         .maint-features {
             background: var(--bg-secondary, rgba(15, 23, 42, 0.5));
@@ -148,15 +194,17 @@
         }
         .maint-actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 12px;
             justify-content: center;
+            margin-bottom: 20px;
         }
         .maint-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
-            padding: 12px 24px;
+            padding: 12px 22px;
             border-radius: 10px;
             font-size: 14px;
             font-weight: 600;
@@ -164,6 +212,16 @@
             transition: all 0.2s ease;
             text-decoration: none;
             border: none;
+            line-height: 1.2;
+        }
+        .maint-btn-vk {
+            background: #2787f5;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(39, 135, 245, 0.35);
+        }
+        .maint-btn-vk:hover {
+            background: #1e74d9;
+            transform: translateY(-1px);
         }
         .maint-btn-primary {
             background: var(--primary, #e11d48);
@@ -173,54 +231,147 @@
             opacity: 0.92;
             transform: translateY(-1px);
         }
+        .maint-btn-secondary {
+            background: var(--bg-secondary, rgba(255, 255, 255, 0.06));
+            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+            color: var(--text-primary, #ffffff);
+        }
+        .maint-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .maint-admin-section {
+            border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+            padding-top: 16px;
+            margin-top: 10px;
+        }
+        .maint-admin-link {
+            font-size: 13px;
+            color: var(--text-tertiary, #64748b);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        .maint-admin-link:hover {
+            color: var(--text-secondary, #94a3b8);
+            text-decoration: underline;
+        }
         .maint-footer {
             margin-top: 24px;
             text-align: center;
             font-size: 12.5px;
             color: var(--text-tertiary, #64748b);
         }
+        .maint-footer a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .maint-footer a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
     <div class="maint-wrapper">
         <div class="maint-card">
-            <div class="maint-icon-wrap" aria-hidden="true">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                </svg>
-            </div>
-            
-            <div class="maint-badge">
-                <span class="maint-dot" aria-hidden="true"></span>
-                <span>Техническое обслуживание</span>
-            </div>
-
-            <h1 class="maint-title">Ведутся технические работы</h1>
-            
-            <p class="maint-text">
-                {{ maintenance_message|default('В данный момент на платформе проводятся плановые технические работы. Приём и обработка обращений временно приостановлены. Мы скоро вернёмся!') }}
-            </p>
-
-            <div class="maint-features">
-                <div class="maint-feature-item">
-                    <span class="maint-feature-icon" aria-hidden="true">✓</span>
-                    <span>Все ранее отправленные тикеты и история сохраняются в полной безопасности.</span>
-                </div>
-                <div class="maint-feature-item">
-                    <span class="maint-feature-icon" aria-hidden="true">✓</span>
-                    <span>Сервисы будут автоматически запущены сразу по завершении обновления.</span>
-                </div>
-            </div>
-
-            <div class="maint-actions">
-                <button type="button" class="maint-btn maint-btn-primary" onclick="window.location.reload();">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            {% if maintenance_active is not defined or maintenance_active %}
+                <!-- Режим: Технические работы АКТИВНЫ -->
+                <div class="maint-icon-wrap active-maint" aria-hidden="true">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
                     </svg>
-                    <span>Проверить статус</span>
-                </button>
-            </div>
+                </div>
+                
+                <div class="maint-badge badge-warning">
+                    <span class="maint-dot" aria-hidden="true"></span>
+                    <span>Техническое обслуживание</span>
+                </div>
+
+                <h1 class="maint-title">Ведутся технические работы</h1>
+                
+                <p class="maint-text">
+                    {{ maintenance_message|default('В данный момент на платформе проводятся плановые технические работы. Приём и обработка веб-обращений временно приостановлены. Мы скоро вернёмся!') }}
+                </p>
+
+                <!-- Специальный блок для обычных пользователей и студентов -->
+                <div class="maint-user-section">
+                    <div class="maint-user-section-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span>Студентам и заявителям</span>
+                    </div>
+                    <div class="maint-user-section-desc">
+                        Если вам срочно необходимо подать обращение или задать вопрос представителям студенческого совета — наш бот ВКонтакте доступен и работает в штатном режиме:
+                    </div>
+                    <div>
+                        <a href="{{ vk_bot_url|default('https://vk.com') }}" target="_blank" rel="noopener noreferrer" class="maint-btn maint-btn-vk">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M15.07 2H8.93C3.33 2 2 3.33 2 8.93v6.14C2 20.67 3.33 22 8.93 22h6.14c5.6 0 6.93-1.33 6.93-6.93V8.93C22 3.33 20.67 2 15.07 2zm3.38 13.91c-.45.69-1.27 1.34-2.14 1.34h-.47c-.82 0-1.25-.43-1.87-1.07-.63-.64-.99-.87-1.42-.87-.45 0-.58.13-.8.71-.24.63-.67.98-1.57.98-1.74 0-3.66-1.05-4.99-2.95-1.99-2.84-2.55-4.98-2.55-5.42 0-.25.1-.48.42-.48h1.66c.38 0 .52.17.67.57.8 2.33 2.14 4.38 2.7 4.38.2 0 .3-.1.3-.64v-2.38c-.06-1.06-.62-1.15-.62-1.53 0-.18.15-.36.39-.36h2.61c.36 0 .49.19.49.61v3.25c0 .35.15.48.26.48.2 0 .37-.13.73-.5 1.13-1.26 1.94-3.23 1.94-3.23.1-.23.31-.41.68-.41h1.66c.5 0 .61.26.5.61-.2 0.94-2.19 3.76-2.19 3.76-.18.3-.25.44 0 .77.18.24.77.75 1.16 1.21.73.83 1.29 1.53 1.44 2.01.16.48-.08.73-.55.73z"/>
+                            </svg>
+                            <span>Открыть бота ВКонтакте</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="maint-features">
+                    <div class="maint-feature-item">
+                        <span class="maint-feature-icon" aria-hidden="true">✓</span>
+                        <span>Все ранее отправленные тикеты и история сохраняются в полной безопасности.</span>
+                    </div>
+                    <div class="maint-feature-item">
+                        <span class="maint-feature-icon" aria-hidden="true">✓</span>
+                        <span>Сервисы сайта будут автоматически доступны сразу по завершении работ.</span>
+                    </div>
+                </div>
+
+                <div class="maint-actions">
+                    <button type="button" class="maint-btn maint-btn-secondary" id="maint-btn-check">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        <span>Проверить статус</span>
+                    </button>
+                </div>
+
+                <div class="maint-admin-section">
+                    <a href="/auth/login" class="maint-admin-link">Вход для администраторов →</a>
+                </div>
+
+            {% else %}
+                <!-- Режим: Техработы НЕ проводятся (все системы работают) -->
+                <div class="maint-icon-wrap online-status" aria-hidden="true">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                </div>
+                
+                <div class="maint-badge badge-success">
+                    <span class="maint-dot dot-success" aria-hidden="true"></span>
+                    <span>Все системы в норме</span>
+                </div>
+
+                <h1 class="maint-title">Технические работы завершены</h1>
+                
+                <p class="maint-text">
+                    Все сервисы платформы OSS Bot функционируют в штатном режиме. Приём и обработка обращений доступны без ограничений.
+                </p>
+
+                <div class="maint-actions">
+                    <a href="/" class="maint-btn maint-btn-primary">
+                        <span>Перейти на главную</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </a>
+                    <a href="/auth/login" class="maint-btn maint-btn-secondary">
+                        <span>Панель управления</span>
+                    </a>
+                </div>
+            {% endif %}
         </div>
 
         <div class="maint-footer">
@@ -229,25 +380,48 @@
     </div>
 
     <script nonce="{{ csp_nonce('script') if csp_nonce is defined else '' }}">
-        // Автоматическая фоновая проверка каждые 30 секунд
-        setInterval(function() {
-            fetch('/health', { cache: 'no-store' })
-                .then(function(res) {
-                    if (res.ok) {
-                        return res.json();
-                    }
-                })
-                .then(function(data) {
-                    // Если статус ok, пробуем обновить страницу
-                    if (data && data.status === 'ok') {
-                        // Небольшая задержка перед обновлением
-                        setTimeout(function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var checkBtn = document.getElementById('maint-btn-check');
+            if (checkBtn) {
+                checkBtn.addEventListener('click', function() {
+                    checkBtn.disabled = true;
+                    var label = checkBtn.querySelector('span');
+                    if (label) label.textContent = 'Проверка...';
+                    fetch('/health', { cache: 'no-store' })
+                        .then(function(res) {
+                            if (res.ok) {
+                                window.location.href = '/';
+                            } else {
+                                window.location.reload();
+                            }
+                        })
+                        .catch(function() {
                             window.location.reload();
-                        }, 2000);
-                    }
-                })
-                .catch(function() {});
-        }, 30000);
+                        });
+                });
+            }
+
+            // Автоматическая фоновая проверка каждые 20 секунд
+            var isMaintenance = {% if maintenance_active is not defined or maintenance_active %}true{% else %}false{% endif %};
+            if (isMaintenance) {
+                setInterval(function() {
+                    fetch('/health', { cache: 'no-store' })
+                        .then(function(res) {
+                            if (res.ok) {
+                                return res.json();
+                            }
+                        })
+                        .then(function(data) {
+                            if (data && data.status === 'ok') {
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 1500);
+                            }
+                        })
+                        .catch(function() {});
+                }, 20000);
+            }
+        });
     </script>
 </body>
 </html>

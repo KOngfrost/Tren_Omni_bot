@@ -482,7 +482,6 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if (
             path.startswith("/static/")
-            or path.startswith("/auth/")
             or path in ("/health", "/metrics", "/favicon.ico", "/maintenance")
         ):
             return await call_next(request)
@@ -490,13 +489,18 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
         from core.maintenance import get_maintenance_info, is_maintenance_mode
 
         if await is_maintenance_mode():
+            request.state.maintenance_active = True
+
+            # Маршруты авторизации доступны для возможности входа суперадминистратора
+            if path.startswith("/auth/"):
+                return await call_next(request)
+
             user = request.session.get("user") if hasattr(request, "session") else None
             is_superadmin = (
                 isinstance(user, dict)
                 and user.get("role") in ("SUPERADMIN", "superadmin")
             )
             if is_superadmin:
-                request.state.maintenance_active = True
                 return await call_next(request)
 
             accept = request.headers.get("accept", "")
@@ -521,7 +525,9 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
                 "maintenance.html",
                 {
                     "request": request,
+                    "maintenance_active": True,
                     "maintenance_message": info.get("message", ""),
+                    "vk_bot_url": getattr(settings, "vk_bot_url", "https://vk.com"),
                     "app_version": settings.APP_VERSION,
                 },
                 status_code=503,

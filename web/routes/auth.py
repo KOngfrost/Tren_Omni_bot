@@ -465,6 +465,9 @@ async def login_page(request: Request):
     Параметр `next` (внутренний путь) запоминается в сессии, чтобы после
     успешного входа вернуть пользователя на исходную страницу.
     """
+    from core.maintenance import is_maintenance_mode
+
+    maintenance_active = getattr(request.state, "maintenance_active", False) or await is_maintenance_mode()
     flash_error = request.session.pop("flash_error", None)
     remember_next(request, request.query_params.get("next"))
     return templates.TemplateResponse(
@@ -474,6 +477,7 @@ async def login_page(request: Request):
             "error": flash_error,
             "flash_error": flash_error,
             "csrf_token": get_csrf_token(request),
+            "maintenance_active": maintenance_active,
         },
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -511,6 +515,21 @@ async def login(request: Request):
             logger.warning("Неудачная попытка входа с IP %s", client_ip)
             request.session["flash_error"] = "Неверный логин или пароль"
             return RedirectResponse(url="/auth/login", status_code=302)
+
+        # Во время техработ разрешён вход только суперадминистраторам
+        from core.maintenance import is_maintenance_mode
+        if await is_maintenance_mode():
+            user_role = str(user_data.get("role", "")).upper()
+            if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
+                logger.warning(
+                    "SECURITY AUDIT: LOGIN REJECTED (MAINTENANCE_ACTIVE) | user=%s role=%s",
+                    user_data.get("username"),
+                    user_role,
+                )
+                request.session["flash_error"] = (
+                    "На платформе ведутся технические работы. Вход разрешён только для суперадминистраторов."
+                )
+                return RedirectResponse(url="/auth/login", status_code=302)
 
         # Второй фактор обязателен для всех привилегированных учёток
         if user_data.get("needs_2fa"):
@@ -686,6 +705,17 @@ async def two_factor_verify(
             "department_id": None,
             "bootstrap": True,
         }
+
+    # Проверка техработ: только SUPERADMIN может завершить вход
+    from core.maintenance import is_maintenance_mode
+    if await is_maintenance_mode():
+        user_role = str(user_data.get("role", "")).upper()
+        if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
+            await otp_store.cancel(request)
+            request.session["flash_error"] = (
+                "На платформе ведутся технические работы. Вход разрешён только для суперадминистраторов."
+            )
+            return RedirectResponse(url="/auth/login", status_code=302)
 
     # Успех: попытка 2FA полностью снимается, токен больше не принимается
     request.session.pop(otp_store.SESSION_KEY, None)

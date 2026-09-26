@@ -216,14 +216,17 @@ async def favicon_endpoint():
 @app.get("/maintenance", response_class=HTMLResponse, include_in_schema=False)
 async def maintenance_endpoint(request: Request):
     """Страница уведомления о проведении технических работ."""
-    from core.maintenance import get_maintenance_info
+    from core.maintenance import get_maintenance_info, is_maintenance_mode
 
     info = await get_maintenance_info()
+    active = await is_maintenance_mode()
     return templates.TemplateResponse(
         "maintenance.html",
         {
             "request": request,
+            "maintenance_active": active,
             "maintenance_message": info.get("message", ""),
+            "vk_bot_url": getattr(settings, "vk_bot_url", "https://vk.com"),
             "app_version": settings.APP_VERSION,
         },
     )

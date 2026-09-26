@@ -513,24 +513,62 @@ async def get_report_for_period(date_from: date, date_to: date) -> dict:
 
 
 async def is_report_already_sent(report_day: date) -> bool:
-    """Был ли отчёт за указанную дату уже отправлен (таблица report_runs)."""
-    async with async_session_maker() as session:
-        existing = await session.scalar(
-            select(ReportRun).where(ReportRun.report_date == report_day)
-        )
-        return existing is not None
+    """Был ли отчёт за указанную дату уже отправлен (Redis + DB)."""
+    # 1. Мгновенная проверка через Redis-кэш
+    try:
+        from core.redis_client import get_redis_client
+
+        redis = await get_redis_client()
+        if redis and await redis.get(f"oss_bot:report_sent:{report_day}"):
+            return True
+    except Exception:
+        pass
+
+    # 2. Проверка через постоянную таблицу report_runs в БД
+    try:
+        async with async_session_maker() as session:
+            existing = await session.scalar(
+                select(ReportRun).where(ReportRun.report_date == report_day)
+            )
+            if existing is not None:
+                # Синхронизируем состояние в Redis (TTL 48 часов)
+                try:
+                    redis = await get_redis_client()
+                    if redis:
+                        await redis.set(f"oss_bot:report_sent:{report_day}", "1", ex=86400 * 2)
+                except Exception:
+                    pass
+                return True
+    except Exception as exc:
+        logger.warning("Не удалось проверить статус отправки отчёта в БД: %s", exc)
+
+    return False
 
 
 async def mark_report_sent(report_day: date, status: str = "sent") -> None:
-    """Зафиксировать факт отправки отчёта за дату (защита от дублей, идемпотентно)."""
-    async with async_session_maker() as session:
-        existing = await session.scalar(
-            select(ReportRun).where(ReportRun.report_date == report_day)
-        )
-        if existing is not None:
-            return
-        session.add(ReportRun(report_date=report_day, status=status))
-        await session.commit()
+    """Зафиксировать факт отправки отчёта за дату (защита от дублей, идемпотентно в Redis + DB)."""
+    # 1. Мгновенная фиксация в Redis для блокировки параллельных/повторных отправок
+    try:
+        from core.redis_client import get_redis_client
+
+        redis = await get_redis_client()
+        if redis:
+            await redis.set(f"oss_bot:report_sent:{report_day}", "1", ex=86400 * 2)
+    except Exception as exc:
+        logger.warning("Не удалось записать статус отчёта в Redis: %s", exc)
+
+    # 2. Персистентная запись в PostgreSQL
+    try:
+        async with async_session_maker() as session:
+            existing = await session.scalar(
+                select(ReportRun).where(ReportRun.report_date == report_day)
+            )
+            if existing is not None:
+                return
+            session.add(ReportRun(report_date=report_day, status=status))
+            await session.commit()
+    except Exception as exc:
+        logger.error("Не удалось зафиксировать ReportRun в БД: %s", exc)
 
 
 async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bool:
@@ -552,15 +590,39 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bo
 
     # Отправка в VK — отдельный try/except
     vk_failed = False
+    sent_any_vk = False
     email_configured = bool(settings.SMTP_HOST and settings.REPORT_EMAILS)
     delivery_configured = bool(admin_vk_ids or email_configured)
     if not delivery_configured:
         logger.error("Отчёт не отправлен: не настроен ни один канал доставки")
         return False
 
+    from core.redis_client import get_redis_client
+
     for admin_vk_id in admin_vk_ids:
+        # Проверяем дедупликацию по конкретному администратору:
+        # если этот админ уже получил отчёт за report_day, не шлём повторно
+        recip_key = f"oss_bot:report_vk_sent:{report_day}:{admin_vk_id}"
+        redis = None
+        try:
+            redis = await get_redis_client()
+            if redis and await redis.get(recip_key):
+                logger.info(
+                    "Отчёт за %s уже был отправлен VK-администратору %s ранее — пропуск",
+                    report_day,
+                    admin_vk_id,
+                )
+                sent_any_vk = True
+                continue
+        except Exception:
+            redis = None
+
         try:
             await send_report_to_vk(api, admin_vk_id, report_bytes, filename)
+            sent_any_vk = True
+            if redis:
+                with contextlib.suppress(Exception):
+                    await redis.set(recip_key, "1", ex=86400 * 2)
         except Exception:
             logger.exception("Не удалось отправить отчёт в VK администратору %s", admin_vk_id)
             vk_failed = True
@@ -574,15 +636,26 @@ async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bo
             logger.exception("Не удалось отправить отчёт по email")
             email_failed = True
 
-    if not vk_failed and not email_failed:
-        await mark_report_sent(report_day)
-        logger.info("Ежедневный отчёт за %s отправлен", report_day)
+    # Если отчёт был успешно доставлен хотя бы одному получателю или в один канал:
+    # фиксируем отправку немедленно, чтобы предотвратить циклический спам
+    if sent_any_vk or (email_configured and not email_failed):
+        final_status = "sent" if not (vk_failed or email_failed) else "partial"
+        await mark_report_sent(report_day, status=final_status)
+        logger.info(
+            "Ежедневный отчёт за %s зафиксирован со статусом '%s'",
+            report_day,
+            final_status,
+        )
         return True
+
     return False
 
 
 async def _report_loop(api) -> None:
     tz = get_app_tz()
+    retry_count = 0
+    max_retries = 3
+
     while True:
         try:
             now = datetime.now(tz)
@@ -600,13 +673,29 @@ async def _report_loop(api) -> None:
                 admin_ids = await get_superadmin_vk_ids()
                 success = await _run_report(api, admin_ids, report_dt)
                 if not success:
-                    # При сбое доставки повторяем попытку через 5 минут
-                    logger.warning(
-                        "Сбой доставки отчёта за %s. Повторная попытка через 300 секунд...",
-                        yesterday,
-                    )
-                    await asyncio.sleep(300)
-                    continue
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        logger.error(
+                            "Сбой доставки отчёта за %s: исчерпано максимальное число попыток (%s). "
+                            "Отчёт фиксируется как завершённый для предотвращения спама.",
+                            yesterday,
+                            max_retries,
+                        )
+                        await mark_report_sent(yesterday, status="failed")
+                        retry_count = 0
+                    else:
+                        retry_delay = 300 * retry_count
+                        logger.warning(
+                            "Сбой доставки отчёта за %s (попытка %s/%s). Повтор через %s сек...",
+                            yesterday,
+                            retry_count,
+                            max_retries,
+                            retry_delay,
+                        )
+                        await asyncio.sleep(retry_delay)
+                        continue
+                else:
+                    retry_count = 0
 
             # Отчёт за вчера отправлен или время отчёта ещё не наступило —
             # спим до следующего планового времени (порциями не более часа)

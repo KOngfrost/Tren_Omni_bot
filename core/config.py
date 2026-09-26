@@ -137,6 +137,16 @@ class Settings(BaseSettings):
     REPORT_TIME: str = "09:00"
     APP_TIMEZONE: str = "Europe/Moscow"
     ALLOW_DB_CREATE: bool = False
+    VK_GROUP_URL: str = Field(
+        default="",
+        validation_alias=AliasChoices("VK_GROUP_URL", "VK_COMMUNITY_URL", "VK_BOT_URL"),
+    )
+
+    @property
+    def vk_bot_url(self) -> str:
+        if self.VK_GROUP_URL:
+            return self.VK_GROUP_URL
+        return "https://vk.com"
 
     # Security & Web Admin
     SESSION_SECRET_KEY: str = ""
