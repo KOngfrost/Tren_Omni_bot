@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if maintenance_active is defined and not maintenance_active %}Сервисы работают — OSS Bot{% else %}Технические работы — OSS Bot{% endif %}</title>
-    <meta name="description" content="{% if maintenance_active is defined and not maintenance_active %}Все сервисы платформы OSS Bot работают в штатном режиме.{% else %}На платформе OSS Bot ведутся плановые технические работы. Приём и обработка веб-обращений временно приостановлены.{% endif %}">
+    <meta name="description" content="{% if maintenance_active is defined and not maintenance_active %}Все сервисы платформы OSS Bot работают в штатном режиме.{% else %}На платформе OSS Bot проводятся плановые технические работы. Панель управления временно переведена в режим обслуживания.{% endif %}">
     
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
@@ -29,12 +29,69 @@
                 }
                 if (theme === 'light' || theme === 'dark') {
                     document.documentElement.setAttribute('data-theme', theme);
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'dark');
                 }
             } catch (e) {}
         })();
     </script>
     <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
     <style>
+        :root, html[data-theme="dark"] {
+            --m-bg: #08080c;
+            --m-bg-gradient: radial-gradient(circle at 18% 15%, rgba(255, 77, 157, 0.16) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(214, 93, 177, 0.12) 0%, transparent 45%), #08080c;
+            --m-card: rgba(18, 18, 23, 0.88);
+            --m-card-border: rgba(255, 255, 255, 0.08);
+            --m-text-primary: #ffffff;
+            --m-text-secondary: #b8b8c8;
+            --m-text-tertiary: #7d7d8f;
+            --m-primary: #ff4d9d;
+            --m-primary-hover: #ff70b2;
+            --m-primary-gradient: linear-gradient(135deg, #ff5ea6 0%, #ea2679 100%);
+            --m-primary-soft: rgba(255, 77, 157, 0.14);
+            --m-primary-border: rgba(255, 77, 157, 0.35);
+            --m-primary-glow: 0 0 20px rgba(255, 77, 157, 0.35);
+            --m-sec-btn-bg: #1a1a23;
+            --m-sec-btn-border: #323242;
+            --m-sec-btn-hover: #242431;
+            --m-feature-bg: rgba(26, 26, 35, 0.65);
+            --m-feature-border: rgba(255, 255, 255, 0.06);
+            --m-card-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.12);
+        }
+
+        html[data-theme="light"] {
+            --m-bg: #fcf9fa;
+            --m-bg-gradient: radial-gradient(circle at 10% 10%, rgba(244, 114, 182, 0.12) 0%, transparent 40%), radial-gradient(circle at 90% 85%, rgba(251, 113, 133, 0.08) 0%, transparent 45%), #fcf9fa;
+            --m-card: rgba(255, 255, 255, 0.95);
+            --m-card-border: rgba(217, 68, 116, 0.15);
+            --m-text-primary: #1f141b;
+            --m-text-secondary: #68525f;
+            --m-text-tertiary: #9c8392;
+            --m-primary: #d94474;
+            --m-primary-hover: #c43362;
+            --m-primary-gradient: linear-gradient(135deg, #e85584 0%, #cc3363 100%);
+            --m-primary-soft: rgba(217, 68, 116, 0.10);
+            --m-primary-border: rgba(217, 68, 116, 0.25);
+            --m-primary-glow: 0 4px 16px rgba(217, 68, 116, 0.25);
+            --m-sec-btn-bg: #f8f3f6;
+            --m-sec-btn-border: rgba(217, 68, 116, 0.20);
+            --m-sec-btn-hover: #f2e9ef;
+            --m-feature-bg: #f8f3f6;
+            --m-feature-border: rgba(217, 68, 116, 0.12);
+            --m-card-shadow: 0 16px 40px rgba(217, 68, 116, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--m-bg);
+            background-image: var(--m-bg-gradient);
+            background-attachment: fixed;
+            color: var(--m-text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
         .maint-wrapper {
             min-height: 100vh;
             display: flex;
@@ -43,244 +100,272 @@
             justify-content: center;
             padding: 24px;
             box-sizing: border-box;
-            background: var(--bg-primary, #0f1117);
         }
+
         .maint-card {
             width: 100%;
-            max-width: 560px;
-            background: var(--bg-card, rgba(26, 29, 39, 0.85));
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            border-radius: 20px;
-            padding: 40px 32px;
+            max-width: 520px;
+            background: var(--m-card);
+            border: 1px solid var(--m-card-border);
+            border-radius: 24px;
+            padding: 32px 32px 36px;
             text-align: center;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            box-shadow: var(--m-card-shadow);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             animation: fadeIn 0.4s ease-out;
+            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
         }
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(12px); }
+            from { opacity: 0; transform: translateY(14px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        .maint-top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .maint-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .maint-monogram {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--m-primary-gradient);
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(255, 77, 157, 0.3);
+        }
+
+        .maint-brand-name {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--m-text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        .maint-theme-btn {
+            background: var(--m-sec-btn-bg);
+            border: 1px solid var(--m-sec-btn-border);
+            color: var(--m-text-secondary);
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .maint-theme-btn:hover {
+            color: var(--m-primary);
+            border-color: var(--m-primary-border);
+            transform: scale(1.05);
+        }
+
         .maint-icon-wrap {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 20px;
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 18px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
+            background: var(--m-primary-soft);
+            border: 1px solid var(--m-primary-border);
+            box-shadow: var(--m-primary-glow);
         }
-        .maint-icon-wrap.active-maint {
-            background: rgba(245, 158, 11, 0.12);
-            border: 1px solid rgba(245, 158, 11, 0.25);
-        }
-        .maint-icon-wrap.active-maint svg {
-            color: #f59e0b;
+
+        .maint-icon-wrap svg {
+            color: var(--m-primary);
             animation: wrenchPulse 3s ease-in-out infinite;
         }
-        .maint-icon-wrap.online-status {
-            background: rgba(16, 185, 129, 0.12);
-            border: 1px solid rgba(16, 185, 129, 0.25);
-        }
+
         .maint-icon-wrap.online-status svg {
-            color: #10b981;
+            animation: none;
         }
+
         @keyframes wrenchPulse {
             0%, 100% { transform: scale(1) rotate(0deg); }
-            50% { transform: scale(1.08) rotate(6deg); }
+            50% { transform: scale(1.06) rotate(6deg); }
         }
+
         .maint-badge {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 7px;
             padding: 5px 14px;
             border-radius: 9999px;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             margin-bottom: 16px;
+            background: var(--m-primary-soft);
+            color: var(--m-primary);
+            border: 1px solid var(--m-primary-border);
         }
-        .maint-badge.badge-warning {
-            background: rgba(245, 158, 11, 0.15);
-            color: #f59e0b;
-            border: 1px solid rgba(245, 158, 11, 0.3);
-        }
-        .maint-badge.badge-success {
-            background: rgba(16, 185, 129, 0.15);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
+
         .maint-dot {
             width: 7px;
             height: 7px;
             border-radius: 50%;
-            background: #f59e0b;
-            box-shadow: 0 0 8px #f59e0b;
+            background: var(--m-primary);
+            box-shadow: 0 0 8px var(--m-primary);
             animation: pulseDot 2s infinite;
         }
-        .maint-dot.dot-success {
-            background: #10b981;
-            box-shadow: 0 0 8px #10b981;
+
+        .maint-dot.dot-online {
             animation: none;
         }
+
         @keyframes pulseDot {
             0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
+            50% { opacity: 0.35; transform: scale(0.8); }
         }
+
         .maint-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 800;
-            color: var(--text-primary, #ffffff);
-            margin: 0 0 12px;
-            letter-spacing: -0.5px;
+            color: var(--m-text-primary);
+            margin: 0 0 10px;
+            letter-spacing: -0.4px;
         }
+
         .maint-text {
-            font-size: 14.5px;
+            font-size: 14px;
             line-height: 1.6;
-            color: var(--text-secondary, #94a3b8);
+            color: var(--m-text-secondary);
             margin: 0 0 24px;
         }
-        .maint-user-section {
-            background: rgba(37, 99, 235, 0.08);
-            border: 1px solid rgba(37, 99, 235, 0.2);
-            border-radius: 14px;
-            padding: 18px 20px;
-            text-align: left;
-            margin-bottom: 24px;
-        }
-        .maint-user-section-title {
-            font-size: 13.5px;
-            font-weight: 700;
-            color: #3b82f6;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .maint-user-section-desc {
-            font-size: 13.5px;
-            line-height: 1.55;
-            color: var(--text-secondary, #94a3b8);
-            margin-bottom: 14px;
-        }
+
         .maint-features {
-            background: var(--bg-secondary, rgba(15, 23, 42, 0.5));
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-            border-radius: 12px;
-            padding: 16px;
+            background: var(--m-feature-bg);
+            border: 1px solid var(--m-feature-border);
+            border-radius: 14px;
+            padding: 16px 18px;
             text-align: left;
             margin-bottom: 24px;
-            font-size: 13.5px;
-            color: var(--text-secondary, #94a3b8);
+            font-size: 13px;
+            color: var(--m-text-secondary);
         }
+
         .maint-feature-item {
             display: flex;
             align-items: flex-start;
             gap: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
+
         .maint-feature-item:last-child {
             margin-bottom: 0;
         }
+
         .maint-feature-icon {
-            color: var(--success, #10b981);
+            color: var(--m-primary);
             font-size: 14px;
+            font-weight: 700;
             line-height: 1.3;
         }
+
         .maint-actions {
             display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
+            flex-direction: column;
+            gap: 10px;
             justify-content: center;
-            margin-bottom: 20px;
         }
+
+        @media (min-width: 480px) {
+            .maint-actions {
+                flex-direction: row;
+            }
+        }
+
         .maint-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
             padding: 12px 22px;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
             text-decoration: none;
             border: none;
             line-height: 1.2;
         }
-        .maint-btn-vk {
-            background: #2787f5;
-            color: #ffffff;
-            box-shadow: 0 4px 14px rgba(39, 135, 245, 0.35);
-        }
-        .maint-btn-vk:hover {
-            background: #1e74d9;
-            transform: translateY(-1px);
-        }
+
         .maint-btn-primary {
-            background: var(--primary, #e11d48);
+            background: var(--m-primary-gradient);
             color: #ffffff;
+            box-shadow: 0 4px 16px rgba(255, 77, 157, 0.32);
         }
+
         .maint-btn-primary:hover {
-            opacity: 0.92;
+            opacity: 0.94;
             transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(255, 77, 157, 0.42);
         }
+
         .maint-btn-secondary {
-            background: var(--bg-secondary, rgba(255, 255, 255, 0.06));
-            border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-            color: var(--text-primary, #ffffff);
+            background: var(--m-sec-btn-bg);
+            border: 1px solid var(--m-sec-btn-border);
+            color: var(--m-text-primary);
         }
+
         .maint-btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--m-sec-btn-hover);
+            border-color: var(--m-primary-border);
         }
-        .maint-admin-section {
-            border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-            padding-top: 16px;
-            margin-top: 10px;
-        }
-        .maint-admin-link {
-            font-size: 13px;
-            color: var(--text-tertiary, #64748b);
-            text-decoration: none;
-            transition: color 0.2s ease;
-        }
-        .maint-admin-link:hover {
-            color: var(--text-secondary, #94a3b8);
-            text-decoration: underline;
-        }
+
         .maint-footer {
             margin-top: 24px;
             text-align: center;
-            font-size: 12.5px;
-            color: var(--text-tertiary, #64748b);
-        }
-        .maint-footer a {
-            color: inherit;
-            text-decoration: none;
-        }
-        .maint-footer a:hover {
-            text-decoration: underline;
+            font-size: 12px;
+            color: var(--m-text-tertiary);
         }
     </style>
 </head>
 <body>
     <div class="maint-wrapper">
         <div class="maint-card">
+            <!-- Верхняя строка: бренд и переключатель темы -->
+            <div class="maint-top-row">
+                <div class="maint-brand">
+                    <div class="maint-monogram" role="img" aria-label="OSS Bot">OB</div>
+                    <span class="maint-brand-name">OSS Bot</span>
+                </div>
+                <button type="button" class="maint-theme-btn" id="maint-theme-btn" aria-label="Сменить тему оформления" title="Сменить тему">
+                    <span class="theme-icon" aria-hidden="true"></span>
+                </button>
+            </div>
+
             {% if maintenance_active is not defined or maintenance_active %}
                 <!-- Режим: Технические работы АКТИВНЫ -->
-                <div class="maint-icon-wrap active-maint" aria-hidden="true">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="maint-icon-wrap" aria-hidden="true">
+                    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
                     </svg>
                 </div>
                 
-                <div class="maint-badge badge-warning">
+                <div class="maint-badge">
                     <span class="maint-dot" aria-hidden="true"></span>
                     <span>Техническое обслуживание</span>
                 </div>
@@ -288,46 +373,30 @@
                 <h1 class="maint-title">Ведутся технические работы</h1>
                 
                 <p class="maint-text">
-                    {{ maintenance_message|default('В данный момент на платформе проводятся плановые технические работы. Приём и обработка веб-обращений временно приостановлены. Мы скоро вернёмся!') }}
+                    {{ maintenance_message|default('На платформе проводятся плановые технические работы. Панель управления временно переведена в режим обслуживания. Доступ открыт для суперадминистраторов.') }}
                 </p>
-
-                <!-- Специальный блок для обычных пользователей и студентов -->
-                <div class="maint-user-section">
-                    <div class="maint-user-section-title">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="16" x2="12" y2="12"></line>
-                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                        </svg>
-                        <span>Студентам и заявителям</span>
-                    </div>
-                    <div class="maint-user-section-desc">
-                        Если вам срочно необходимо подать обращение или задать вопрос представителям студенческого совета — наш бот ВКонтакте доступен и работает в штатном режиме:
-                    </div>
-                    <div>
-                        <a href="{{ vk_bot_url|default('https://vk.com') }}" target="_blank" rel="noopener noreferrer" class="maint-btn maint-btn-vk">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                <path d="M15.07 2H8.93C3.33 2 2 3.33 2 8.93v6.14C2 20.67 3.33 22 8.93 22h6.14c5.6 0 6.93-1.33 6.93-6.93V8.93C22 3.33 20.67 2 15.07 2zm3.38 13.91c-.45.69-1.27 1.34-2.14 1.34h-.47c-.82 0-1.25-.43-1.87-1.07-.63-.64-.99-.87-1.42-.87-.45 0-.58.13-.8.71-.24.63-.67.98-1.57.98-1.74 0-3.66-1.05-4.99-2.95-1.99-2.84-2.55-4.98-2.55-5.42 0-.25.1-.48.42-.48h1.66c.38 0 .52.17.67.57.8 2.33 2.14 4.38 2.7 4.38.2 0 .3-.1.3-.64v-2.38c-.06-1.06-.62-1.15-.62-1.53 0-.18.15-.36.39-.36h2.61c.36 0 .49.19.49.61v3.25c0 .35.15.48.26.48.2 0 .37-.13.73-.5 1.13-1.26 1.94-3.23 1.94-3.23.1-.23.31-.41.68-.41h1.66c.5 0 .61.26.5.61-.2 0.94-2.19 3.76-2.19 3.76-.18.3-.25.44 0 .77.18.24.77.75 1.16 1.21.73.83 1.29 1.53 1.44 2.01.16.48-.08.73-.55.73z"/>
-                            </svg>
-                            <span>Открыть бота ВКонтакте</span>
-                        </a>
-                    </div>
-                </div>
 
                 <div class="maint-features">
                     <div class="maint-feature-item">
                         <span class="maint-feature-icon" aria-hidden="true">✓</span>
-                        <span>Все ранее отправленные тикеты и история сохраняются в полной безопасности.</span>
+                        <span>Все тикеты, настройки отделов и журнал аудита сохранены в безопасности.</span>
                     </div>
                     <div class="maint-feature-item">
                         <span class="maint-feature-icon" aria-hidden="true">✓</span>
-                        <span>Сервисы сайта будут автоматически доступны сразу по завершении работ.</span>
+                        <span>Суперадминистраторы могут войти в систему для проведения работ.</span>
                     </div>
                 </div>
 
                 <div class="maint-actions">
+                    <a href="/auth/login" class="maint-btn maint-btn-primary">
+                        <span>Войти в систему</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </a>
                     <button type="button" class="maint-btn maint-btn-secondary" id="maint-btn-check">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <polyline points="23 4 23 10 17 10"></polyline>
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                         </svg>
@@ -335,40 +404,36 @@
                     </button>
                 </div>
 
-                <div class="maint-admin-section">
-                    <a href="/auth/login" class="maint-admin-link">Вход для администраторов →</a>
-                </div>
-
             {% else %}
                 <!-- Режим: Техработы НЕ проводятся (все системы работают) -->
                 <div class="maint-icon-wrap online-status" aria-hidden="true">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                         <polyline points="22 4 12 14.01 9 11.01"></polyline>
                     </svg>
                 </div>
                 
-                <div class="maint-badge badge-success">
-                    <span class="maint-dot dot-success" aria-hidden="true"></span>
+                <div class="maint-badge">
+                    <span class="maint-dot dot-online" aria-hidden="true"></span>
                     <span>Все системы в норме</span>
                 </div>
 
                 <h1 class="maint-title">Технические работы завершены</h1>
                 
                 <p class="maint-text">
-                    Все сервисы платформы OSS Bot функционируют в штатном режиме. Приём и обработка обращений доступны без ограничений.
+                    Все сервисы платформы функционируют в штатном режиме. Панель управления полностью доступна.
                 </p>
 
                 <div class="maint-actions">
-                    <a href="/" class="maint-btn maint-btn-primary">
-                        <span>Перейти на главную</span>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <a href="/auth/login" class="maint-btn maint-btn-primary">
+                        <span>Панель управления</span>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                             <polyline points="12 5 19 12 12 19"></polyline>
                         </svg>
                     </a>
-                    <a href="/auth/login" class="maint-btn maint-btn-secondary">
-                        <span>Панель управления</span>
+                    <a href="/" class="maint-btn maint-btn-secondary">
+                        <span>На главную</span>
                     </a>
                 </div>
             {% endif %}
@@ -381,6 +446,35 @@
 
     <script nonce="{{ csp_nonce('script') if csp_nonce is defined else '' }}">
         document.addEventListener('DOMContentLoaded', function() {
+            // Переключатель темы (Dark / Light)
+            var themeBtn = document.getElementById('maint-theme-btn');
+            function renderIcon(theme) {
+                var icon = document.querySelector('.theme-icon');
+                if (!icon) return;
+                if (theme === 'light') {
+                    icon.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+                } else {
+                    icon.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+                }
+            }
+
+            var initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            renderIcon(initialTheme);
+
+            if (themeBtn) {
+                themeBtn.addEventListener('click', function() {
+                    var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+                    var next = cur === 'light' ? 'dark' : 'light';
+                    document.documentElement.setAttribute('data-theme', next);
+                    try {
+                        localStorage.setItem('app_theme', next);
+                        document.cookie = 'app_theme=' + next + '; path=/; max-age=31536000; SameSite=Lax';
+                    } catch (e) {}
+                    renderIcon(next);
+                });
+            }
+
+            // Кнопка проверки статуса
             var checkBtn = document.getElementById('maint-btn-check');
             if (checkBtn) {
                 checkBtn.addEventListener('click', function() {
@@ -401,7 +495,7 @@
                 });
             }
 
-            // Автоматическая фоновая проверка каждые 20 секунд
+            // Автоматическая фоновая проверка каждые 20 секунд во время техработ
             var isMaintenance = {% if maintenance_active is not defined or maintenance_active %}true{% else %}false{% endif %};
             if (isMaintenance) {
                 setInterval(function() {
