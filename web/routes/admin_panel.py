@@ -8,6 +8,7 @@
 - Назначение суперадминов: только действующий суперадмин
 """
 
+from datetime import datetime, timedelta, timezone
 import logging
 import secrets
 
@@ -75,7 +76,11 @@ async def admins_page(request: Request, user=Depends(require_auth)):
                     Admin.id,
                 )
             )
-            # Загружаем также тестовых веб-пользователей без привязки к VK ID (для QA)
+            if not is_super:
+                admins_stmt = admins_stmt.where(Admin.department_id == dept_id)
+            admins = list((await session.execute(admins_stmt)).scalars().all())
+
+            # Загружаем также веб-пользователей без привязки к VK ID (временные / QA)
             qa_stmt = (
                 select(WebUser)
                 .options(selectinload(WebUser.department))
@@ -110,26 +115,30 @@ async def admins_page(request: Request, user=Depends(require_auth)):
 
 @router.post("/qa")
 async def add_qa_admin(request: Request, user=Depends(require_auth)):
-    """Создание тестового QA-администратора без VK ID."""
+    """Создание тестового QA-администратора без VK ID (обратная совместимость)."""
+    return await add_admin(request, user)
+
+
+@router.post("/")
+async def add_admin(request: Request, user=Depends(require_auth)):
+    """Добавление нового администратора (с VK ID или временного/QA с настраиваемым сроком)."""
     await require_crud_rate_limit(request)
     form = await request.form()
 
+    # Определение типа: vk или temp (qa)
+    admin_type = str(form.get("admin_type", "vk")).strip().lower()
+    # Если путь запроса был /qa, считаем admin_type = "temp"
+    if request.url.path.rstrip("/").endswith("/qa"):
+        admin_type = "temp"
+
     role_str = str(form.get("role", "admin")).strip().lower()
-    if role_str == "superadmin" and not is_superadmin(user):
-        request.session["flash_error"] = "Только суперадмин может создавать тестового суперадмина"
+    if role_str not in ("admin", "superadmin"):
+        request.session["flash_error"] = "Неизвестная роль администратора"
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
-    username = sanitize_html(str(form.get("username", "")).strip())
-    if not username:
-        username = f"qa_test_{secrets.token_hex(4)}"
-    elif not username.startswith("qa_") and not username.startswith("test_"):
-        username = f"qa_{username}"
-
-    password = str(form.get("password", "")).strip()
-    if not password:
-        password = secrets.token_urlsafe(12)
-    elif len(password) < 8:
-        request.session["flash_error"] = "Пароль должен быть не короче 8 символов"
+    allowed_roles = _check_role_permissions(user, role_str)
+    if allowed_roles is not None:
+        request.session["flash_error"] = allowed_roles
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     raw_dept_id = form.get("department_id")
@@ -137,100 +146,105 @@ async def add_qa_admin(request: Request, user=Depends(require_auth)):
     if not is_superadmin(user):
         dept_id = user_get_department_id(user)
 
+    username = sanitize_html(str(form.get("username", "")).strip())
+    password = str(form.get("password", "")).strip()
+    if password and len(password) < 8:
+        request.session["flash_error"] = "Пароль должен быть не короче 8 символов"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
     web_role = WebRole.SUPERADMIN if role_str == "superadmin" else WebRole.DEPARTMENT_ADMIN
 
+    # Расчёт срока действия для временного администратора
+    expires_at = None
+    if admin_type == "temp":
+        preset = str(form.get("duration_preset", "24")).strip()
+        try:
+            if preset == "custom":
+                custom_hours = int(form.get("custom_hours", 0))
+                if custom_hours < 1:
+                    request.session["flash_error"] = "Количество часов должно быть положительным числом"
+                    return RedirectResponse(url="/admin/admins/", status_code=302)
+                hours = custom_hours
+            else:
+                hours = int(preset)
+            if hours > 0:
+                expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
+        except (ValueError, TypeError):
+            request.session["flash_error"] = "Некорректное значение срока действия"
+            return RedirectResponse(url="/admin/admins/", status_code=302)
+
     try:
         async with async_session_maker() as session:
-            existing = await session.scalar(select(WebUser).where(WebUser.username == username))
-            if existing:
-                request.session["flash_error"] = f"Логин '{username}' уже занят"
-                return RedirectResponse(url="/admin/admins/", status_code=302)
+            if admin_type == "temp":
+                if not username:
+                    username = f"qa_{secrets.token_hex(4)}"
+                if not password:
+                    password = secrets.token_urlsafe(12)
 
-            qa_web_user = WebUser(
-                username=username,
-                password_hash=hash_password(password),
-                role=web_role,
-                department_id=dept_id,
-                admin_id=None,
-                is_active=True,
-            )
-            session.add(qa_web_user)
-            await session.commit()
-    except Exception:
-        logger.exception("Не удалось создать QA-администратора")
-        request.session["flash_error"] = "Не удалось сохранить QA-пользователя. Попробуйте позже."
+                existing = await session.scalar(select(WebUser).where(WebUser.username == username))
+                if existing:
+                    request.session["flash_error"] = f"Логин '{username}' уже занят"
+                    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+                web_user = WebUser(
+                    username=username,
+                    password_hash=hash_password(password),
+                    role=web_role,
+                    department_id=dept_id,
+                    admin_id=None,
+                    is_active=True,
+                    expires_at=expires_at,
+                )
+                session.add(web_user)
+                await session.commit()
+
+                if expires_at:
+                    duration_str = f"действует до {expires_at.strftime('%d.%m.%Y %H:%M UTC')}"
+                else:
+                    duration_str = "бессрочный доступ"
+                request.session["flash_success"] = f"Временный/QA администратор '{username}' успешно создан ({duration_str})."
+                request.session["created_credentials"] = {"username": username, "password": password}
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+            else:
+                # Постоянный администратор с VK ID
+                try:
+                    vk_id = _parse_vk_id(form)
+                except ValueError:
+                    request.session["flash_error"] = "VK ID должен быть числом"
+                    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+                full_name = sanitize_html(str(form.get("full_name", "")).strip())
+                if not username:
+                    username = f"dept_admin_{vk_id}"
+                if not password:
+                    password = secrets.token_urlsafe(12)
+
+                existing = await session.scalar(select(WebUser).where(WebUser.username == username))
+                if existing:
+                    request.session["flash_error"] = f"Логин '{username}' уже занят"
+                    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+                await _create_admin_records(
+                    session=session,
+                    vk_id=vk_id,
+                    full_name=full_name,
+                    department_id_raw=str(dept_id) if dept_id is not None else None,
+                    admin_department_id=user_get_department_id(user),
+                    user_is_super=is_superadmin(user),
+                    role=role_str,
+                    username=username,
+                    password_hash=hash_password(password),
+                )
+                request.session["flash_success"] = "Администратор успешно добавлен"
+                request.session["created_credentials"] = {"username": username, "password": password}
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+    except ValueError as e:
+        request.session["flash_error"] = str(e)
         return RedirectResponse(url="/admin/admins/", status_code=302)
-
-    request.session["flash_success"] = f"Тестовый QA-администратор '{username}' успешно создан (без привязки к VK ID)."
-    request.session["created_credentials"] = {"username": username, "password": password}
-    return RedirectResponse(url="/admin/admins/", status_code=302)
-
-
-@router.post("/")
-async def add_admin(request: Request, user=Depends(require_auth)):
-    """Добавление нового администратора."""
-    await require_crud_rate_limit(request)
-    form = await request.form()
-
-    # === Шаг 1: Валидация входных данных ===
-    errors = _validate_add_admin_form(form)
-    if errors:
-        request.session["flash_error"] = errors
-        return RedirectResponse(url="/admin/admins/", status_code=302)
-
-    vk_id: int = _parse_vk_id(form)
-    full_name: str = sanitize_html(str(form.get("full_name", "")))
-    raw_department_id = form.get("department_id")
-    department_id_raw: str | None = (
-        str(raw_department_id) if raw_department_id is not None else None
-    )
-    role: str = str(form.get("role", "admin"))
-    username: str = sanitize_html(str(form.get("username", "")))
-    password: str = str(form.get("password", ""))
-
-    # === Шаг 2: Проверка прав и определение department_id ===
-    try:
-        async with async_session_maker() as session:
-            allowed_roles = _check_role_permissions(user, role)
-            if allowed_roles is not None:
-                request.session["flash_error"] = allowed_roles
-                return RedirectResponse(url="/admin/admins/", status_code=302)
-
-            # Генерация учётных данных
-            if not username:
-                username = f"dept_admin_{vk_id}"
-            if not password:
-                password = secrets.token_urlsafe(12)
-            if len(password) < 8:
-                request.session["flash_error"] = "Пароль должен быть не короче 8 символов"
-                return RedirectResponse(url="/admin/admins/", status_code=302)
-
-            # Проверка уникальности username
-            if await session.scalar(select(WebUser).where(WebUser.username == username)):
-                request.session["flash_error"] = "Такой логин уже занят"
-                return RedirectResponse(url="/admin/admins/", status_code=302)
-
-            # === Шаг 3: БД-логика ===
-            await _create_admin_records(
-                session=session,
-                vk_id=vk_id,
-                full_name=full_name,
-                department_id_raw=department_id_raw,
-                admin_department_id=user_get_department_id(user),
-                user_is_super=is_superadmin(user),
-                role=role,
-                username=username,
-                password_hash=hash_password(password),
-            )
     except Exception:
         logger.exception("Не удалось добавить администратора")
-        request.session["flash_error"] = "Не удалось сохранить изменения. Попробуйте позже."
+        request.session["flash_error"] = "Не удалось сохранить администратора. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
-
-    # === Шаг 4: Ответ ===
-    request.session["flash_success"] = "Администратор успешно добавлен"
-    request.session["created_credentials"] = {"username": username, "password": password}
-    return RedirectResponse(url="/admin/admins/", status_code=302)
 
 
 def _parse_vk_id(form) -> int:

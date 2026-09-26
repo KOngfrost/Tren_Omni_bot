@@ -79,7 +79,6 @@ def build_admin_keyboard() -> str:
     """Панель администратора: все действия белые, возврат в меню белый."""
     rows: list[list[tuple[str, str]]] = [
         [("Заявки администратора", "secondary"), ("Сформировать отчет", "secondary")],
-        [("Отчет по дате", "secondary"), ("Отчет за период", "secondary")],
         [("Обычное меню", "secondary")],
     ]
     return _format_keyboard(rows, one_time=False)

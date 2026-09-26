@@ -11,7 +11,6 @@
         <div class="page-desc">Управление доступом: суперадмины имеют полный доступ, администраторы — в рамках отдела</div>
     </div>
     <div class="actions">
-        <button class="btn btn-secondary" data-open-modal="modal-qa">Создать QA-админа (без VK ID)</button>
         <button class="btn btn-success" data-open-modal="modal">Добавить админа</button>
     </div>
 </div>
@@ -159,8 +158,8 @@
     {% if qa_users %}
     <div class="page-header" style="margin-top: 2rem;">
         <div>
-            <h2>QA-администраторы (без VK ID)</h2>
-            <div class="page-desc">Тестовые аккаунты веб-панели для ручного тестирования и QA</div>
+            <h2>Временные и QA-администраторы (веб-доступ)</h2>
+            <div class="page-desc">Аккаунты веб-панели без привязки к VK ID (для тестирования или временного доступа)</div>
         </div>
     </div>
     <div class="admins-grid">
@@ -174,7 +173,18 @@
                 </div>
             </div>
             <div class="admin-card-meta">
-                <span class="badge badge-warning">QA аккаунт</span>
+                <span class="badge badge-warning">Веб-доступ</span>
+                {% if qa_user.expires_at %}
+                    {% if qa_user.is_expired %}
+                    <span class="badge badge-danger">Срок истёк</span>
+                    {% else %}
+                    <span class="badge badge-info" title="Действует до {{ qa_user.expires_at.strftime('%d.%m.%Y %H:%M') }} UTC">
+                        До {{ qa_user.expires_at.strftime('%d.%m %H:%M') }}
+                    </span>
+                    {% endif %}
+                {% else %}
+                    <span class="badge badge-secondary">Бессрочно</span>
+                {% endif %}
                 <span class="admin-dept">{{ qa_user.department.name if qa_user.department else ('Полный доступ' if qa_user.role.value == 'superadmin' else 'Без отдела') }}</span>
             </div>
             <div class="admin-card-footer">
@@ -182,7 +192,7 @@
                 <div class="admin-card-actions">
                     {% if user.role in ['SUPERADMIN', 'superadmin'] and qa_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ qa_user.id }}/delete"
-                          data-confirm="Удалить тестового QA-администратора {{ qa_user.username }}?">
+                          data-confirm="Удалить временного/QA-администратора {{ qa_user.username }}?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-danger btn-small">Удалить</button>
                     </form>
@@ -195,7 +205,7 @@
     {% endif %}
 </div>
 
-<!-- Modal -->
+<!-- Modal: Unified Add Admin -->
 <div id="modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -204,28 +214,63 @@
         </div>
         <form method="POST" action="/admin/admins/">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
             <div class="form-group">
-                <label for="vk_id">VK ID пользователя</label>
-                <input type="number" id="vk_id" name="vk_id" required 
-                       placeholder="Например: 193626953">
+                <label for="admin_type">Тип учетной записи</label>
+                <select id="admin_type" name="admin_type" onchange="toggleAdminType(this.value)">
+                    <option value="vk" selected>С привязкой к VK ID (постоянный доступ + бот)</option>
+                    <option value="temp">Временный / QA (без VK ID, настраиваемый срок)</option>
+                </select>
             </div>
+
+            <!-- Блок полей для VK-администратора -->
+            <div id="vk_fields">
+                <div class="form-group">
+                    <label for="vk_id">VK ID пользователя <span style="color:var(--danger)">*</span></label>
+                    <input type="number" id="vk_id" name="vk_id" required 
+                           placeholder="Например: 193626953">
+                </div>
+                <div class="form-group">
+                    <label for="full_name">ФИО (опционально)</label>
+                    <input type="text" id="full_name" name="full_name" 
+                           placeholder="Иванов Иван">
+                </div>
+            </div>
+
+            <!-- Блок полей для временного / QA-администратора -->
+            <div id="temp_fields" style="display: none;">
+                <div class="form-group">
+                    <label for="duration_preset">Срок действия доступа</label>
+                    <select id="duration_preset" name="duration_preset" onchange="toggleCustomDuration(this.value)">
+                        <option value="1">1 час</option>
+                        <option value="6">6 часов</option>
+                        <option value="12">12 часов</option>
+                        <option value="24" selected>24 часа (1 сутки)</option>
+                        <option value="72">3 дня (72 часа)</option>
+                        <option value="168">7 дней (1 неделя)</option>
+                        <option value="custom">Указать своё количество часов...</option>
+                        <option value="0">Бессрочно</option>
+                    </select>
+                </div>
+                <div class="form-group" id="custom_duration_field" style="display: none;">
+                    <label for="custom_hours">Количество часов <span style="color:var(--danger)">*</span></label>
+                    <input type="number" id="custom_hours" name="custom_hours" min="1" max="87600" placeholder="Например: 48">
+                </div>
+            </div>
+
+            <!-- Общие поля -->
             <div class="form-group">
                 <label for="username">Логин веб-панели</label>
-                <input type="text" id="username" name="username" autocomplete="off" placeholder="Пусто: dept_admin_{{ user.get('web_user_id', 'ID') }}">
+                <input type="text" id="username" name="username" autocomplete="off" placeholder="Пусто: сгенерировать автоматически">
             </div>
             <div class="form-group">
                 <label for="password">Пароль веб-панели</label>
-                <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" placeholder="Пусто: сгенерировать">
-            </div>
-            <div class="form-group">
-                <label for="full_name">ФИО (опционально)</label>
-                <input type="text" id="full_name" name="full_name" 
-                       placeholder="Иванов Иван">
+                <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" placeholder="Минимум 8 символов (или пусто для генерации)">
             </div>
             <div class="form-group">
                 <label for="department_id">Отдел (опционально)</label>
                 <select id="department_id" name="department_id">
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="">— Без привязки —</option>{% endif %}
+                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="">— Без привязки / Все отделы —</option>{% endif %}
                     {% for d in departments %}
                     <option value="{{ d.id }}" {% if selected_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
                     {% endfor %}
@@ -238,46 +283,36 @@
                     {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="superadmin">Суперадмин</option>{% endif %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-success btn-full">Добавить</button>
+            <button type="submit" class="btn btn-success btn-full">Создать администратора</button>
         </form>
     </div>
 </div>
 
-<!-- Modal QA -->
-<div id="modal-qa" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Создать QA-администратора (без VK ID)</h3>
-            <button class="close-btn" data-close-modal="modal-qa">&times;</button>
-        </div>
-        <form method="POST" action="/admin/admins/qa">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="form-group">
-                <label for="qa_username">Логин веб-панели</label>
-                <input type="text" id="qa_username" name="username" autocomplete="off" placeholder="Например: qa_tester (префикс qa_ добавится автоматически)">
-            </div>
-            <div class="form-group">
-                <label for="qa_password">Пароль веб-панели</label>
-                <input type="password" id="qa_password" name="password" autocomplete="new-password" minlength="8" placeholder="Минимум 8 символов (или пусто для генерации)">
-            </div>
-            <div class="form-group">
-                <label for="qa_department_id">Отдел (опционально)</label>
-                <select id="qa_department_id" name="department_id">
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="">— Без привязки / Все отделы —</option>{% endif %}
-                    {% for d in departments %}
-                    <option value="{{ d.id }}" {% if selected_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="qa_role">Роль</label>
-                <select id="qa_role" name="role" required>
-                    <option value="admin">Администратор отдела</option>
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="superadmin">Суперадмин</option>{% endif %}
-                </select>
-            </div>
-            <button type="submit" class="btn btn-secondary btn-full">Создать QA-админа</button>
-        </form>
-    </div>
-</div>
+<script>
+function toggleAdminType(val) {
+    var vkFields = document.getElementById('vk_fields');
+    var tempFields = document.getElementById('temp_fields');
+    var vkInput = document.getElementById('vk_id');
+    if (val === 'temp') {
+        if (vkFields) vkFields.style.display = 'none';
+        if (tempFields) tempFields.style.display = 'block';
+        if (vkInput) vkInput.removeAttribute('required');
+    } else {
+        if (vkFields) vkFields.style.display = 'block';
+        if (tempFields) tempFields.style.display = 'none';
+        if (vkInput) vkInput.setAttribute('required', 'required');
+    }
+}
+function toggleCustomDuration(val) {
+    var customField = document.getElementById('custom_duration_field');
+    var customInput = document.getElementById('custom_hours');
+    if (val === 'custom') {
+        if (customField) customField.style.display = 'block';
+        if (customInput) customInput.setAttribute('required', 'required');
+    } else {
+        if (customField) customField.style.display = 'none';
+        if (customInput) customInput.removeAttribute('required');
+    }
+}
+</script>
 {% endblock %}

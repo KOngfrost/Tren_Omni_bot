@@ -368,7 +368,7 @@ code {
     max-width: 1280px;
     margin: 0 auto;
     width: 100%;
-    animation: fadeIn 0.5s ease-out 0.1s both;
+    animation: fadeInSlow 0.3s ease-out;
     transition: max-width 0.3s ease, padding 0.3s ease;
 }
 
@@ -1052,6 +1052,26 @@ tbody tr:hover {
     color: var(--status-anon);
 }
 
+.badge-warning {
+    background: var(--warning-soft, rgba(234, 179, 8, 0.15));
+    color: var(--warning, #eab308);
+}
+
+.badge-danger {
+    background: var(--danger-soft, rgba(239, 68, 68, 0.15));
+    color: var(--danger, #ef4444);
+}
+
+.badge-secondary {
+    background: var(--bg-surface-elevated, #2a2e39);
+    color: var(--text-secondary, #94a3b8);
+}
+
+.badge-info {
+    background: var(--primary-soft, rgba(59, 130, 246, 0.15));
+    color: var(--primary, #3b82f6);
+}
+
 /* ---------- Forms ---------- */
 .form-group {
     margin-bottom: 16px;
@@ -1196,14 +1216,22 @@ textarea::placeholder {
 /* ---------- Modal ---------- */
 .modal {
     position: fixed;
-    inset: 0;
-    background: rgba(5, 5, 8, 0.7);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(8, 8, 14, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: none;
     align-items: flex-start;
     justify-content: center;
-    padding: 5vh 16px 16px;
-    z-index: 200;
+    padding: 6vh 16px 32px;
+    z-index: 9999;
     overflow-y: auto;
+    box-sizing: border-box;
 }
 
 .modal.active {
@@ -1211,17 +1239,19 @@ textarea::placeholder {
 }
 
 .modal-content {
-    background: var(--bg-glass-card);
+    background: var(--bg-surface-elevated, var(--bg-glass-card));
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-glass);
     border-radius: var(--r-lg);
-    box-shadow: var(--shadow-lg), var(--glass-shadow);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), var(--glass-shadow);
     width: 100%;
     max-width: 580px;
     padding: 26px 28px;
     margin: auto;
-    animation: scaleIn 0.3s ease-out;
+    animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    z-index: 10000;
 }
 
 .modal-header {

@@ -228,11 +228,22 @@
 
     function openModal(id) {
         var modal = document.getElementById(id);
-        if (modal) modal.classList.add('active');
+        if (modal) {
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
     }
     function closeModal(id) {
         var modal = document.getElementById(id);
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.classList.remove('active');
+            if (!document.querySelector('.modal.active')) {
+                document.body.style.overflow = '';
+            }
+        }
     }
     window.openModal = openModal;
     window.closeModal = closeModal;
@@ -248,6 +259,9 @@
         if (closer) closeModal(closer.dataset.closeModal);
         if (event.target.classList && event.target.classList.contains('modal')) {
             event.target.classList.remove('active');
+            if (!document.querySelector('.modal.active')) {
+                document.body.style.overflow = '';
+            }
         }
         var question = event.target.closest('.faq-question');
         if (question) {
@@ -351,6 +365,7 @@
             document.querySelectorAll('.modal.active').forEach(function (modal) {
                 modal.classList.remove('active');
             });
+            document.body.style.overflow = '';
         }
     });
 

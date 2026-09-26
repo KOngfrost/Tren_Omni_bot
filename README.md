@@ -1,4 +1,4 @@
-# OSS Bot v0.8.8 🎓
+# OSS Bot v0.8.8.1 🎓
 
 [![CI](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml/badge.svg)](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -204,4 +204,4 @@ curl -s http://127.0.0.1:8000/health
 Исходный код распространяется под свободной и открытой лицензией **[MIT](LICENSE)**.  
 Вы можете свободно использовать, модифицировать и разворачивать систему в своём вузе или организации.
 
-*Проект поддерживается объединённой командой Студенческого совета университета. Версия 0.8.8.*
+*Проект поддерживается объединённой командой Студенческого совета университета. Версия 0.8.8.1.*

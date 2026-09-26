@@ -55,6 +55,8 @@ from core.commands import (
     COMMANDS_WITHOUT_DEPT,
     STUDENT_REPLY_PATTERN,
 )
+from sqlalchemy import select
+
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import PartnershipRequest, User
@@ -631,23 +633,31 @@ async def partnership_proposal_handler(message: Message):
         )
         return
 
-    async with async_session_maker() as session:
-        user = await session.scalar(select(User).where(User.vk_id == message.from_id))
-        user_name = user.full_name if user and user.full_name else f"id{message.from_id}"
-        req = PartnershipRequest(
-            vk_id=message.from_id,
-            user_name=user_name,
-            proposal_text=text,
-            status="new",
-        )
-        session.add(req)
-        await session.commit()
+    try:
+        async with async_session_maker() as session:
+            user = await session.scalar(select(User).where(User.vk_id == message.from_id))
+            user_name = user.full_name if user and user.full_name else f"id{message.from_id}"
+            req = PartnershipRequest(
+                vk_id=message.from_id,
+                user_name=user_name,
+                proposal_text=text,
+                status="new",
+            )
+            session.add(req)
+            await session.commit()
 
-    await vk_bot.state_dispenser.delete(message.from_id)
-    await message.answer(
-        "Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",
-        keyboard=await _main_keyboard_for(message.from_id),
-    )
+        await message.answer(
+            "Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+    except Exception:
+        logger.exception("Ошибка при сохранении заявки на партнёрство")
+        await message.answer(
+            "Произошла ошибка при отправке предложения. Пожалуйста, попробуйте позже.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+    finally:
+        await vk_bot.state_dispenser.delete(message.from_id)
 
 
 # Рендерер пагинации списка «Мои заявки» (ЭТАП 4.1 / B4)

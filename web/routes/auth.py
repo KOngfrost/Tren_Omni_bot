@@ -416,6 +416,10 @@ async def _authenticate(
             if not web_user.is_active:
                 verify_dummy_password(password)
                 return None
+            if web_user.expires_at is not None and web_user.expires_at <= datetime.now(UTC):
+                logger.warning("LOGIN BLOCKED: account expired for %s (expired at %s)", web_user.username, web_user.expires_at)
+                verify_dummy_password(password)
+                return None
             if not verify_password(password, web_user.password_hash):
                 return None
             web_user.last_login_at = datetime.now(UTC)
@@ -425,10 +429,16 @@ async def _authenticate(
                 web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
             )
             two_factor_on = await is_two_factor_enabled()
-            is_qa_user = web_user.username.startswith("qa_") or web_user.username.startswith("test_") or (web_user.admin is None and "qa" in web_user.username.lower())
+            is_qa_user = (
+                web_user.admin_id is None
+                or web_user.expires_at is not None
+                or web_user.username.startswith("qa_")
+                or web_user.username.startswith("test_")
+                or "qa" in web_user.username.lower()
+            )
             if two_factor_on and not vk_admin_id:
                 if is_qa_user:
-                    # Тестовый QA-администратор без VK ID: допускается прямой вход без 2FA
+                    # Временный / QA-администратор без VK ID: допускается прямой вход без 2FA
                     needs_2fa = False
                 else:
                     # Нет доверенного канала — вход блокируется до привязки VK

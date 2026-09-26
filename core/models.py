@@ -185,9 +185,19 @@ class WebUser(Base):
     is_active = mapped_column(Boolean, default=True, nullable=False)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at = mapped_column(DateTime(timezone=True), nullable=True)
 
     department: Mapped["Department | None"] = relationship("Department")
-    admin: Mapped["Admin | None"] = relationship("Admin")
+    admin: Mapped["Admin | None"] = relationship("Admin", back_populates="web_user")
+
+    @property
+    def is_expired(self) -> bool:
+        if self.expires_at is None:
+            return False
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        exp = self.expires_at if self.expires_at.tzinfo else self.expires_at.replace(tzinfo=timezone.utc)
+        return now >= exp
 
 
 class ReportRun(Base):
