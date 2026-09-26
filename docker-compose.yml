@@ -131,7 +131,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8}
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -179,7 +179,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -278,7 +278,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/backups/oss_bot:/var/backups/oss_bot
