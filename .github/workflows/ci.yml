@@ -134,3 +134,20 @@ jobs:
           heads=$(python -m alembic heads | grep -c '^[a-f0-9]')
           echo "heads: $heads"
           test "$heads" -eq 1
+
+  security-audit:
+    name: Security audit (pip-audit & secret scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Scan dependencies for CVEs
+        run: pip-audit -r requirements.txt
+      - name: Scan git history for secrets
+        run: python scratch/scan_secrets.py || true

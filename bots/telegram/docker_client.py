@@ -140,18 +140,34 @@ class ContainerInfo:
 
 
 class DockerClient:
-    """Клиент для взаимодействия с Docker Engine API через Unix сокет."""
+    """Клиент для взаимодействия с Docker Engine API через Unix сокет или Socket Proxy (TCP/HTTP)."""
 
-    def __init__(self, socket_path: str = DEFAULT_SOCKET_PATH):
+    def __init__(
+        self,
+        socket_path: str = DEFAULT_SOCKET_PATH,
+        base_url: str | None = None,
+    ):
+        docker_host = (base_url or os.environ.get("DOCKER_HOST", "")).strip()
+        if docker_host.startswith("tcp://"):
+            docker_host = "http://" + docker_host[6:]
+        self.base_url = (
+            docker_host
+            if (docker_host.startswith("http://") or docker_host.startswith("https://"))
+            else None
+        )
         self.socket_path = socket_path
         self._available: bool | None = None
 
     def is_socket_present(self) -> bool:
-        """Проверить физическое наличие сокета на диске."""
+        """Проверить физическое наличие сокета на диске или доступность через TCP/Proxy."""
+        if self.base_url:
+            return True
         return os.path.exists(self.socket_path)
 
     async def _get_client(self) -> httpx.AsyncClient:
-        """Создать httpx клиент через UDS (Unix Domain Socket)."""
+        """Создать httpx клиент через UDS (Unix Domain Socket) или TCP (Docker Socket Proxy)."""
+        if self.base_url:
+            return httpx.AsyncClient(base_url=self.base_url, timeout=120.0)
         transport = httpx.AsyncHTTPTransport(uds=self.socket_path)
         return httpx.AsyncClient(transport=transport, base_url="http://docker", timeout=120.0)
 

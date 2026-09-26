@@ -82,3 +82,49 @@ class MonitoringAndAdminUser(HttpUser):
     def view_login_page(self):
         """Открытие страницы входа."""
         self.client.get("/", name="/ [Login Page HTML]")
+
+
+class PeakLoadBurstUser(HttpUser):
+    """Имитирует резкий всплеск (spike/burst) запросов от сотен студентов одновременно.
+
+    Используется для стресс-тестирования пула подключений PgBouncer,
+    кэширования Redis, времени ответа FastAPI/Go API и устойчивости к 429/503.
+    """
+
+    # Минимальная задержка между запросами для создания пикового стресса
+    wait_time = between(0.05, 0.25)
+
+    @task(6)
+    def fast_faq_search(self):
+        """Параллельный поиск по FAQ (проверка Redis кэша и FTS в БД)."""
+        queries = ["стипендия", "деканат", "сессия", "перевод", "задолженность", "справка", "обходной лист"]
+        q = random.choice(queries)
+        self.client.get(f"/api/v1/faq?query={q}", name="/api/v1/faq [Burst Search]")
+
+    @task(4)
+    def rapid_frame_load(self):
+        """Мгновенное открытие виджета студентами при рассылке уведомления."""
+        self.client.get("/departments/frame", name="/departments/frame [Burst Frame]")
+
+    @task(2)
+    def rapid_ticket_creation(self):
+        """Массовая подача заявок при анонсах."""
+        payload = {
+            "vk_user_id": random.randint(10000000, 99999999),
+            "user_name": f"Burst Student {random.randint(1, 10000)}",
+            "department_id": random.choice([1, 2, 3]),
+            "topic": "Пиковая нагрузка: подача заявки",
+            "text": "Стресс-тест одновременной записи обращений в очередь Outbox и БД.",
+        }
+        with self.client.post(
+            "/api/v1/tickets",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            name="/api/v1/tickets [Burst Ticket Submit]",
+            catch_response=True,
+        ) as resp:
+            if resp.status_code in (200, 201, 400, 422, 429):
+                resp.success()
+            else:
+                resp.failure(f"Burst stress failed with code {resp.status_code}")
+
