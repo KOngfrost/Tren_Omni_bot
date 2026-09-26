@@ -20,8 +20,10 @@ from core.models import (
     Event,
     FAQNode,
     KnowledgeBase,
+    PartnershipRequest,
     Subscription,
     Ticket,
+    TicketStatus,
     WebUser,
 )
 from web.dependencies import get_admin_scope, require_auth, require_superadmin
@@ -351,3 +353,42 @@ async def api_delete_department(dept_id: int, request: Request, user=Depends(req
     except Exception:
         logger.exception("API: не удалось удалить отдел %s", dept_id)
         return api_error("Не удалось удалить отдел", 500)
+
+
+# ==========================================
+# API: Счётчики новых заявок и партнёрств (🔥)
+# ==========================================
+
+
+@router.get("/counters")
+async def api_get_counters(request: Request, user=Depends(require_auth)):
+    """Получить количество новых заявок и новых партнёрских предложений для текущего пользователя."""
+    new_tickets = 0
+    new_partnerships = 0
+    try:
+        async with async_session_maker() as session:
+            is_super, dept_id = await get_admin_scope(session, user)
+            scope = [Ticket.status == TicketStatus.NEW]
+            if not is_super and dept_id:
+                scope.append(Ticket.department_id == dept_id)
+
+            new_tickets = (
+                await session.scalar(select(func.count(Ticket.id)).where(*scope))
+            ) or 0
+
+            if is_super:
+                new_partnerships = (
+                    await session.scalar(
+                        select(func.count(PartnershipRequest.id)).where(
+                            PartnershipRequest.status == "new"
+                        )
+                    )
+                ) or 0
+    except Exception:
+        logger.exception("API: не удалось получить счетчики")
+        return api_error("Ошибка получения счетчиков", 500)
+
+    return api_success({
+        "new_tickets": new_tickets,
+        "new_partnerships": new_partnerships,
+    })

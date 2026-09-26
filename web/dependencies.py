@@ -80,6 +80,7 @@ async def _verify_web_user(
         "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
         "web_user_id": web_user.id,
         "department_id": web_user.department_id,
+        "admin_id": web_user.admin_id,
     }
     request.session["user"] = canonical
     return canonical

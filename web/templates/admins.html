@@ -158,22 +158,22 @@
     {% if qa_users %}
     <div class="page-header" style="margin-top: 2rem;">
         <div>
-            <h2>Временные и QA-администраторы (веб-доступ)</h2>
-            <div class="page-desc">Аккаунты веб-панели без привязки к VK ID (для тестирования или временного доступа)</div>
+            <h2>Временные администраторы</h2>
+            <div class="page-desc">Учётные записи веб-панели с настраиваемым или тестовым сроком действия</div>
         </div>
     </div>
     <div class="admins-grid">
         {% for qa_user in qa_users %}
         <div class="admin-card">
             <div class="admin-card-top">
-                <div class="admin-avatar">QA</div>
+                <div class="admin-avatar">ВА</div>
                 <div class="admin-card-top-info">
                     <div class="admin-name">{{ qa_user.username }}</div>
                     <div class="admin-vk">Без привязки к VK</div>
                 </div>
             </div>
             <div class="admin-card-meta">
-                <span class="badge badge-warning">Веб-доступ</span>
+                <span class="badge badge-warning">Временный доступ</span>
                 {% if qa_user.expires_at %}
                     {% if qa_user.is_expired %}
                     <span class="badge badge-danger">Срок истёк</span>
@@ -219,7 +219,7 @@
                 <label for="admin_type">Тип учетной записи</label>
                 <select id="admin_type" name="admin_type">
                     <option value="vk" selected>С привязкой к VK ID (постоянный доступ + бот)</option>
-                    <option value="temp">Временный / QA (без VK ID, настраиваемый срок)</option>
+                    <option value="temp">Временный (без VK ID, настраиваемый срок)</option>
                 </select>
             </div>
 

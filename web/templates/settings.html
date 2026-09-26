@@ -139,17 +139,17 @@
                     При включённой 2FA после ввода логина и пароля бот отправляет 6-значный одноразовый код администратору в VK. При отключении 2FA авторизация происходит мгновенно по логину и паролю без запроса второго фактора.
                 </div>
             </div>
-            <form method="POST" action="/settings/2fa" style="margin: 0; flex-shrink: 0;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="hidden" name="enabled" value="{{ 'false' if two_factor_enabled else 'true' }}">
-                <button type="submit" class="btn {% if two_factor_enabled %}btn-secondary{% else %}btn-primary{% endif %}" onclick="return confirm('Вы уверены, что хотите {{ 'ОТКЛЮЧИТЬ' if two_factor_enabled else 'ВКЛЮЧИТЬ' }} двухфакторную аутентификацию (2FA)?');">
-                    {% if two_factor_enabled %}
-                    Отключить 2FA
-                    {% else %}
-                    Включить 2FA
-                    {% endif %}
-                </button>
-            </form>
+                <form method="POST" action="/settings/2fa" id="formToggle2FA" style="margin: 0; flex-shrink: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="enabled" value="{{ 'false' if two_factor_enabled else 'true' }}">
+                    <button type="submit" id="btnToggle2FA" class="btn {% if two_factor_enabled %}btn-secondary{% else %}btn-primary{% endif %}" data-confirm="Вы уверены, что хотите {{ 'ОТКЛЮЧИТЬ' if two_factor_enabled else 'ВКЛЮЧИТЬ' }} двухфакторную аутентификацию (2FA)?">
+                        {% if two_factor_enabled %}
+                        Отключить 2FA
+                        {% else %}
+                        Включить 2FA
+                        {% endif %}
+                    </button>
+                </form>
         </div>
     </div>
     {% endif %}
@@ -177,8 +177,10 @@
             <div class="settings-info-item">
                 <div class="settings-info-label">Двухфакторная аутентификация (2FA)</div>
                 <div class="settings-info-value">
-                    {% if two_factor_enabled %}
+                    {% if user.admin_id and two_factor_enabled %}
                     <span style="color: var(--success); font-weight: 600;">● Активна (через VK)</span>
+                    {% elif not user.admin_id %}
+                    <span style="color: var(--text-tertiary); font-weight: 600;">○ Не привязана (аккаунт без VK ID)</span>
                     {% else %}
                     <span style="color: var(--danger); font-weight: 600;">○ Отключена (вход по паролю)</span>
                     {% endif %}
@@ -240,6 +242,16 @@
                     saveStatus.style.display = 'none';
                 }, 2500);
             }
+        }
+
+        const btnToggle2FA = document.getElementById('btnToggle2FA');
+        if (btnToggle2FA) {
+            btnToggle2FA.addEventListener('click', function(e) {
+                const msg = btnToggle2FA.getAttribute('data-confirm');
+                if (msg && !window.confirm(msg)) {
+                    e.preventDefault();
+                }
+            });
         }
     }
 

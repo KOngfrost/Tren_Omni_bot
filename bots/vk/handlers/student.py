@@ -162,18 +162,16 @@ async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, A
     start = page * PAGE_SIZE
     page_tickets = tickets[start : start + PAGE_SIZE]
 
-    # Сквозная локальная нумерация по всем заявкам (не по странице):
-    # «Подробнее #N» из любой страницы списка открывает ту же заявку.
-    user_ticket_map = {t.id: idx for idx, t in enumerate(tickets, 1) if t.id is not None}
-    local_ids = list(range(start + 1, start + 1 + len(page_tickets)))
+    # Используем реальные номера заявок t.id, чтобы номер везде (#7) совпадал
+    ticket_ids = [t.id for t in page_tickets if t.id is not None]
 
-    text = format_ticket_list(page_tickets, user_ticket_map)
+    text = format_ticket_list(page_tickets, user_ticket_map=None)
     if total_pages > 1:
         text += f"\n\n📄 Страница {page + 1} из {total_pages}"
     await message.answer(
         text,
         keyboard=build_tickets_keyboard(
-            local_ids, page=page, has_more=page + 1 < total_pages
+            ticket_ids, page=page, has_more=page + 1 < total_pages
         ),
     )
 
@@ -247,14 +245,36 @@ async def ticket_number_direct_handler(message: Message):
 
 @student_labeler.private_message(RegexRule(STUDENT_REPLY_PATTERN))
 async def ticket_reply_handler(message: Message):
-    """Единый диспетчер ответов на заявки: операторы (глобальный ID) и студенты (глобальный/локальный ID)."""
+    """Единый диспетчер ответов на заявки: автор заявки (студент) или оператор (администратор)."""
     match = re.match(STUDENT_REPLY_PATTERN, message.text or "", re.DOTALL)
     if match is None:
         return
     parsed_id = int(match.group(1))
     reply_text = match.group(2).strip()
 
-    # 1. Если отправитель — оператор с доступом к глобальной заявке #parsed_id
+    # 1. Сначала проверяем, является ли отправитель автором этой заявки (студентом)
+    # Если автор заявки отправляет «Ответ #N: ...», это ВСЕГДА вопрос или дополнение от студента!
+    user_ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
+    if user_ticket is None:
+        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
+        user_ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
+
+    if user_ticket is not None and user_ticket.id is not None:
+        result = await add_student_reply(user_ticket.id, message.from_id, reply_text)
+        if result is None:
+            await message.answer(
+                "Заявка не найдена или ответ в неё недоступен.",
+                keyboard=await _main_keyboard_for(message.from_id),
+            )
+            return
+        await message.answer(
+            f"Ваш вопрос/ответ добавлен к заявке #{user_ticket.id}.\n"
+            f"Ответственный отдел уведомлён, статус обновлён.",
+            keyboard=build_tickets_keyboard([user_ticket.id]),
+        )
+        return
+
+    # 2. Если отправитель — НЕ автор заявки, но оператор с доступом к заявке #parsed_id — это ответ оператора студенту
     if await _operator_can_access(message.from_id, parsed_id):
         ticket, delivered = await reply_to_ticket(
             ticket_id=parsed_id, admin_username=str(message.from_id), message=reply_text
@@ -268,32 +288,10 @@ async def ticket_reply_handler(message: Message):
         )
         return
 
-    # 2. Иначе обрабатываем как ответ студента:
-    # 2.1. Сначала ищем по глобальному ID
-    ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
-
-    # 2.2. Если не найдено по глобальному ID — ищем по локальному номеру
-    if ticket is None:
-        tickets = await get_user_tickets(message.from_id, include_completed=True, limit=10)
-        ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
-
-    if ticket is None or ticket.id is None:
-        await message.answer(
-            f"Заявка #{parsed_id} не найдена среди ваших заявок.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
-        return
-
-    result = await add_student_reply(ticket.id, message.from_id, reply_text)
-    if result is None:
-        await message.answer(
-            "Заявка не найдена или ответ в неё недоступен.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
-        return
+    # 3. Ни автор, ни оператор
     await message.answer(
-        f"Ответ добавлен в заявку #{ticket.id}. Администратор увидит его в переписке.",
-        keyboard=build_tickets_keyboard([ticket.id]),
+        f"Заявка #{parsed_id} не найдена среди ваших заявок.",
+        keyboard=await _main_keyboard_for(message.from_id),
     )
 
 

@@ -782,9 +782,54 @@
         }
     }
 
+    /**
+     * Счётчики уведомлений навигации (🔥) с фоновым обновлением
+     */
+    function initNavCounters() {
+        var ticketsBadge = document.getElementById('nav-badge-tickets');
+        var partBadge = document.getElementById('nav-badge-partnerships');
+        if (!ticketsBadge && !partBadge) return;
+
+        function updateCounters() {
+            fetch('/api/counters')
+                .then(function (res) {
+                    return res.ok ? res.json() : null;
+                })
+                .then(function (result) {
+                    if (!result || !result.success || !result.data) return;
+                    var data = result.data;
+                    if (ticketsBadge) {
+                        var tCount = data.new_tickets || 0;
+                        if (tCount > 0) {
+                            ticketsBadge.textContent = '🔥 ' + tCount;
+                            ticketsBadge.classList.remove('hidden');
+                        } else {
+                            ticketsBadge.classList.add('hidden');
+                        }
+                    }
+                    if (partBadge) {
+                        var pCount = data.new_partnerships || 0;
+                        if (pCount > 0) {
+                            partBadge.textContent = '🔥 ' + pCount;
+                            partBadge.classList.remove('hidden');
+                        } else {
+                            partBadge.classList.add('hidden');
+                        }
+                    }
+                })
+                .catch(function () {});
+        }
+
+        setInterval(updateCounters, 25000);
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initCookieConsent);
+        document.addEventListener('DOMContentLoaded', function () {
+            initCookieConsent();
+            initNavCounters();
+        });
     } else {
         initCookieConsent();
+        initNavCounters();
     }
 })();

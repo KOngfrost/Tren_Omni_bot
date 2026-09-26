@@ -660,28 +660,23 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
         # Добавляем сообщение в историю
         add_ticket_message(session, ticket, MessageAuthorType.USER, message, author_vk_id=vk_id)
 
-        # Если заявка закрыта — возвращаем в обработку
-        reopened = False
-        if ticket.status in COMPLETED_STATUSES:
-            old_status_value = ticket.status.value
-            ticket.status = TicketStatus.IN_PROGRESS
-            reopened = True
-            add_ticket_message(
-                session,
-                ticket,
-                MessageAuthorType.SYSTEM,
-                f"Заявка повторно открыта студентом: статус изменён с «{old_status_value}» на «В обработке»",
-            )
+        # Ответ студента переводит заявку в статус NEW (Новое / Требует ответа),
+        # чтобы администраторы видели её в очереди нерассмотренных и загорался огонёк/счётчик
+        old_status_value = ticket.status.value
+        ticket.status = TicketStatus.NEW
+        add_ticket_message(
+            session,
+            ticket,
+            MessageAuthorType.SYSTEM,
+            f"Студент направил уточняющий вопрос/ответ: статус возвращён в «Новое» для рассмотрения администратором (был «{old_status_value}»)",
+        )
 
         # Журнал
         session.add(
             Log(
                 user_id=ticket.user_id,
                 action="student_reply",
-                details=(
-                    f"Ответ в заявке #{ticket.id}"
-                    + (" (заявка повторно открыта)" if reopened else "")
-                ),
+                details=f"Студент направил ответ в заявку #{ticket.id} (статус переведён в «Новое»)",
             )
         )
 
