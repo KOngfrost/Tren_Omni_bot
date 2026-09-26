@@ -55,7 +55,7 @@ services:
         condition: service_healthy
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.22.1
+    image: edoburu/pgbouncer:latest
     container_name: oss_bot_pgbouncer
     restart: unless-stopped
     logging: *default-logging
