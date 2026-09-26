@@ -286,7 +286,7 @@ services:
       - /var/backups/oss_bot:/var/backups/oss_bot
     command: python scripts/run_tg_monitor.py
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys, os, subprocess; sys.exit(0 if os.path.exists('/var/run/docker.sock') and subprocess.run(['pgrep', '-f', 'run_tg_monitor.py']).returncode == 0 else 1)"]
+      test: ["CMD", "python", "-c", "import os, sys; ok = os.path.exists('/var/run/docker.sock') and 'run_tg_monitor.py' in open('/proc/1/cmdline').read(); sys.exit(0 if ok else 1)"]
       interval: 60s
       timeout: 10s
       retries: 3
