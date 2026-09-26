@@ -71,14 +71,19 @@ def _get_auth_user(connection) -> str | None:
 
 def _grant_to_auth_user(connection, auth_user: str) -> None:
     """Выдать минимальные права на схему и функцию роли auth_user."""
+    import re
+
     from sqlalchemy import text
 
-    # Идентификатор роли подставляется только через параметр :role —
-    # защита от SQL-инъекции, если роль задана через -x auth_user.
-    connection.execute(text("GRANT USAGE ON SCHEMA pgbouncer TO :role"), {"role": auth_user})
+    # PostgreSQL DDL (GRANT/REVOKE) не поддерживает параметризацию идентификаторов ($1).
+    # Защищаемся валидацией допустимых символов идентификатора роли и экранированием кавычками.
+    if not re.match(r"^[a-zA-Z0-9_]+$", auth_user):
+        raise ValueError(f"Недопустимое имя роли PostgreSQL: {auth_user!r}")
+
+    safe_role = f'"{auth_user}"'
+    connection.execute(text(f"GRANT USAGE ON SCHEMA pgbouncer TO {safe_role}"))
     connection.execute(
-        text("GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO :role"),
-        {"role": auth_user},
+        text(f"GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO {safe_role}")
     )
 
 
