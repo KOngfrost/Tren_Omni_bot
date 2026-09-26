@@ -311,7 +311,7 @@ services:
       - caddy_config:/config
     depends_on:
       web-admin:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   postgres_data:
