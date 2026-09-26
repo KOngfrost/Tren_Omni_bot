@@ -37,6 +37,7 @@ services:
       dockerfile: Dockerfile
     container_name: oss_bot_pgbouncer_userlist
     restart: "no"
+    user: "0:0"
     logging: *default-logging
     mem_limit: 128m
     memswap_limit: 128m

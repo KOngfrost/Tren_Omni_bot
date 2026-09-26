@@ -135,11 +135,16 @@ def fetch_verifier_from_postgres(dsn: str, user: str, *, timeout: float = 10.0) 
 
 
 def write_userlist(lines: list[str], out_path: Path) -> None:
-    """Записать userlist.txt с правами 0600 (только владелец может читать)."""
+    """Записать userlist.txt с правами для чтения PgBouncer."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    # Права выставляем явно: umask мог бы оставить файл читаемым всеми.
-    os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR)
+    # Права 0644 позволяют процессу PgBouncer (UID 70 в alpine-образе)
+    # читать файл, даже если он был сгенерирован под root.
+    os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+    try:
+        os.chown(out_path, 70, 70)
+    except (PermissionError, AttributeError):
+        pass
 
 
 def _build_line(user: str, verifier: str) -> str:
