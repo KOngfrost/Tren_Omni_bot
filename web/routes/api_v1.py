@@ -481,16 +481,28 @@ async def v1_delete_department(
 )
 async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
     """Получить системные метрики и статистику заявок (с кэшированием TTL)."""
-    cached = await cache_get("v1_system_stats")
+    async with async_session_maker() as session:
+        is_super, dept_id = await get_admin_scope(session, user)
+
+    cache_key = "v1_system_stats" if is_super else f"v1_system_stats:{dept_id}"
+    cached = await cache_get(cache_key)
     if cached:
         return SystemStatsResponse(**cached)
 
     async with async_session_maker() as session:
-        total = await session.scalar(select(func.count(Ticket.id))) or 0
+        ticket_filter = []
+        if not is_super:
+            if dept_id is None:
+                ticket_filter = [Ticket.id == -1]
+            else:
+                ticket_filter = [Ticket.department_id == dept_id]
+
+        total = await session.scalar(select(func.count(Ticket.id)).where(*ticket_filter)) or 0
         active = (
             await session.scalar(
                 select(func.count(Ticket.id)).where(
-                    Ticket.status.in_([TicketStatus.NEW, TicketStatus.IN_PROGRESS])
+                    Ticket.status.in_([TicketStatus.NEW, TicketStatus.IN_PROGRESS]),
+                    *ticket_filter,
                 )
             )
             or 0
@@ -507,7 +519,7 @@ async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
         total_tickets=total,
         active_tickets=active,
     )
-    await cache_set("v1_system_stats", stats.model_dump(), ttl=60)
+    await cache_set(cache_key, stats.model_dump(), ttl=60)
     return stats
 
 
@@ -531,7 +543,10 @@ async def v1_get_tickets(
             .limit(limit)
         )
         if not is_super:
-            stmt = stmt.where(Ticket.department_id == dept_id)
+            if dept_id is None:
+                stmt = stmt.where(Ticket.id == -1)
+            else:
+                stmt = stmt.where(Ticket.department_id == dept_id)
 
         tickets = list((await session.execute(stmt)).scalars().all())
         return [

@@ -137,7 +137,7 @@ async def delete_event(request: Request, event_id: int, user=Depends(require_wri
 
             # IDOR: админ отдела может удалять только события своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
-            if not is_super and event.department_id != dept_id:
+            if not is_super and (dept_id is None or event.department_id != dept_id):
                 request.session["flash_error"] = "Нет прав для удаления этого мероприятия"
                 return RedirectResponse(url="/events/", status_code=303)
 

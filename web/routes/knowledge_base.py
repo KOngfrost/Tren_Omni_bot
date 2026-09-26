@@ -140,7 +140,7 @@ async def delete_knowledge_base(request: Request, kb_id: int, user=Depends(requi
 
             # IDOR: админ отдела может удалять только записи своего отдела
             is_super, dept_id = await get_admin_scope(session, user)
-            if not is_super and kb.department_id != dept_id:
+            if not is_super and (dept_id is None or kb.department_id != dept_id):
                 request.session["flash_error"] = "Нет прав для удаления этой записи"
                 return RedirectResponse(url="/knowledge/", status_code=303)
 
@@ -241,6 +241,10 @@ async def import_knowledge_base(request: Request, user=Depends(require_writer)):
     try:
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
+            if not is_super and dept_id is None:
+                request.session["flash_error"] = "У вашей учётной записи не назначен отдел"
+                return RedirectResponse(url="/knowledge/", status_code=303)
+
             form_dept_id = parse_form_int(form, "department_id", default=dept_id)
 
             depts = list((await session.execute(select(Department))).scalars().all())
@@ -252,15 +256,18 @@ async def import_knowledge_base(request: Request, user=Depends(require_writer)):
                 a = sanitize_html(item["answer"]).strip()
                 row_dept = item.get("department", "").lower().strip()
 
-                target_dept_id = dept_id if not is_super else None
-                if target_dept_id is None and row_dept:
-                    for d_name, d_id in dept_map.items():
-                        if row_dept in d_name or d_name in row_dept:
-                            target_dept_id = d_id
-                            break
+                if not is_super:
+                    target_dept_id = dept_id
+                else:
+                    target_dept_id = None
+                    if row_dept:
+                        for d_name, d_id in dept_map.items():
+                            if row_dept in d_name or d_name in row_dept:
+                                target_dept_id = d_id
+                                break
 
-                if target_dept_id is None:
-                    target_dept_id = form_dept_id or (depts[0].id if depts else None)
+                    if target_dept_id is None:
+                        target_dept_id = form_dept_id or (depts[0].id if depts else None)
 
                 if k and a and target_dept_id:
                     session.add(

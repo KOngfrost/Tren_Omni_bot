@@ -138,7 +138,10 @@ async def tickets_page(
 
             # IDOR разграничение
             if not is_super:
-                filters.append(Ticket.department_id == dept_id)
+                if dept_id is None:
+                    filters.append(Ticket.id == -1)
+                else:
+                    filters.append(Ticket.department_id == dept_id)
             elif dept_filter_id is not None:
                 filters.append(Ticket.department_id == dept_filter_id)
 
@@ -209,7 +212,7 @@ async def _load_ticket_for_user(ticket_id: int, user: dict) -> Ticket:
     ticket = await _get_ticket(ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    if not is_super and ticket.department_id != dept_id:
+    if not is_super and (dept_id is None or ticket.department_id != dept_id):
         raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
     return ticket
 

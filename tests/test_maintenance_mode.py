@@ -61,6 +61,10 @@ async def test_web_maintenance_middleware():
             assert res_maint.status_code == 200
             assert "Ведутся технические работы" in res_maint.text
 
+            # Маршруты авторизации доступны даже во время техработ, чтобы суперадмин мог войти
+            res_login = await client.get("/auth/login")
+            assert res_login.status_code == 200
+
             # 3. Обычные страницы должны возвращать 503 и HTML-заглушку
             res_root = await client.get("/")
             assert res_root.status_code == 503

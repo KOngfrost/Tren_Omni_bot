@@ -211,3 +211,28 @@ async def test_delete_web_user_button_and_endpoint(web_client):
     cur.execute("SELECT id FROM admins WHERE id = 503")
     assert cur.fetchone() is not None
     conn.close()
+
+
+@pytest.mark.asyncio
+async def test_idor_unassigned_admin_cannot_access_unassigned_ticket():
+    from fastapi import HTTPException
+    from unittest.mock import MagicMock, patch
+    from web.routes.tickets import _load_ticket_for_user
+
+    unassigned_user = {
+        "username": "unassigned_admin",
+        "role": "DEPARTMENT_ADMIN",
+        "web_user_id": 999,
+        "department_id": None,
+    }
+
+    mock_ticket = MagicMock()
+    mock_ticket.id = 100
+    mock_ticket.department_id = None
+
+    with patch("web.routes.tickets._get_ticket", return_value=mock_ticket), \
+         patch("web.routes.tickets.get_admin_scope", return_value=(False, None)):
+        with pytest.raises(HTTPException) as exc_info:
+            await _load_ticket_for_user(100, unassigned_user)
+        assert exc_info.value.status_code == 403
+

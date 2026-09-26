@@ -482,6 +482,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if (
             path.startswith("/static/")
+            or path.startswith("/auth/")
             or path in ("/health", "/metrics", "/favicon.ico", "/maintenance")
         ):
             return await call_next(request)
