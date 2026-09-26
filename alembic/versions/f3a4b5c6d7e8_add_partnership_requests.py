@@ -1,7 +1,7 @@
 """Add partnership_requests table.
 
 Revision ID: f3a4b5c6d7e8
-Revises: f2a3b4c5d6e7
+Revises: b4c5d6e7f8a
 """
 
 from collections.abc import Sequence
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "f3a4b5c6d7e8"
-down_revision: str | Sequence[str] | None = "f2a3b4c5d6e7"
+down_revision: str | Sequence[str] | None = "b4c5d6e7f8a"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
