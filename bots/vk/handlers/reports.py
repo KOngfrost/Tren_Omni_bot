@@ -9,12 +9,18 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
 
 from bots.vk.common import _REPORT_PERIOD_PATTERN, ReportStates, _main_keyboard_for
-from bots.vk.keyboards import build_admin_cancel_keyboard, build_admin_keyboard
+from bots.vk.keyboards import (
+    build_admin_cancel_keyboard,
+    build_admin_keyboard,
+    build_admin_report_types_keyboard,
+)
 from core.bot_core import BotCore
 from core.commands import (
+    COMMANDS_CANCEL,
     COMMANDS_REPORT,
     COMMANDS_REPORT_BY_DATE,
     COMMANDS_REPORT_BY_PERIOD,
+    COMMANDS_REPORT_TODAY,
 )
 from core.reporting import (
     build_daily_report,
@@ -30,24 +36,50 @@ reports_labeler = BotLabeler()
 
 
 @reports_labeler.private_message(text=COMMANDS_REPORT)
-async def report_handler(message: Message):
+async def report_menu_handler(message: Message):
+    """Выбор периода для формирования отчёта: за сегодня, за определённое число, за период."""
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        from bots.vk.common import _main_keyboard_for
-
         await message.answer(
             "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
         )
         return
 
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_TYPE)
+    await message.answer(
+        "📊 Формирование отчёта\n\n"
+        "Выберите тип отчёта на клавиатуре ниже:\n"
+        "• «За сегодня» — отчёт по обращениям за текущий день\n"
+        "• «За определённое число» — отчёт за конкретную дату (ДД.ММ.ГГГГ)\n"
+        "• «За период» — сводный отчёт за диапазон дат",
+        keyboard=build_admin_report_types_keyboard(),
+    )
+
+
+@reports_labeler.private_message(text=COMMANDS_REPORT_TODAY)
+@reports_labeler.private_message(state=ReportStates.WAITING_TYPE, text=COMMANDS_REPORT_TODAY)
+async def report_today_handler(message: Message):
+    """Формирование и отправка отчёта за сегодняшний день."""
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    if not await BotCore.is_admin(user):
+        await message.answer(
+            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+        )
+        return
+
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.delete(message.from_id)
+
     try:
-        report_date = datetime.now(get_app_tz()) - timedelta(days=1)
-        data = await get_report_for_date(report_date.date())
-        # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
-        # чтобы не блокировать event loop (Ошибка #11).
-        report_bytes = await asyncio.to_thread(build_daily_report, data, report_date)
+        now_msk = datetime.now(get_app_tz())
+        report_date = now_msk.date()
+        data = await get_report_for_date(report_date)
+        report_dt = datetime.combine(report_date, datetime.min.time(), tzinfo=get_app_tz())
+        report_bytes = await asyncio.to_thread(build_daily_report, data, report_dt)
         filename = f"report_{report_date:%Y-%m-%d}.xlsx"
-        from bots.vk.bot import vk_bot
 
         await send_report_to_vk(
             vk_bot.api,
@@ -55,27 +87,24 @@ async def report_handler(message: Message):
             report_bytes,
             filename,
         )
-        await BotCore.log_action(user, "report_generated", f"Сформирован отчёт {filename}")
-    except Exception:
-        logger.exception("Ошибка при формировании отчёта")
-        await BotCore.log_action(user, "report_failed", "Ошибка при формировании отчёта")
+        await BotCore.log_action(user, "report_generated", f"Сформирован отчёт за сегодня {filename}")
         await message.answer(
-            "Не удалось сформировать отчёт. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
+            f"Отчёт за сегодня ({report_date:%d.%m.%Y}) сформирован и отправлен вам в VK.",
             keyboard=build_admin_keyboard(),
         )
-        return
-    await message.answer(
-        f"Отчёт за {report_date:%d.%m.%Y} сформирован и отправлен вам в VK.",
-        keyboard=build_admin_keyboard(),
-    )
+    except Exception:
+        logger.exception("Ошибка при формировании отчёта за сегодня")
+        await message.answer(
+            "Не удалось сформировать отчёт за сегодня. Пожалуйста, обратитесь к техническому администратору.",
+            keyboard=build_admin_keyboard(),
+        )
 
 
 @reports_labeler.private_message(text=COMMANDS_REPORT_BY_DATE)
+@reports_labeler.private_message(state=ReportStates.WAITING_TYPE, text=COMMANDS_REPORT_BY_DATE)
 async def report_by_date(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        from bots.vk.common import _main_keyboard_for
-
         await message.answer(
             "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
         )
@@ -85,7 +114,8 @@ async def report_by_date(message: Message):
 
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE)
     await message.answer(
-        "Введите дату для отчета в формате ДД.ММ.ГГГГ (например: 31.08.2026):",
+        "Введите дату для отчета в формате ДД.ММ.ГГГГ (например: 31.08.2026):\n\n"
+        "Или нажмите «Отмена» для возврата.",
         keyboard=build_admin_cancel_keyboard(),
     )
 
@@ -144,11 +174,10 @@ async def report_by_date_input(message: Message):
 
 
 @reports_labeler.private_message(text=COMMANDS_REPORT_BY_PERIOD)
+@reports_labeler.private_message(state=ReportStates.WAITING_TYPE, text=COMMANDS_REPORT_BY_PERIOD)
 async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        from bots.vk.common import _main_keyboard_for
-
         await message.answer(
             "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
         )
@@ -159,7 +188,8 @@ async def report_by_period_handler(message: Message):
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE_FROM)
     await message.answer(
         "Введите диапазон дат через дефис в формате: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ\n"
-        "Например: 01.08.2026 - 31.08.2026",
+        "Например: 01.08.2026 - 31.08.2026\n\n"
+        "Или нажмите «Отмена» для возврата.",
         keyboard=build_admin_cancel_keyboard(),
     )
 
@@ -260,6 +290,7 @@ async def report_by_period_fallback(message: Message):
 
 
 # Алиасы для обратной совместимости
+report_handler = report_menu_handler
 report_by_date_start = report_by_date
 report_date_received = report_by_date_input
 report_by_period_start = report_by_period_handler

@@ -210,7 +210,7 @@ class KnowledgeBase(Base):
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     department_id = mapped_column(
-        Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=True
     )
     keywords = mapped_column(Text, nullable=False)
     answer = mapped_column(Text, nullable=False)
@@ -219,7 +219,7 @@ class KnowledgeBase(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    department: Mapped["Department"] = relationship("Department", back_populates="knowledge_base")
+    department: Mapped["Department | None"] = relationship("Department", back_populates="knowledge_base")
 
 
 class FAQNode(Base):
@@ -388,3 +388,24 @@ class VkOutbox(Base):
     error = mapped_column(Text, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     sent_at = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PartnershipRequest(Base):
+    """Предложения о сотрудничестве и партнёрстве от внешних организаций и студентов."""
+
+    __tablename__ = "partnership_requests"
+    __table_args__ = (
+        Index("ix_partnership_requests_status_created", "status", "created_at"),
+    )
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vk_id = mapped_column(BigInteger, nullable=False, index=True)
+    user_name = mapped_column(String(255), nullable=True)
+    proposal_text = mapped_column(Text, nullable=False)
+    status = mapped_column(String(32), default="new", nullable=False)  # new | contacted | closed
+    contact_info = mapped_column(String(255), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+

@@ -564,6 +564,7 @@ from web.routes import (
     knowledge_base,
     legal,
     logs,
+    partnerships,
     tickets,
     vk_callback,
 )
@@ -576,6 +577,7 @@ app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
 app.include_router(knowledge_base.router, prefix="/knowledge", tags=["knowledge_base"])
 app.include_router(faq.router, prefix="/faq", tags=["faq"])
 app.include_router(events.router, prefix="/events", tags=["events"])
+app.include_router(partnerships.router, prefix="/partnerships", tags=["partnerships"])
 app.include_router(logs.router, prefix="/logs", tags=["logs"])
 app.include_router(settings_route.router, prefix="/settings", tags=["settings"])
 app.include_router(dashboard.router, tags=["dashboard"])

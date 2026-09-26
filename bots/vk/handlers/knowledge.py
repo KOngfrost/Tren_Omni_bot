@@ -22,29 +22,39 @@ knowledge_labeler = BotLabeler()
 @knowledge_labeler.private_message(text=COMMANDS_KNOWLEDGE)
 @knowledge_labeler.private_message(text=("К разделам Базы", "к разделам базы"))
 async def knowledge_base_handler(message: Message):
-    """Главный вход в Базу знаний с понятной инструкцией и выбором отдела."""
+    """Главный вход в Базу знаний с понятной инструкцией, отделами и темами."""
     dept_names = await _get_department_names()
+    topics = []
+    async with async_session_maker() as session:
+        kb_topics = list(await session.scalars(select(KnowledgeBase.keywords).distinct().limit(6)))
+        for k in kb_topics:
+            if k:
+                first_keyword = k.split(",")[0].strip()
+                if first_keyword and first_keyword not in topics:
+                    topics.append(first_keyword)
+
     instruction_text = (
-        "ℹ️ Инструкция по Базе знаний:\n\n"
-        "В Базе знаний собраны официальные материалы, регламенты, памятки, "
-        "ссылки на полезные ресурсы и сообщества Студсовета.\n\n"
+        "📚 Инструкция по Базе знаний Студсовета:\n\n"
+        "Здесь собраны официальные материалы, регламенты, памятки и контакты "
+        "как по конкретным отделам, так и общие материалы без привязки к отделу.\n\n"
         "📖 Как пользоваться:\n"
-        "1. Нажмите на нужный отдел на кнопках ниже или выберите «База: Все материалы».\n"
-        "2. Бот покажет оформленные карточки с описанием и ссылками.\n"
-        "3. Для быстрого поиска по теме отправьте: «База [слово]» "
-        "(например: «База сообщество» или «База сантехника»)."
+        "1. Выберите отдел или нажмите «База: Без отдела» для общих материалов.\n"
+        "2. Выберите интересующую тему на кнопках.\n"
+        "3. Или найдите материал поиском: отправьте «База [слово]» "
+        "(например: «База общежитие» или «База контакты»)."
     )
-    keyboard = build_knowledge_departments_keyboard(dept_names)
+    keyboard = build_knowledge_departments_keyboard(dept_names, topics=topics[:4])
     await message.answer(instruction_text, keyboard=keyboard)
 
 
-@knowledge_labeler.private_message(RegexRule(r"(?i)^База:\s*(.+)$"))
+@knowledge_labeler.private_message(RegexRule(r"(?i)^(?:База:\s*|Тема:\s*)(.+)$"))
 async def knowledge_department_handler(message: Message):
-    """Отображение материалов выбранного отдела с красивым форматированием."""
-    match = re.match(r"(?i)^База:\s*(.+)$", message.text or "")
+    """Отображение материалов выбранного отдела, общих материалов или темы."""
+    match = re.match(r"(?i)^(?:База:\s*|Тема:\s*)(.+)$", message.text or "")
     if not match:
         return
-    dept_raw = match.group(1).strip()
+    query_raw = match.group(1).strip()
+    is_topic = (message.text or "").strip().lower().startswith("тема:")
 
     async with async_session_maker() as session:
         stmt = (
@@ -52,15 +62,27 @@ async def knowledge_department_handler(message: Message):
             .options(selectinload(KnowledgeBase.department))
             .order_by(KnowledgeBase.department_id, KnowledgeBase.id)
         )
-        if "все материалы" not in dept_raw.lower():
+        if is_topic:
+            stmt = stmt.where(
+                KnowledgeBase.keywords.ilike(f"%{query_raw}%")
+                | KnowledgeBase.answer.ilike(f"%{query_raw}%")
+            )
+            title = f"Тема: {query_raw}"
+        elif query_raw.lower() in ("без отдела", "общие", "общие материалы"):
+            stmt = stmt.where(KnowledgeBase.department_id.is_(None))
+            title = "Общие материалы (без отдела)"
+        elif "все материалы" in query_raw.lower():
+            title = "Все материалы"
+        else:
             dept = await session.scalar(
-                select(Department).where(Department.name.ilike(f"%{dept_raw}%"))
+                select(Department).where(Department.name.ilike(f"%{query_raw}%"))
             )
             if dept:
                 stmt = stmt.where(KnowledgeBase.department_id == dept.id)
+                title = f"Отдел: {dept.name}"
             else:
                 await message.answer(
-                    f"Раздел «{dept_raw}» не найден.\nВыберите раздел из списка:",
+                    f"Раздел «{query_raw}» не найден.\nВыберите раздел из списка:",
                     keyboard=build_back_nav_keyboard("К разделам Базы"),
                 )
                 return
@@ -69,15 +91,15 @@ async def knowledge_department_handler(message: Message):
 
     if not entries:
         await message.answer(
-            f"В разделе «{dept_raw}» пока нет опубликованных материалов.\n"
-            "Вы можете задать вопрос оператору через кнопку «Задать вопрос» в меню.",
+            f"В разделе «{query_raw}» пока нет опубликованных материалов.\n"
+            "Вы можете задать вопрос оператору через кнопку «Создать заявку» в меню.",
             keyboard=build_back_nav_keyboard("К разделам Базы"),
         )
         return
 
     cards = []
     for entry in entries:
-        dept_name = entry.department.name if entry.department else "Общий"
+        dept_name = entry.department.name if entry.department else "Без отдела (Общий)"
         ans = entry.answer or ""
         if len(ans) > 400:
             ans = ans[:400] + "..."
@@ -87,7 +109,7 @@ async def knowledge_department_handler(message: Message):
         cards.append(card)
 
     divider = "\n\n" + "─" * 28 + "\n\n"
-    response_text = f"📚 База знаний — {dept_raw}:\n\n" + divider.join(cards)
+    response_text = f"📚 База знаний — {title}:\n\n" + divider.join(cards)
     if len(response_text) > 4000:
         response_text = response_text[:3990] + "\n\n[...]"
 

@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -48,6 +49,7 @@ from core.commands import (
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import MessageAuthorType, Ticket, TicketStatus
+from core.reporting import get_app_tz
 from core.ticket_service import (
     COMPLETED_STATUSES,
     StatusTransitionError,
@@ -78,7 +80,7 @@ async def admin_panel(message: Message):
     await message.answer(
         "Админ-панель\n\n"
         "Доступные функции:\n"
-        "• Просмотр и решение заявок студентов\n"
+        "• Просмотр и решение заявок студентов за сегодняшний день\n"
         "• Формирование оперативных отчётов\n\n"
         "Нажмите «Заявки администратора» для работы с обращениями.",
         keyboard=build_admin_keyboard(),
@@ -98,7 +100,7 @@ async def regular_menu_handler(message: Message):
 
 
 async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str, Any]) -> None:
-    """Отрисовать страницу списка активных заявок администратора (пагинация, ЭТАП 4.1 / B4)."""
+    """Отрисовать страницу списка активных заявок администратора за сегодняшний день (пагинация)."""
     async with async_session_maker() as session:
         is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
@@ -109,10 +111,15 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         )
         return
 
+    now_msk = datetime.now(get_app_tz())
+    today_start = datetime(now_msk.year, now_msk.month, now_msk.day, 0, 0, 0, tzinfo=get_app_tz())
+    today_str = now_msk.strftime("%d.%m.%Y")
+
     async with async_session_maker() as session:
         stmt = (
             select(Ticket)
             .options(selectinload(Ticket.department), selectinload(Ticket.user))
+            .where(Ticket.created_at >= today_start)
             .order_by(Ticket.created_at.desc())
             .limit(FETCH_LIMIT)
         )
@@ -120,9 +127,10 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
             stmt = stmt.where(Ticket.department_id == dept_id)
 
         count_stmt = select(func.count(Ticket.id)).where(
-            Ticket.status.not_in((TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO))
+            Ticket.created_at >= today_start,
+            Ticket.status.not_in((TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO)),
         )
-        total_count_stmt = select(func.count(Ticket.id))
+        total_count_stmt = select(func.count(Ticket.id)).where(Ticket.created_at >= today_start)
         if not is_super and dept_id is not None:
             count_stmt = count_stmt.where(Ticket.department_id == dept_id)
             total_count_stmt = total_count_stmt.where(Ticket.department_id == dept_id)
@@ -136,9 +144,9 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
 
     if not tickets:
         await message.answer(
-            f"Всего доступных заявок: {total_count or 0}\n"
-            f"В обработке / новых: {pending_count or 0}\n\n"
-            "Активных заявок пока нет.",
+            f"Заявок за сегодня ({today_str}) пока нет.\n\n"
+            f"Всего за сегодня: {total_count or 0}\n"
+            f"В обработке / новых: {pending_count or 0}",
             keyboard=build_admin_keyboard(),
         )
         return

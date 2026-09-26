@@ -8,6 +8,8 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
 
 from bots.vk.common import (
+    PartnershipStates,
+    ReportStates,
     TicketStates,
     _get_department_names,
     _main_keyboard_for,
@@ -30,26 +32,32 @@ from bots.vk.keyboards import (
     build_cancel_keyboard,
     build_knowledge_suggest_keyboard,
     build_main_keyboard,
+    build_ticket_department_keyboard,
     build_tickets_keyboard,
 )
 from core.bot_core import BotCore
 from core.commands import (
+    COMMAND_CREATE_TICKET,
     COMMAND_REVEAL_IDENTITY,
     COMMAND_TICKET_DETAILS_PATTERN,
     COMMANDS_ANONYMOUS,
     COMMANDS_ANONYMOUS_STAY,
     COMMANDS_CANCEL,
     COMMANDS_CORPORATE,
+    COMMANDS_CREATE_TICKET,
     COMMANDS_CULTURE,
     COMMANDS_HOUSING,
     COMMANDS_INFORMATION,
     COMMANDS_MY_TICKETS,
+    COMMANDS_PARTNERSHIP,
     COMMANDS_QUESTION,
     COMMANDS_START,
+    COMMANDS_WITHOUT_DEPT,
     STUDENT_REPLY_PATTERN,
 )
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
+from core.models import PartnershipRequest, User
 from core.redis_client import get_redis_client
 from core.ticket_service import (
     add_student_reply,
@@ -108,8 +116,15 @@ async def start_handler(message: Message):
 
 
 @student_labeler.private_message(text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=TicketStates.WAITING_DEPARTMENT, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=TicketStates.WAITING_DESCRIPTION, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=TicketStates.WAITING_IDENTITY_CHOICE, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=PartnershipStates.WAITING_PROPOSAL, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=ReportStates.WAITING_TYPE, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=ReportStates.WAITING_DATE, text=COMMANDS_CANCEL)
+@student_labeler.private_message(state=ReportStates.WAITING_DATE_FROM, text=COMMANDS_CANCEL)
 async def cancel_handler(message: Message):
-    """Отменить текущее действие (создание заявки/вопроса)."""
+    """Отменить текущее действие (создание заявки/вопроса/партнёрства/отчёта)."""
     touch_heartbeat()
     from bots.vk.bot import vk_bot
 
@@ -136,7 +151,7 @@ async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, A
     if not tickets:
         await message.answer(
             "У вас пока нет созданных заявок.\n\n"
-            "Чтобы создать заявку, выберите нужный раздел в меню ниже.",
+            "Чтобы создать заявку, нажмите кнопку «Создать заявку» в меню ниже.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -170,14 +185,14 @@ async def my_tickets_handler(message: Message):
     await open_list(message, KIND_MY_TICKETS)
 
 
-@student_labeler.private_message(RegexRule(COMMAND_TICKET_DETAILS_PATTERN))
+@student_labeler.private_message(RegexRule(r"(?i)^(?:Подробнее\s*#?|#)(\d+)$"))
 async def ticket_details_handler(message: Message):
-    """История заявки: «Подробнее #N» — номер, отдел, тема, статус, вся переписка."""
+    """История заявки: «Подробнее #N» или «#N» — номер, отдел, тема, статус, вся переписка."""
     touch_heartbeat()
     match = re.search(r"(\d+)", message.text or "")
     if not match:
         await message.answer(
-            "Укажите номер заявки, например: «Подробнее #12» или «Подробнее 12».",
+            "Укажите номер заявки, например: «Подробнее #12» или «#12».",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -188,8 +203,6 @@ async def ticket_details_handler(message: Message):
     ticket = await get_user_ticket_by_id(message.from_id, parsed_id)
 
     # 2. Если не найдено по глобальному ID — ищем по локальному номеру в последних заявках
-    # (limit совпадает с FETCH_LIMIT пагинации «Мои заявки», чтобы номера
-    # со всех страниц списка разрешались в те же заявки)
     if ticket is None:
         tickets = await get_user_tickets(message.from_id, include_completed=True, limit=FETCH_LIMIT)
         ticket = tickets[parsed_id - 1] if 1 <= parsed_id <= len(tickets) else None
@@ -202,10 +215,32 @@ async def ticket_details_handler(message: Message):
         return
 
     history = await get_ticket_messages(ticket.id)
+    details = format_ticket_details(ticket, history)
+    details += (
+        f"\n\n💬 Чтобы задать уточняющий вопрос или дополнить заявку, отправьте:\n"
+        f"«Ответ #{ticket.id}: ваш текст»"
+    )
     await message.answer(
-        format_ticket_details(ticket, history),
+        details,
         keyboard=build_tickets_keyboard([ticket.id]),
     )
+
+
+@student_labeler.private_message(RegexRule(r"^\d+$"))
+async def ticket_number_direct_handler(message: Message):
+    """Прямой ввод номера заявки (например, «1» или «105») при просмотре списка."""
+    from bots.vk.handlers.pagination import get_page_state
+
+    raw_num = int((message.text or "").strip())
+    state = await get_page_state(message.from_id)
+    if state and state.get("kind") == KIND_MY_TICKETS:
+        await ticket_details_handler(message)
+        return
+
+    ticket = await get_user_ticket_by_id(message.from_id, raw_num)
+    if ticket is not None:
+        await ticket_details_handler(message)
+        return
 
 
 @student_labeler.private_message(RegexRule(STUDENT_REPLY_PATTERN))
@@ -275,10 +310,10 @@ async def _start_ticket_flow(
         topic=topic,
         department=department,
     )
-    header = f"Раздел «{topic}»" if department else "Задать вопрос"
+    header = f"Раздел «{topic}»" if department else "Создать заявку"
     await message.answer(
         f"{header}\n\n"
-        "Опишите вашу проблему одним сообщением: что случилось, когда и где.\n"
+        "Опишите вашу проблему или вопрос одним сообщением (минимум 10 символов).\n"
         "Чем подробнее описание, тем быстрее ответственный отдел сможет помочь.\n\n"
         "После текста вы сможете выбрать, оставить ли свой VK ID для ответа.\n\n"
         "Нажмите «Отмена», чтобы отменить создание заявки.",
@@ -307,8 +342,68 @@ async def corporate_section(message: Message):
 
 
 @student_labeler.private_message(text=COMMANDS_QUESTION)
+@student_labeler.private_message(text=COMMANDS_CREATE_TICKET)
 async def question_section_start(message: Message):
-    await _start_ticket_flow(message, "Вопрос")
+    """Общий старт создания заявки: выбор отдела, без отдела, с отменой."""
+    touch_heartbeat()
+    from bots.vk.bot import vk_bot
+
+    departments = await _get_department_names()
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        TicketStates.WAITING_DEPARTMENT,
+    )
+    await message.answer(
+        "📝 Создание заявки\n\n"
+        "Выберите отдел, в который хотите направить вопрос, либо выберите «Без отдела» (общий вопрос):\n\n"
+        "Нажмите «Отмена», чтобы вернуться в главное меню.",
+        keyboard=build_ticket_department_keyboard(departments),
+    )
+
+
+@student_labeler.private_message(state=TicketStates.WAITING_DEPARTMENT)
+async def ticket_department_choice_handler(message: Message):
+    """Выбор отдела или 'Без отдела' при создании заявки."""
+    touch_heartbeat()
+    from bots.vk.bot import vk_bot
+
+    text = (message.text or "").strip()
+    if text.lower() in [c.lower() for c in COMMANDS_CANCEL]:
+        await cancel_handler(message)
+        return
+
+    selected_dept = None
+    topic = "Общее обращение"
+    if text.lower() in [c.lower() for c in COMMANDS_WITHOUT_DEPT] or "без отдела" in text.lower():
+        selected_dept = None
+        dept_label = "Без отдела (Общий)"
+    else:
+        departments = await _get_department_names()
+        matched = [d for d in departments if d.lower() == text.lower() or d.lower() in text.lower()]
+        if not matched:
+            await message.answer(
+                "Пожалуйста, выберите отдел из предложенных кнопок или нажмите «Без отдела».\n"
+                "Для отмены нажмите кнопку «Отмена».",
+                keyboard=build_ticket_department_keyboard(departments),
+            )
+            return
+        selected_dept = matched[0]
+        dept_label = selected_dept
+        topic = selected_dept
+
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        TicketStates.WAITING_DESCRIPTION,
+        topic=topic,
+        department=selected_dept,
+    )
+    await message.answer(
+        f"📝 Выбран раздел: {dept_label}\n\n"
+        "Опишите вашу проблему или вопрос одним сообщением (минимум 10 символов).\n"
+        "Чем подробнее описание, тем быстрее мы сможем вам помочь.\n\n"
+        "Нажмите «Отмена», чтобы отменить создание заявки.",
+        keyboard=build_cancel_keyboard(),
+    )
 
 
 @student_labeler.private_message(text=COMMANDS_ANONYMOUS)
@@ -326,8 +421,9 @@ async def anonymous_section_start(message: Message):
         "Анонимное обращение\n\n"
         "Вы можете сообщить о проблеме без указания своего имени.\n"
         "Ваше имя и VK ID не будут привязаны к обращению.\n\n"
-        "Опишите проблему в одном сообщении:",
-        keyboard=await _main_keyboard_for(message.from_id),
+        "Опишите проблему в одном сообщении (минимум 10 символов):\n\n"
+        "Нажмите «Отмена», чтобы вернуться в меню.",
+        keyboard=build_cancel_keyboard(),
     )
 
 
@@ -336,30 +432,36 @@ async def ticket_description_handler(message: Message):
     touch_heartbeat()
     from bots.vk.bot import vk_bot
 
-    description = (message.text or "").strip()
+    text = (message.text or "").strip()
+    if text.lower() in [c.lower() for c in COMMANDS_CANCEL]:
+        await cancel_handler(message)
+        return
+
+    description = text
 
     if len(description) < 10:
         await message.answer(
             "Описание слишком короткое.\n\n"
             "Пожалуйста, опишите проблему подробнее (минимум 10 символов).\n\n"
-            "Введите текст обращения:"
+            "Или нажмите «Отмена» для возврата в меню:",
+            keyboard=build_cancel_keyboard(),
         )
         return
 
     if len(description) > 3000:
         await message.answer(
             "Описание слишком длинное (максимум 3000 символов).\n\n"
-            f"Текущая длина: {len(description)} символов. Пожалуйста, сократите текст и отправьте снова:"
+            f"Текущая длина: {len(description)} символов. Пожалуйста, сократите текст и отправьте снова:",
+            keyboard=build_cancel_keyboard(),
         )
         return
 
     state_peer = await vk_bot.state_dispenser.get(message.from_id)
     department = state_peer.payload.get("department") if state_peer else None
+    topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
 
     stored_description = state_peer.payload.get("description") if state_peer else None
-    if stored_description and description.strip().casefold() == "создать заявку":
-        topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
-        department = state_peer.payload.get("department") if state_peer else None
+    if stored_description and description.strip().casefold() in ("создать заявку", "продолжить"):
         await vk_bot.state_dispenser.set(
             message.from_id,
             TicketStates.WAITING_IDENTITY_CHOICE,
@@ -369,8 +471,9 @@ async def ticket_description_handler(message: Message):
         )
         await message.answer(
             "Выберите режим обращения:\n\n"
-            "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n"
-            "«Остаться не анонимным» — администратор сможет ответить вам в VK.",
+            "«Остаться не анонимным» — администратор сможет ответить вам в VK.\n"
+            "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n\n"
+            "Нажмите «Отмена», если хотите отменить создание заявки.",
             keyboard=build_anonymous_choice_keyboard(),
         )
         return
@@ -378,8 +481,6 @@ async def ticket_description_handler(message: Message):
     async with async_session_maker() as session:
         knowledge_entry = await find_knowledge_entry(session, description, department)
     if knowledge_entry is not None:
-        topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
-        department = state_peer.payload.get("department") if state_peer else None
         await vk_bot.state_dispenser.set(
             message.from_id,
             TicketStates.WAITING_DESCRIPTION,
@@ -389,13 +490,11 @@ async def ticket_description_handler(message: Message):
         )
         await message.answer(
             f"Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
-            "Если ответ не подходит, напишите «Создать заявку», чтобы продолжить.",
+            "Если ответ не подходит, нажмите «Создать заявку», чтобы продолжить.",
             keyboard=build_knowledge_suggest_keyboard(),
         )
         return
 
-    topic = state_peer.payload.get("topic", "Вопрос") if state_peer else "Вопрос"
-    department = state_peer.payload.get("department") if state_peer else None
     await vk_bot.state_dispenser.set(
         message.from_id,
         TicketStates.WAITING_IDENTITY_CHOICE,
@@ -405,20 +504,32 @@ async def ticket_description_handler(message: Message):
     )
     await message.answer(
         "Выберите режим обращения:\n\n"
-        "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n"
-        "«Остаться не анонимным» — администратор сможет ответить вам в VK.",
+        "«Остаться не анонимным» — администратор сможет ответить вам в VK.\n"
+        "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n\n"
+        "Нажмите «Отмена», если хотите отменить создание заявки.",
         keyboard=build_anonymous_choice_keyboard(),
     )
 
 
 @student_labeler.private_message(
     state=TicketStates.WAITING_IDENTITY_CHOICE,
-    text=COMMANDS_ANONYMOUS_STAY,
 )
 async def ticket_identity_choice_handler(message: Message):
     from bots.vk.bot import vk_bot
 
-    keep_identity = message.text == COMMAND_REVEAL_IDENTITY
+    text = (message.text or "").strip()
+    if text.lower() in [c.lower() for c in COMMANDS_CANCEL]:
+        await cancel_handler(message)
+        return
+
+    if text not in COMMANDS_ANONYMOUS_STAY:
+        await message.answer(
+            "Пожалуйста, выберите один из вариантов на клавиатуре или нажмите «Отмена»:",
+            keyboard=build_anonymous_choice_keyboard(),
+        )
+        return
+
+    keep_identity = text == COMMAND_REVEAL_IDENTITY
     state_peer = await vk_bot.state_dispenser.get(message.from_id)
     payload = state_peer.payload if state_peer else {}
     description = payload.get("description", "")
@@ -453,7 +564,7 @@ async def ticket_identity_choice_handler(message: Message):
             department_name=department,
         )
 
-        department_name = department or "Общая"
+        department_name = department or "Без отдела (Общий)"
         answer_tail = (
             "Администратор сможет ответить вам в этом диалоге."
             if keep_identity
@@ -476,6 +587,67 @@ async def ticket_identity_choice_handler(message: Message):
             keyboard=await _main_keyboard_for(message.from_id),
         )
         await vk_bot.state_dispenser.delete(message.from_id)
+
+
+# === Раздел «Партнёрство» ===
+
+
+@student_labeler.private_message(text=COMMANDS_PARTNERSHIP)
+async def partnership_handler(message: Message):
+    """Раздел партнёрства: запрос предложения от пользователя."""
+    touch_heartbeat()
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        PartnershipStates.WAITING_PROPOSAL,
+    )
+    await message.answer(
+        "🤝 Партнёрство со Студенческим советом\n\n"
+        "Мы всегда открыты к новым проектам, идеям и сотрудничеству!\n\n"
+        "Пожалуйста, напишите о себе (компания/организация/проект, ваши контакты) "
+        "и в чём заключается ваше предложение о сотрудничестве.\n\n"
+        "Нажмите «Отмена», если хотите вернуться в главное меню.",
+        keyboard=build_cancel_keyboard(),
+    )
+
+
+@student_labeler.private_message(state=PartnershipStates.WAITING_PROPOSAL)
+async def partnership_proposal_handler(message: Message):
+    """Обработка предложения о партнёрстве и сохранение в базу данных."""
+    touch_heartbeat()
+    from bots.vk.bot import vk_bot
+
+    text = (message.text or "").strip()
+    if text.lower() in [c.lower() for c in COMMANDS_CANCEL]:
+        await cancel_handler(message)
+        return
+
+    if len(text) < 10:
+        await message.answer(
+            "Пожалуйста, расскажите о вашем предложении подробнее (минимум 10 символов).\n"
+            "Или нажмите «Отмена» для выхода в меню.",
+            keyboard=build_cancel_keyboard(),
+        )
+        return
+
+    async with async_session_maker() as session:
+        user = await session.scalar(select(User).where(User.vk_id == message.from_id))
+        user_name = user.full_name if user and user.full_name else f"id{message.from_id}"
+        req = PartnershipRequest(
+            vk_id=message.from_id,
+            user_name=user_name,
+            proposal_text=text,
+            status="new",
+        )
+        session.add(req)
+        await session.commit()
+
+    await vk_bot.state_dispenser.delete(message.from_id)
+    await message.answer(
+        "Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",
+        keyboard=await _main_keyboard_for(message.from_id),
+    )
 
 
 # Рендерер пагинации списка «Мои заявки» (ЭТАП 4.1 / B4)

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Партнёрство — OSS Bot{% endblock %}
+{% block meta_description %}Управление предложениями о сотрудничестве и спонсорстве.{% endblock %}
+{% block canonical_url %}/partnerships/{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="crumb">Сотрудничество</div>
+        <h1>Партнёрские предложения</h1>
+        <div class="page-desc">Заявки и идеи сотрудничества, поступившие через бота Студсовета</div>
+    </div>
+</div>
+
+{% if flash_success %}
+<div class="alert alert-success" role="status" aria-live="polite">{{ flash_success }}</div>
+{% endif %}
+{% if flash_error %}
+<div class="alert alert-error" role="alert" aria-live="assertive">{{ flash_error }}</div>
+{% endif %}
+{% if db_error %}
+<div class="alert alert-error">База данных временно недоступна. Попробуйте обновить страницу позже.</div>
+{% endif %}
+
+<div class="card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 60px;">#</th>
+                    <th style="width: 180px;">Отправитель</th>
+                    <th>Предложение о сотрудничестве</th>
+                    <th style="width: 200px;">Статус</th>
+                    <th style="width: 140px;">Дата</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td><strong>#{{ item.id }}</strong></td>
+                    <td>
+                        <div><strong>{{ item.user_name }}</strong></div>
+                        {% if item.vk_id %}
+                        <div>
+                            <a href="https://vk.com/id{{ item.vk_id }}" target="_blank" rel="noopener noreferrer" class="link-external" style="font-size: 12px;">
+                                vk.com/id{{ item.vk_id }} ↗
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if item.contact_info %}
+                        <div style="font-size: 12px; color: var(--color-muted);">{{ item.contact_info }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; max-width: 600px;">{{ item.proposal_text }}</div>
+                    </td>
+                    <td>
+                        <form method="post" action="/partnerships/{{ item.id }}/status" style="display: flex; gap: 6px; align-items: center;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <select name="status" class="form-select form-select-sm" style="padding: 4px 8px; font-size: 12px; border-radius: 4px;">
+                                {% for val, label in statuses.items() %}
+                                <option value="{{ val }}" {% if item.status == val %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-secondary btn-small" style="padding: 4px 8px; font-size: 11px;">OK</button>
+                        </form>
+                    </td>
+                    <td style="font-size: 12px; color: var(--color-muted);">
+                        {{ item.created_at|format_dt }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="empty-state" style="text-align: center; padding: 40px 20px;">
+                        <div style="font-size: 24px; margin-bottom: 8px;">🤝</div>
+                        <div style="font-weight: 500;">Пока нет предложений о партнёрстве</div>
+                        <div style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">
+                            Когда пользователи отправят предложение через бота, оно появится здесь.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

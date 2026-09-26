@@ -33,30 +33,28 @@ faq_labeler = BotLabeler()
 
 
 @faq_labeler.private_message(text=COMMANDS_FAQ)
-@faq_labeler.private_message(text=("К разделам вопросов", "к разделам вопросов"))
+@faq_labeler.private_message(text=("К разделам вопросов", "к разделам вопросов", "Темы вопросов"))
 async def faq_handler(message: Message):
-    """Главный вход в «Частые вопросы» с инструкцией по использованию и выбором отдела."""
+    """Главный вход в «Частые вопросы»: разбитый список по темам и короткое сообщение."""
     dept_names = await _get_department_names()
-    instruction_text = (
-        "ℹ️ Инструкция по разделу «Частые вопросы»:\n\n"
-        "Здесь собраны проверенные ответы на самые частые вопросы студентов по общежитиям, "
-        "стипендиям, мероприятиям и сервисам университета.\n\n"
-        "📖 Как пользоваться:\n"
-        "1. Нажмите на нужный отдел на кнопках ниже или выберите «Вопросы: Все отделы».\n"
-        "2. Нажмите кнопку с номером интересующего вопроса, чтобы прочитать подробный ответ.\n"
-        "3. Для быстрого поиска по ключевому слову отправьте: «Поиск [слово]» "
-        "(например: «Поиск общежитие» или «Поиск пропуск»)."
+    lines = [
+        "❓ Инструкция по разделу «Частые вопросы»:\n",
+        "📖 Как пользоваться:",
+        "Выберите интересующую вас тему из списка ниже (нажмите кнопку или напишите её название/номер):\n",
+        "Список тем:",
+    ]
+    for idx, dname in enumerate(dept_names, start=1):
+        lines.append(f"{idx}. {dname}")
+    lines.append(f"{len(dept_names) + 1}. Все отделы")
+    lines.append(
+        "\nЧтобы выбрать тему, напишите её название или номер (или нажмите кнопку ниже):"
     )
     keyboard = build_faq_departments_keyboard(dept_names)
-    await message.answer(instruction_text, keyboard=keyboard)
+    await message.answer("\n".join(lines), keyboard=keyboard)
 
 
 async def _render_faq_department_page(message: Message, page: int, meta: dict[str, Any]) -> None:
-    """Отрисовать страницу списка вопросов отдела (пагинация, ЭТАП 4.1 / B4).
-
-    Название раздела передаётся в meta, поэтому перелистывание «Ещё ➡️»
-    перечитывает те же данные, не теряя выбранный отдел.
-    """
+    """Отрисовать страницу списка вопросов отдела (пагинация, ЭТАП 4.1 / B4)."""
     dept_raw = str(meta.get("dept") or "Все отделы")
 
     async with async_session_maker() as session:
@@ -67,7 +65,6 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
             .order_by(FAQNode.department_id, FAQNode.order_index, FAQNode.id)
         )
         if "все отделы" not in dept_raw.lower():
-            # Поиск отдела по подстроке названия
             dept = await session.scalar(
                 select(Department).where(Department.name.ilike(f"%{dept_raw}%"))
             )
@@ -83,35 +80,34 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
         nodes = list(await session.scalars(stmt.limit(FETCH_LIMIT)))
 
     page = clamp_page(page, len(nodes))
+    total_pages = page_count(len(nodes))
+    start = page * PAGE_SIZE
+    page_nodes = nodes[start : start + PAGE_SIZE]
+    item_ids = [n.id for n in page_nodes]
+
+    meta["item_ids"] = item_ids
     await persist_page(message.from_id, KIND_FAQ_DEPARTMENTS, page, meta)
 
     if not nodes:
         await message.answer(
             f"В разделе «{dept_raw}» пока нет опубликованных вопросов.\n"
-            "Вы можете задать свой вопрос напрямую операторам через кнопку «Задать вопрос» в меню.",
+            "Вы можете задать свой вопрос напрямую операторам через кнопку «Создать заявку» в меню.",
             keyboard=build_back_nav_keyboard("К разделам вопросов"),
         )
         return
 
     lines = [
-        f"❓ Частые вопросы — {dept_raw}:\n",
+        f"❓ Вопросы по теме «{dept_raw}»:\n",
     ]
-    total_pages = page_count(len(nodes))
-    start = page * PAGE_SIZE
-    page_nodes = nodes[start : start + PAGE_SIZE]
-
-    item_ids = []
-    # Сквозная нумерация по всем вопросам раздела, а не по странице
     for idx, node in enumerate(page_nodes, start=start + 1):
-        item_ids.append(node.id)
         dept_prefix = f"[{node.department.name}] " if "все отделы" in dept_raw.lower() else ""
-        lines.append(f"{idx}. {dept_prefix}{node.button_text or node.question} [Вопрос {node.id}]")
+        lines.append(f"{idx}. {dept_prefix}{node.button_text or node.question}")
 
     if total_pages > 1:
         lines.append(f"\n📄 Страница {page + 1} из {total_pages}")
 
     lines.append(
-        "\n💡 Нажмите кнопку с номером вопроса на клавиатуре или отправьте его номер (например: 1 или Вопрос 1):"
+        "\n💡 Чтобы прочитать ответ, напишите номер вопроса (например: 1) или нажмите кнопку с его номером:"
     )
 
     keyboard = build_faq_items_keyboard(
@@ -120,33 +116,40 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
     await message.answer("\n".join(lines), keyboard=keyboard)
 
 
-@faq_labeler.private_message(RegexRule(r"(?i)^Вопросы:\s*(.+)$"))
+@faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопросы:\s*|Тема:\s*)(.+)$"))
 async def faq_department_handler(message: Message):
     """Отображение списка вопросов выбранного отдела."""
-    match = re.match(r"(?i)^Вопросы:\s*(.+)$", message.text or "")
+    match = re.match(r"(?i)^(?:Вопросы:\s*|Тема:\s*)(.+)$", message.text or "")
     if not match:
         return
     dept_raw = match.group(1).strip()
     await open_list(message, KIND_FAQ_DEPARTMENTS, {"dept": dept_raw})
 
 
-@faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопрос\s*#?|FAQ\s*#?|#)(\d+)$"))
+@faq_labeler.private_message(RegexRule(r"(?i)^(?:Вопрос\s*#?|FAQ\s*#?|#)?(\d+)$"))
 async def faq_node_handler(message: Message):
-    """Отображение конкретного ответа на вопрос по ID."""
+    """Отображение конкретного ответа на вопрос по номеру или ID."""
     match = re.search(r"(\d+)", message.text or "")
     if match is None:
         return
-    node_id = int(match.group(1))
+    parsed_num = int(match.group(1))
+
+    # Сначала проверяем, находится ли пользователь на странице вопросов
+    from bots.vk.handlers.pagination import get_page_state
+    state = await get_page_state(message.from_id)
+    node_id = parsed_num
+    if state and state.get("kind") in (KIND_FAQ_DEPARTMENTS, KIND_FAQ_SEARCH):
+        item_ids = state.get("meta", {}).get("item_ids", [])
+        if 1 <= parsed_num <= len(item_ids):
+            node_id = item_ids[parsed_num - 1]
 
     async with async_session_maker() as session:
         node = await session.scalar(
             select(FAQNode).options(selectinload(FAQNode.department)).where(FAQNode.id == node_id)
         )
         if node is None:
-            await message.answer(
-                "Вопрос с указанным номером не найден. Выберите раздел вопросов в меню:",
-                keyboard=build_back_nav_keyboard("К разделам вопросов"),
-            )
+            # Если не найден и пользователь мог иметь в виду номер заявки,
+            # не блокируем другие обработчики
             return
 
         children = list(

@@ -38,34 +38,48 @@ def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) 
 
 
 def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = None) -> str:
-    """Построить основную клавиатуру с динамическими отделами из БД."""
-    buttons: list[tuple[str, str]] = (
-        [(dept, "primary") for dept in departments] if departments else []
-    )
-
-    buttons.extend(
-        [
-            ("Задать вопрос", "secondary"),
-            ("Частые вопросы", "secondary"),
-            ("Мероприятия", "primary"),
-            ("База знаний", "secondary"),
-        ]
-    )
+    """Построить основную клавиатуру с ключевыми разделами бота."""
+    buttons: list[tuple[str, str]] = [
+        ("Создать заявку", "positive"),
+        ("Мои заявки", "primary"),
+        ("Частые вопросы", "secondary"),
+        ("База знаний", "secondary"),
+        ("Мероприятия", "primary"),
+        ("Партнёрство", "secondary"),
+    ]
     if is_admin:
         buttons.append(("Админ", "positive"))
-    buttons.append(("Мои заявки", "primary"))
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+
+
+def build_ticket_department_keyboard(departments: list[str]) -> str:
+    """Клавиатура выбора отдела при создании заявки (включая вариант 'Без отдела')."""
+    buttons: list[tuple[str, str]] = [(dept, "primary") for dept in departments]
+    buttons.append(("Без отдела", "secondary"))
+    buttons.append(("Отмена", "negative"))
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
 
 
 def build_admin_keyboard() -> str:
     buttons = [
         ("Заявки администратора", "primary"),
         ("Сформировать отчет", "positive"),
-        ("Отчет по дате", "positive"),
-        ("Отчет за период", "positive"),
+        ("Отчет по дате", "secondary"),
+        ("Отчет за период", "secondary"),
         ("Обычное меню", "secondary"),
     ]
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=False)
+
+
+def build_admin_report_types_keyboard() -> str:
+    """Клавиатура выбора типа отчёта: за сегодня, за определённое число, за период."""
+    buttons = [
+        ("За сегодня", "positive"),
+        ("За определённое число", "primary"),
+        ("За период", "primary"),
+        ("Отмена", "negative"),
+    ]
+    return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
 
 
 def build_admin_tickets_list_keyboard(
@@ -133,23 +147,32 @@ build_admin_cancel_keyboard = build_cancel_keyboard
 
 
 def build_anonymous_choice_keyboard() -> str:
-    """Клавиатура выбора анонимности."""
+    """Клавиатура выбора анонимности с обязательной кнопкой отмены."""
     return json.dumps(
         {
             "one_time": True,
             "buttons": [
                 [
                     {
-                        "action": {"type": "text", "label": "Остаться анонимным"},
-                        "color": "secondary",
-                    },
-                    {
                         "action": {"type": "text", "label": "Остаться не анонимным"},
                         "color": "primary",
                     },
-                ]
+                ],
+                [
+                    {
+                        "action": {"type": "text", "label": "Остаться анонимным"},
+                        "color": "secondary",
+                    },
+                ],
+                [
+                    {
+                        "action": {"type": "text", "label": "Отмена"},
+                        "color": "negative",
+                    },
+                ],
             ],
-        }
+        },
+        ensure_ascii=False,
     )
 
 
@@ -192,10 +215,11 @@ def build_faq_items_keyboard(
 
     page/has_more включают ряд пагинации «⬅️ Назад» / «Ещё ➡️» (ЭТАП 4.1).
     """
+    start_num = page * max_buttons + 1
     buttons: list[tuple[str, str]] = [
-        (f"Вопрос {item_id}", "secondary") for item_id in item_ids[:max_buttons]
+        (f"{start_num + i}", "secondary") for i, item_id in enumerate(item_ids[:max_buttons])
     ]
-    rows = _chunk_buttons(buttons, 2)
+    rows = _chunk_buttons(buttons, 3)
     nav_row = _pagination_nav_row(page, has_more)
     if nav_row:
         rows.append(nav_row)
@@ -203,10 +227,16 @@ def build_faq_items_keyboard(
     return _format_keyboard(rows, one_time=True)
 
 
-def build_knowledge_departments_keyboard(departments: list[str]) -> str:
+def build_knowledge_departments_keyboard(
+    departments: list[str], topics: list[str] | None = None
+) -> str:
     """Клавиатура выбора отдела для просмотра материалов базы знаний."""
     buttons: list[tuple[str, str]] = [(f"База: {dept}", "secondary") for dept in departments]
+    buttons.append(("База: Без отдела", "secondary"))
     buttons.append(("База: Все материалы", "primary"))
+    if topics:
+        for t in topics[:4]:
+            buttons.append((f"Тема: {t}", "secondary"))
     buttons.append(("Меню", "negative"))
     return _format_keyboard(_chunk_buttons(buttons, 2), one_time=True)
 

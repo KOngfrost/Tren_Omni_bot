@@ -18,6 +18,7 @@ _REPORT_PERIOD_PATTERN = r"^\s*(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})
 class ReportStates(BaseStateGroup):
     """FSM StateGroup для отчётов."""
 
+    WAITING_TYPE = "waiting_type"
     WAITING_DATE = "waiting_date"
     WAITING_DATE_FROM = "waiting_date_from"
 
@@ -25,8 +26,15 @@ class ReportStates(BaseStateGroup):
 class TicketStates(BaseStateGroup):
     """FSM StateGroup для создания обращений."""
 
+    WAITING_DEPARTMENT = "waiting_department"
     WAITING_DESCRIPTION = "waiting_description"
     WAITING_IDENTITY_CHOICE = "waiting_identity_choice"
+
+
+class PartnershipStates(BaseStateGroup):
+    """FSM StateGroup для раздела «Партнёрство»."""
+
+    WAITING_PROPOSAL = "waiting_proposal"
 
 
 class AdminTicketStates(BaseStateGroup):
@@ -35,22 +43,20 @@ class AdminTicketStates(BaseStateGroup):
     WAITING_REPLY_TEXT = "admin_waiting_reply_text"
 
 
+
 def _main_reply_text(departments: list[str] | None = None) -> str:
     lines = [
         "Привет! Я бот-помощник Объединённого студсовета общежитий.\n",
-        "Выберите нужный раздел в меню ниже:\n",
-        "📋 Отделы для подачи заявок:",
-        "• Жил-быт (Жилищно-бытовой)",
-        "• Культмасс (Культурно-массовый)",
-        "• Информ (Информационный)",
-        "• Корпоративный (Корп)\n",
-        "📌 Дополнительные разделы:",
-        "• Задать вопрос — общий вопрос без привязки к отделу",
-        "• Частые вопросы — ответы на популярные вопросы студентов",
-        "• Мероприятия — актуальные события и запись на них",
-        "• База знаний — полезные статьи и инструкции",
-        "• Мои заявки — список ваших обращений и их статусы\n",
-        "💡 При создании обращения можно выбрать: получить ответ в VK или отправить анонимно.",
+        "Выберите нужное действие в меню ниже:\n",
+        "📝 Обращения:",
+        "• Создать заявку — вопрос к определенному отделу или общий (без отдела)",
+        "• Мои заявки — список ваших заявок и история ответов\n",
+        "📌 Разделы информации:",
+        "• Частые вопросы — ответы на популярные вопросы по темам",
+        "• База знаний — регламенты, памятки по отделам и общие статьи",
+        "• Мероприятия — анонсы событий и запись",
+        "• Партнёрство — предложения о сотрудничестве\n",
+        "💡 При подаче заявки можно выбрать: получить ответ в VK или отправить анонимно.",
         "🔒 Отправляя обращение, вы даёте согласие на обработку персональных данных.",
     ]
     return "\n".join(lines)
