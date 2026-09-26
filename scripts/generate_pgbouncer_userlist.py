@@ -147,6 +147,22 @@ def write_userlist(lines: list[str], out_path: Path) -> None:
         pass
 
 
+def render_pgbouncer_ini(template_path: Path, out_path: Path, env_vars: dict[str, str]) -> None:
+    """Подставить переменные окружения в шаблон pgbouncer.ini и сохранить результат."""
+    if not template_path.is_file():
+        return
+    content = template_path.read_text(encoding="utf-8")
+    for key, val in env_vars.items():
+        content = content.replace(f"${{{key}}}", str(val))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
+    os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+    try:
+        os.chown(out_path, 70, 70)
+    except (PermissionError, AttributeError):
+        pass
+
+
 def _build_line(user: str, verifier: str) -> str:
     """Строка userlist.txt: ``"user" "SCRAM-SHA-256$..."``."""
     if not verifier.startswith("SCRAM-SHA-256$"):
@@ -215,6 +231,16 @@ def main() -> int:
         help="путь к userlist.txt (по умолчанию pgbouncer/userlist.txt); "
         "пустая строка — только вывод в stdout",
     )
+    parser.add_argument(
+        "--ini-template",
+        default="",
+        help="путь к шаблону pgbouncer.ini (по умолчанию pgbouncer/pgbouncer.ini)",
+    )
+    parser.add_argument(
+        "--ini-out",
+        default="",
+        help="путь для сохранения отрендеренного pgbouncer.ini (по умолчанию <out_dir>/pgbouncer.ini)",
+    )
     args = parser.parse_args()
 
     user = args.user.strip()
@@ -264,7 +290,20 @@ def main() -> int:
 
     if out_path is not None:
         write_userlist([line], out_path)
-        print(f"Записан файл: {out_path} (права 0600)", file=sys.stderr)
+        print(f"Записан файл: {out_path}", file=sys.stderr)
+
+        ini_tpl_str = args.ini_template or str(_REPO_ROOT / "pgbouncer" / "pgbouncer.ini")
+        ini_tpl = Path(ini_tpl_str)
+        ini_out = Path(args.ini_out) if args.ini_out else (out_path.parent / "pgbouncer.ini")
+        if ini_tpl.is_file():
+            env_vars = {
+                "DB_NAME": os.environ.get("POSTGRES_DB") or os.environ.get("DB_NAME") or "oss_bot",
+                "DB_HOST": os.environ.get("DB_HOST", "db"),
+                "DB_PORT": os.environ.get("DB_PORT", "5432"),
+                "AUTH_USER": user,
+            }
+            render_pgbouncer_ini(ini_tpl, ini_out, env_vars)
+            print(f"Записан конфиг PgBouncer: {ini_out}", file=sys.stderr)
     return 0
 
 

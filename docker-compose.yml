@@ -65,7 +65,6 @@ services:
     # файла автогенерация конфига в entrypoint НЕ выполняется, поэтому все
     # параметры пула обязаны быть заданы явно — они и заданы в pgbouncer/.
     volumes:
-      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
       - pgbouncer_config:/etc/pgbouncer
     environment:
       # Подстановки ${...} в pgbouncer.ini выполняет entrypoint образа.
