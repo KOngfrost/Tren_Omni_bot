@@ -145,11 +145,20 @@
             <button class="close-btn" data-close-modal="import-modal">&times;</button>
         </div>
         
-        <div style="background: var(--bg-subtle, #f8fafc); padding: 12px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border-color, #e2e8f0);">
-            <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">Скачать готовый шаблон для заполнения:</div>
-            <div style="display: flex; gap: 8px;">
-                <a href="/faq/template.xlsx" class="btn btn-secondary btn-small">Скачать Excel (.xlsx)</a>
-                <a href="/faq/template.csv" class="btn btn-secondary btn-small">Скачать CSV</a>
+        <div class="template-download-card">
+            <div class="template-download-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Скачать готовый шаблон для заполнения:</span>
+            </div>
+            <div class="template-download-buttons">
+                <a href="/faq/template.xlsx" class="btn btn-secondary btn-small">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Скачать Excel (.xlsx)</span>
+                </a>
+                <a href="/faq/template.csv" class="btn btn-secondary btn-small">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>Скачать CSV</span>
+                </a>
             </div>
         </div>
 
@@ -169,8 +178,10 @@
 
             <div class="form-group">
                 <label for="faq_file">Файл Excel (.xlsx) или CSV (.csv)</label>
-                <input type="file" id="faq_file" name="file" accept=".xlsx,.csv,.txt">
-                <small style="color: #64748b; display: block; margin-top: 4px;">Колонки в файле: Вопрос, Ответ, Отдел (необязательно)</small>
+                <div class="file-dropzone">
+                    <input type="file" id="faq_file" name="file" accept=".xlsx,.csv,.txt" class="file-input-field">
+                </div>
+                <small class="form-hint">Колонки в файле: Вопрос, Ответ, Отдел (необязательно)</small>
             </div>
 
             <div class="form-group">

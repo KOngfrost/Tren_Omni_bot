@@ -822,8 +822,17 @@
         var tagPart = document.getElementById('tag-partnerships');
         var notifWrapper = document.getElementById('notifications-wrapper');
 
+        // Элементы колокольчика в боковой панели (рядом с Рабочей областью)
+        var sidebarNotifBtn = document.getElementById('sidebar-notif-btn');
+        var sidebarNotifBadge = document.getElementById('sidebar-notif-badge');
+        var sidebarNotifTray = document.getElementById('sidebar-notif-tray');
+        var sidebarItemsList = document.getElementById('sidebar-notif-items-list');
+        var sidebarTagTickets = document.getElementById('sidebar-tag-tickets');
+        var sidebarTagReplies = document.getElementById('sidebar-tag-replies');
+        var sidebarTagPart = document.getElementById('sidebar-tag-partner');
+
         // Не запускать опрос счётчиков на публичных страницах (логин, правила и т.д.)
-        if (!ticketsBadge && !repliesBadge && !partBadge && !totalBadge && !notifBtn) {
+        if (!ticketsBadge && !repliesBadge && !partBadge && !totalBadge && !notifBtn && !sidebarNotifBtn) {
             return;
         }
 
@@ -860,7 +869,7 @@
             });
         }
 
-        // Интерактивность выпадающего окна Центра уведомлений
+        // Интерактивность выпадающего окна Центра уведомлений в шапке
         if (notifBtn && dropdown) {
             notifBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
@@ -889,6 +898,25 @@
                     dropdown.classList.remove('active');
                     notifBtn.setAttribute('aria-expanded', 'false');
                     notifBtn.focus();
+                }
+            });
+        }
+
+        // Интерактивность колокольчика в боковой панели (рядом с Рабочей областью)
+        if (sidebarNotifBtn && sidebarNotifTray) {
+            sidebarNotifBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var isVisible = sidebarNotifTray.style.display !== 'none';
+                if (isVisible) {
+                    sidebarNotifTray.style.display = 'none';
+                    sidebarNotifBtn.classList.remove('active');
+                    sidebarNotifBtn.setAttribute('aria-expanded', 'false');
+                } else {
+                    sidebarNotifTray.style.display = 'block';
+                    sidebarNotifBtn.classList.add('active');
+                    sidebarNotifBtn.setAttribute('aria-expanded', 'true');
+                    updateCounters();
                 }
             });
         }
@@ -924,14 +952,25 @@
                     var studentReplies = data.student_replies || 0;
                     var newParts = data.new_partnerships || 0;
                     var totalCount = data.total_notifications || (newTickets + studentReplies + newParts);
+                    var totalDisplay = totalCount > 99 ? '99+' : totalCount;
 
-                    // 1. Общий бейдж на колокольчике
+                    // 1. Общий бейдж на колокольчике в шапке
                     if (totalBadge) {
                         if (totalCount > 0) {
-                            totalBadge.textContent = totalCount > 99 ? '99+' : totalCount;
+                            totalBadge.textContent = totalDisplay;
                             totalBadge.classList.remove('hidden');
                         } else {
                             totalBadge.classList.add('hidden');
+                        }
+                    }
+
+                    // 1.1. Колокольчик в боковом меню (Рабочая область)
+                    if (sidebarNotifBadge) {
+                        if (totalCount > 0) {
+                            sidebarNotifBadge.textContent = totalDisplay;
+                            sidebarNotifBadge.classList.remove('hidden');
+                        } else {
+                            sidebarNotifBadge.classList.add('hidden');
                         }
                     }
 
@@ -965,44 +1004,74 @@
                     }
 
                     // 3. Теги в шапке выпадающего списка
+                    var ticketsTagText = '🔥 ' + newTickets + ' новых заявок';
+                    var repliesTagText = '💬 ' + studentReplies + ' ответов';
+                    var partsTagText = '🤝 ' + newParts + ' партнёрств';
+
                     if (tagTickets) {
                         if (newTickets > 0) {
-                            tagTickets.textContent = '🔥 ' + newTickets + ' новых заявок';
+                            tagTickets.textContent = ticketsTagText;
                             tagTickets.classList.remove('hidden');
                         } else {
                             tagTickets.classList.add('hidden');
                         }
                     }
+                    if (sidebarTagTickets) {
+                        if (newTickets > 0) {
+                            sidebarTagTickets.textContent = '🔥 ' + newTickets;
+                            sidebarTagTickets.classList.remove('hidden');
+                        } else {
+                            sidebarTagTickets.classList.add('hidden');
+                        }
+                    }
+
                     if (tagReplies) {
                         if (studentReplies > 0) {
-                            tagReplies.textContent = '💬 ' + studentReplies + ' ответов';
+                            tagReplies.textContent = repliesTagText;
                             tagReplies.classList.remove('hidden');
                         } else {
                             tagReplies.classList.add('hidden');
                         }
                     }
+                    if (sidebarTagReplies) {
+                        if (studentReplies > 0) {
+                            sidebarTagReplies.textContent = '💬 ' + studentReplies;
+                            sidebarTagReplies.classList.remove('hidden');
+                        } else {
+                            sidebarTagReplies.classList.add('hidden');
+                        }
+                    }
+
                     if (tagPart) {
                         if (newParts > 0) {
-                            tagPart.textContent = '🤝 ' + newParts + ' партнёрств';
+                            tagPart.textContent = partsTagText;
                             tagPart.classList.remove('hidden');
                         } else {
                             tagPart.classList.add('hidden');
                         }
                     }
-
-                    // 4. Список конкретных уведомлений со ссылками на тикеты
-                    if (itemsList && data.items) {
-                        if (data.items.length === 0) {
-                            itemsList.innerHTML = '<div class="notifications-empty">✨ Нет новых уведомлений</div>';
+                    if (sidebarTagPart) {
+                        if (newParts > 0) {
+                            sidebarTagPart.textContent = '🤝 ' + newParts;
+                            sidebarTagPart.classList.remove('hidden');
                         } else {
-                            var html = '';
+                            sidebarTagPart.classList.add('hidden');
+                        }
+                    }
+
+                    // 4. Список конкретных уведомлений со ссылками
+                    if (data.items) {
+                        var html = '';
+                        if (data.items.length === 0) {
+                            html = '<div class="notifications-empty">✨ Нет новых уведомлений</div>';
+                        } else {
                             for (var i = 0; i < data.items.length; i++) {
                                 var item = data.items[i];
                                 html += '<a href="' + escapeHtml(item.url) + '" class="notifications-item notif-type-' + escapeHtml(item.type) + '">' +
                                     '<div class="notifications-item-icon" aria-hidden="true">' + escapeHtml(item.icon) + '</div>' +
                                     '<div class="notifications-item-content">' +
                                         '<div class="notifications-item-title-row">' +
-                                            '<span class="notifications-item-title">' + escapeHtml(item.title) + '</span>' +
+                                            '<span class="notifications-item-title">' + escapeHtml(item.title) + '</span> ' +
                                             '<span class="notifications-item-badge badge-' + escapeHtml(item.type) + '">' + escapeHtml(item.type_label) + '</span>' +
                                         '</div>' +
                                         (item.department ? '<div class="notifications-item-dept">' + escapeHtml(item.department) + '</div>' : '') +
@@ -1011,8 +1080,9 @@
                                     '</div>' +
                                 '</a>';
                             }
-                            itemsList.innerHTML = html;
                         }
+                        if (itemsList) itemsList.innerHTML = html;
+                        if (sidebarItemsList) sidebarItemsList.innerHTML = html;
                     }
                 })
                 .catch(function (err) {
