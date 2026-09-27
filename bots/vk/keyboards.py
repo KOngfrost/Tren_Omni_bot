@@ -24,7 +24,7 @@ def _format_keyboard(rows: list[list[tuple[str, str]]], one_time: bool = False) 
 
     Цветовые правила проекта:
     - Все обычные кнопки: белые (secondary).
-    - Кнопка админа: зелёная (positive).
+    - Кнопка админа: строгая белая (secondary).
     - Кнопка отмены: красная (negative).
     """
     return json.dumps(
@@ -49,7 +49,7 @@ def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = 
     - Ряд 1: Создать заявку / Мои заявки (белые)
     - Ряд 2: Частые вопросы / База знаний (белые)
     - Ряд 3: Мероприятия / Партнёрство (белые)
-    - Ряд 4 (для администратора): Админ (зелёная)
+    - Ряд 4 (для администратора): Админ (белая)
     """
     rows: list[list[tuple[str, str]]] = [
         [("Создать заявку", "secondary"), ("Мои заявки", "secondary")],
@@ -57,7 +57,7 @@ def build_main_keyboard(is_admin: bool = False, departments: list[str] | None = 
         [("Мероприятия", "secondary"), ("Партнёрство", "secondary")],
     ]
     if is_admin:
-        rows.append([("Админ", "positive")])
+        rows.append([("Админ", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
 
@@ -109,7 +109,7 @@ def build_admin_tickets_list_keyboard(
     nav_row = _pagination_nav_row(page, has_more)
     if nav_row:
         rows.append(nav_row)
-    rows.append([("Заявки администратора", "secondary"), ("Админ", "positive")])
+    rows.append([("Заявки администратора", "secondary"), ("Админ", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
 
@@ -122,7 +122,7 @@ def build_admin_ticket_actions_keyboard(ticket_id: int, is_completed: bool = Fal
         rows.append([(f"В обработку #{ticket_id}", "secondary")])
     else:
         rows.append([(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "secondary")])
-    rows.append([("Заявки администратора", "secondary"), ("Админ", "positive")])
+    rows.append([("Заявки администратора", "secondary"), ("Админ", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
 

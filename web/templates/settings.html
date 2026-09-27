@@ -125,9 +125,9 @@
         <div class="card-header">
             <h2>Двухфакторная аутентификация (2FA)</h2>
             {% if two_factor_enabled %}
-            <span class="badge" style="background: rgba(34, 197, 94, 0.15); color: #22c55e;">● Включена</span>
+            <span class="badge" style="background: var(--status-done-bg); color: var(--status-done);">● Включена</span>
             {% else %}
-            <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">○ Отключена</span>
+            <span class="badge" style="background: var(--danger-bg); color: var(--danger);">○ Отключена</span>
             {% endif %}
         </div>
         <div class="settings-toggle-row">

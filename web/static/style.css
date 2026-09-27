@@ -42,57 +42,57 @@
     100% { background-position: 200% 0; }
 }
 
-/* ---------- Design tokens (Dark / Default) ---------- */
+/* ---------- Design tokens (Dark / Default: черный и оттенки, розовый и оттенки, белый и оттенки) ---------- */
 :root,
 html[data-theme="dark"] {
-    --bg-page: #08080c;
-    --bg-gradient: radial-gradient(circle at 18% 15%, rgba(255, 77, 157, 0.16) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(214, 93, 177, 0.12) 0%, transparent 45%), radial-gradient(circle at 50% 50%, rgba(255, 158, 200, 0.05) 0%, transparent 55%), #08080c;
-    --bg-surface: #121217;
-    --bg-surface-2: #1a1a23;
-    --bg-surface-3: #242431;
+    --bg-page: #000000;
+    --bg-gradient: radial-gradient(circle at 18% 15%, rgba(244, 63, 94, 0.12) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(225, 29, 72, 0.08) 0%, transparent 45%), #000000;
+    --bg-surface: #0a0a0d;
+    --bg-surface-2: #121217;
+    --bg-surface-3: #1a1a22;
 
     --text-primary: #ffffff;
-    --text-secondary: #b8b8c8;
-    --text-tertiary: #7d7d8f;
-    --text-inverse: #08080b;
+    --text-secondary: #e2e8f0;
+    --text-tertiary: #94a3b8;
+    --text-inverse: #000000;
 
-    /* Розовый акцент и градиенты */
-    --primary: #ff4d9d;
-    --primary-hover: #ff70b2;
-    --primary-gradient: linear-gradient(135deg, #ff5ea6 0%, #ea2679 100%);
-    --primary-soft: rgba(255, 77, 157, 0.14);
-    --primary-glow: 0 0 16px rgba(255, 77, 157, 0.35);
+    /* Розовый акцент и градиенты: строгие выверенные оттенки */
+    --primary: #f43f5e;
+    --primary-hover: #fb7185;
+    --primary-gradient: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+    --primary-soft: rgba(244, 63, 94, 0.12);
+    --primary-glow: 0 0 16px rgba(244, 63, 94, 0.35);
 
-    /* Статусы в дифференцированных оттенках розового */
-    --status-new: #ff4d9d;
-    --status-new-bg: rgba(255, 77, 157, 0.16);
-    --status-progress: #d65db1;
-    --status-progress-bg: rgba(214, 93, 177, 0.16);
-    --status-done: #ff9ec8;
-    --status-done-bg: rgba(255, 158, 200, 0.16);
-    --status-transferred: #e070e0;
-    --status-transferred-bg: rgba(224, 112, 224, 0.16);
-    --status-anon: #8f8f9e;
-    --status-anon-bg: rgba(143, 143, 158, 0.16);
+    /* Статусы в дифференцированных строгих оттенках розового */
+    --status-new: #f43f5e;
+    --status-new-bg: rgba(244, 63, 94, 0.14);
+    --status-progress: #e11d48;
+    --status-progress-bg: rgba(225, 29, 72, 0.14);
+    --status-done: #fda4af;
+    --status-done-bg: rgba(253, 164, 175, 0.14);
+    --status-transferred: #f472b6;
+    --status-transferred-bg: rgba(244, 114, 182, 0.14);
+    --status-anon: #a1a1aa;
+    --status-anon-bg: rgba(161, 161, 170, 0.14);
 
-    --danger: #ff3366;
-    --danger-bg: rgba(255, 51, 102, 0.15);
-    --success: #10b981;
-    --success-bg: rgba(16, 185, 129, 0.15);
+    --danger: #e11d48;
+    --danger-bg: rgba(225, 29, 72, 0.14);
+    --success: #fb7185;
+    --success-bg: rgba(251, 113, 133, 0.14);
 
-    --line: #22222c;
-    --line-strong: #323242;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.65);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.75);
+    --line: #202028;
+    --line-strong: #2e2e3a;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.8);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.85);
+    --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.9);
 
     /* Полустеклянные карточки (Frosted Glass / Glassmorphism) */
-    --bg-glass: rgba(18, 16, 25, 0.72);
-    --bg-glass-card: rgba(22, 19, 32, 0.62);
-    --border-glass: rgba(255, 255, 255, 0.12);
-    --border-glass-hover: rgba(255, 77, 157, 0.38);
+    --bg-glass: rgba(10, 10, 14, 0.85);
+    --bg-glass-card: rgba(14, 14, 18, 0.78);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --border-glass-hover: rgba(244, 63, 94, 0.45);
     --glass-blur: blur(18px) saturate(190%);
-    --glass-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 20px 0 rgba(255, 77, 157, 0.05);
+    --glass-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 20px 0 rgba(244, 63, 94, 0.04);
 
     --r-xs: 4px;
     --r-sm: 8px;
@@ -101,54 +101,56 @@ html[data-theme="dark"] {
     --r-full: 9999px;
 }
 
-/* ---------- Светлая тема (Light Mode: благородный розовый и оттенки белого) ---------- */
+/* ---------- Светлая тема (Light Mode: белый и оттенки, розовый и оттенки, шрифт черный и оттенки) ---------- */
 html[data-theme="light"] {
-    --bg-page: #fcf9fa;
-    --bg-gradient: radial-gradient(circle at 10% 10%, rgba(244, 114, 182, 0.08) 0%, transparent 40%), radial-gradient(circle at 90% 85%, rgba(251, 113, 133, 0.06) 0%, transparent 45%), #fcf9fa;
+    --bg-page: #ffffff;
+    --bg-gradient: radial-gradient(circle at 10% 10%, rgba(225, 29, 72, 0.04) 0%, transparent 40%), radial-gradient(circle at 90% 85%, rgba(244, 63, 94, 0.03) 0%, transparent 45%), #ffffff;
     --bg-surface: #ffffff;
-    --bg-surface-2: #f8f3f6;
-    --bg-surface-3: #f2e9ef;
+    --bg-surface-2: #f8fafc;
+    --bg-surface-3: #f1f5f9;
 
-    --text-primary: #1f141b;
-    --text-secondary: #68525f;
-    --text-tertiary: #9c8392;
+    --text-primary: #09090b;
+    --text-secondary: #27272a;
+    --text-tertiary: #52525b;
     --text-inverse: #ffffff;
 
-    --primary: #d94474;
-    --primary-hover: #c43362;
-    --primary-gradient: linear-gradient(135deg, #e85584 0%, #cc3363 100%);
-    --primary-soft: rgba(217, 68, 116, 0.08);
-    --primary-glow: 0 4px 14px rgba(217, 68, 116, 0.22);
+    /* Розовый акцент и градиенты: строгие глубокие оттенки */
+    --primary: #e11d48;
+    --primary-hover: #be123c;
+    --primary-gradient: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+    --primary-soft: rgba(225, 29, 72, 0.08);
+    --primary-glow: 0 4px 14px rgba(225, 29, 72, 0.22);
 
-    --status-new: #d94474;
-    --status-new-bg: rgba(217, 68, 116, 0.08);
-    --status-progress: #b8407a;
-    --status-progress-bg: rgba(184, 64, 122, 0.08);
-    --status-done: #e05e8e;
-    --status-done-bg: rgba(224, 94, 142, 0.10);
-    --status-transferred: #a33b7b;
-    --status-transferred-bg: rgba(163, 59, 123, 0.08);
-    --status-anon: #8c707f;
-    --status-anon-bg: rgba(140, 112, 127, 0.10);
+    /* Статусы в дифференцированных строгих оттенках розового */
+    --status-new: #e11d48;
+    --status-new-bg: rgba(225, 29, 72, 0.08);
+    --status-progress: #be123c;
+    --status-progress-bg: rgba(190, 18, 60, 0.08);
+    --status-done: #9f1239;
+    --status-done-bg: rgba(159, 18, 57, 0.08);
+    --status-transferred: #db2777;
+    --status-transferred-bg: rgba(219, 39, 119, 0.08);
+    --status-anon: #71717a;
+    --status-anon-bg: rgba(113, 113, 122, 0.08);
 
-    --danger: #d13b5e;
-    --danger-bg: rgba(209, 59, 94, 0.08);
-    --success: #059669;
-    --success-bg: rgba(5, 150, 105, 0.12);
+    --danger: #be123c;
+    --danger-bg: rgba(190, 18, 60, 0.08);
+    --success: #e11d48;
+    --success-bg: rgba(225, 29, 72, 0.08);
 
-    --line: rgba(217, 68, 116, 0.10);
-    --line-strong: rgba(217, 68, 116, 0.20);
-    --shadow-sm: 0 1px 3px rgba(31, 20, 27, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-    --shadow-md: 0 4px 12px rgba(31, 20, 27, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
-    --shadow-lg: 0 12px 28px rgba(31, 20, 27, 0.08), 0 3px 8px rgba(0, 0, 0, 0.03);
+    --line: #e2e8f0;
+    --line-strong: #cbd5e1;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.03);
+    --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.09), 0 3px 8px rgba(0, 0, 0, 0.04);
 
     /* Полустеклянные карточки для светлой темы */
-    --bg-glass: rgba(255, 255, 255, 0.82);
-    --bg-glass-card: rgba(255, 255, 255, 0.78);
-    --border-glass: rgba(255, 255, 255, 0.90);
-    --border-glass-hover: rgba(217, 68, 116, 0.35);
+    --bg-glass: rgba(255, 255, 255, 0.94);
+    --bg-glass-card: rgba(255, 255, 255, 0.90);
+    --border-glass: rgba(0, 0, 0, 0.08);
+    --border-glass-hover: rgba(225, 29, 72, 0.35);
     --glass-blur: blur(16px) saturate(180%);
-    --glass-shadow: 0 8px 24px -4px rgba(31, 20, 27, 0.04), 0 2px 6px -1px rgba(217, 68, 116, 0.03), inset 0 1px 1px 0 #ffffff;
+    --glass-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(225, 29, 72, 0.03), inset 0 1px 1px 0 #ffffff;
 }
 
 /* ---------- Reset & base ---------- */
@@ -1138,24 +1140,27 @@ body.no-scroll {
     box-shadow: none;
 }
 
-.btn-primary {
-    background: linear-gradient(135deg, #ff4d9d 0%, #d92370 100%);
-    border: 1px solid rgba(255, 77, 157, 0.6);
+.btn-primary,
+.btn-success {
+    background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+    border: 1px solid rgba(244, 63, 94, 0.6);
     color: #ffffff;
-    box-shadow: 0 2px 10px rgba(255, 77, 157, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    box-shadow: 0 2px 10px rgba(244, 63, 94, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
     font-weight: 600;
 }
 
-.btn-primary:hover {
-    background: linear-gradient(135deg, #ff66ad 0%, #ea2a7d 100%);
-    border-color: #ff70b2;
+.btn-primary:hover,
+.btn-success:hover {
+    background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+    border-color: #fb7185;
     transform: translateY(-1.5px);
-    box-shadow: 0 5px 16px rgba(255, 77, 157, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    box-shadow: 0 5px 16px rgba(244, 63, 94, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.btn-primary:active {
+.btn-primary:active,
+.btn-success:active {
     transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(255, 77, 157, 0.2);
+    box-shadow: 0 1px 3px rgba(244, 63, 94, 0.2);
 }
 
 .btn-secondary {
@@ -1170,24 +1175,31 @@ body.no-scroll {
     color: var(--text-primary);
 }
 
-.btn-success {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    border: 1px solid rgba(16, 185, 129, 0.6);
+html[data-theme="light"] .btn-primary,
+html[data-theme="light"] .btn-success {
+    background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+    border-color: #be123c;
     color: #ffffff;
-    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(225, 29, 72, 0.25);
 }
 
-.btn-success:hover {
-    background: linear-gradient(135deg, #34d399 0%, #059669 100%);
-    border-color: #34d399;
-    transform: translateY(-1.5px);
-    box-shadow: 0 5px 16px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+html[data-theme="light"] .btn-primary:hover,
+html[data-theme="light"] .btn-success:hover {
+    background: linear-gradient(135deg, #e11d48 0%, #9f1239 100%);
+    border-color: #9f1239;
+    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
 }
 
-.btn-success:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+html[data-theme="light"] .btn-secondary {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #09090b;
+}
+
+html[data-theme="light"] .btn-secondary:hover {
+    background: #f1f5f9;
+    border-color: #e11d48;
+    color: #e11d48;
 }
 
 .btn-danger {
