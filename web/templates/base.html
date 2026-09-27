@@ -123,7 +123,7 @@
             <nav class="sidebar-nav" id="sidebar-nav" aria-label="Основная навигация">
                 <div class="nav-section-title-wrap">
                     <span class="nav-label">Рабочая область</span>
-                    <button type="button" class="btn-sidebar-notif" id="sidebar-notif-btn" aria-label="Уведомления рабочей области" aria-expanded="false" title="Уведомления">
+                    <button type="button" class="btn-sidebar-notif" id="sidebar-notif-btn" data-open-modal="notifications-modal" aria-label="Уведомления рабочей области" title="Открыть окно уведомлений">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -132,19 +132,6 @@
                             {{ request.state.total_notifications_count|default(0) }}
                         </span>
                     </button>
-                </div>
-                <div class="sidebar-notif-tray" id="sidebar-notif-tray" style="display: none;">
-                    <div class="sidebar-notif-tray-header">
-                        <span class="sidebar-notif-tray-title">Уведомления</span>
-                        <div class="sidebar-notif-tags" id="sidebar-notif-tags">
-                            <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="sidebar-tag-tickets">🔥 {{ request.state.new_tickets_count|default(0) }}</span>
-                            <span class="notif-tag notif-tag-replies {% if not request.state.student_replies_count %}hidden{% endif %}" id="sidebar-tag-replies">💬 {{ request.state.student_replies_count|default(0) }}</span>
-                            <span class="notif-tag notif-tag-partner {% if not request.state.new_partnerships_count %}hidden{% endif %}" id="sidebar-tag-partner">🤝 {{ request.state.new_partnerships_count|default(0) }}</span>
-                        </div>
-                    </div>
-                    <div class="sidebar-notif-list" id="sidebar-notif-items-list">
-                        <div class="notifications-loading">Загрузка...</div>
-                    </div>
                 </div>
                 <a class="nav-link {% if active == 'dashboard' %}active{% endif %}" href="/"><span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Обзор</a>
                 <a class="nav-link {% if active == 'tickets' %}active{% endif %}" href="/tickets/" id="nav-link-tickets">
@@ -202,7 +189,7 @@
                     {% block top_actions %}{% endblock %}
                     <!-- Центр уведомлений: раздельный просмотр заявок, ответов и партнёрств -->
                     <div class="notifications-wrapper" id="notifications-wrapper">
-                        <button type="button" class="btn-notifications" id="notifications-btn" aria-label="Уведомления" aria-expanded="false" title="Уведомления">
+                        <button type="button" class="btn-notifications" id="notifications-btn" data-open-modal="notifications-modal" aria-label="Уведомления" title="Открыть окно уведомлений">
                             <span class="notifications-icon" aria-hidden="true">
                                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -328,6 +315,46 @@
             <button type="button" class="btn-cookie-accept" id="cookie-consent-accept-btn" aria-label="Принять использование файлов cookie">Понятно</button>
         </div>
     </aside>
+
+    <!-- Дополнительное модальное окно уведомлений для максимальной читаемости и чистоты меню -->
+    {% if user is defined and user %}
+    <div id="notifications-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="notif-modal-title">
+        <div class="modal-content notifications-modal-content">
+            <div class="modal-header">
+                <div class="notifications-modal-header-left">
+                    <div class="notif-bell-icon-wrap" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 id="notif-modal-title" style="margin: 0; font-size: 18px;">Центр уведомлений</h3>
+                        <div class="notifications-modal-sub">Активные обращения, ответы и партнёрства</div>
+                    </div>
+                </div>
+                <button type="button" class="close-btn" data-close-modal="notifications-modal" aria-label="Закрыть">&times;</button>
+            </div>
+
+            <div class="notifications-tags" id="modal-notifications-tags" style="margin-bottom: 14px;">
+                <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="modal-tag-new-tickets">🔥 {{ request.state.new_tickets_count|default(0) }} новых заявок</span>
+                <span class="notif-tag notif-tag-replies {% if not request.state.student_replies_count %}hidden{% endif %}" id="modal-tag-student-replies">💬 {{ request.state.student_replies_count|default(0) }} ответов</span>
+                <span class="notif-tag notif-tag-partner {% if not request.state.new_partnerships_count %}hidden{% endif %}" id="modal-tag-partnerships">🤝 {{ request.state.new_partnerships_count|default(0) }} партнёрств</span>
+            </div>
+
+            <div class="notifications-items-list notifications-modal-list" id="modal-notifications-items-list">
+                <div class="notifications-loading">Загрузка уведомлений...</div>
+            </div>
+
+            <div class="notifications-dropdown-footer" style="margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px;">
+                <a href="/tickets/?status=new" class="notifications-footer-link">Все новые обращения →</a>
+                {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                <a href="/partnerships/" class="notifications-footer-link">Раздел партнёрств →</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% block extra_js %}{% endblock %}
 </body>

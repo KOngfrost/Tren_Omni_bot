@@ -825,11 +825,13 @@
         // Элементы колокольчика в боковой панели (рядом с Рабочей областью)
         var sidebarNotifBtn = document.getElementById('sidebar-notif-btn');
         var sidebarNotifBadge = document.getElementById('sidebar-notif-badge');
-        var sidebarNotifTray = document.getElementById('sidebar-notif-tray');
-        var sidebarItemsList = document.getElementById('sidebar-notif-items-list');
-        var sidebarTagTickets = document.getElementById('sidebar-tag-tickets');
-        var sidebarTagReplies = document.getElementById('sidebar-tag-replies');
-        var sidebarTagPart = document.getElementById('sidebar-tag-partner');
+
+        // Элементы модального окна Центра уведомлений
+        var notifModal = document.getElementById('notifications-modal');
+        var modalItemsList = document.getElementById('modal-notifications-items-list');
+        var modalTagTickets = document.getElementById('modal-tag-new-tickets');
+        var modalTagReplies = document.getElementById('modal-tag-student-replies');
+        var modalTagPart = document.getElementById('modal-tag-partnerships');
 
         // Не запускать опрос счётчиков на публичных страницах (логин, правила и т.д.)
         if (!ticketsBadge && !repliesBadge && !partBadge && !totalBadge && !notifBtn && !sidebarNotifBtn) {
@@ -869,55 +871,15 @@
             });
         }
 
-        // Интерактивность выпадающего окна Центра уведомлений в шапке
-        if (notifBtn && dropdown) {
-            notifBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var isOpen = dropdown.classList.contains('active');
-                if (isOpen) {
-                    dropdown.classList.remove('active');
-                    notifBtn.setAttribute('aria-expanded', 'false');
-                } else {
-                    dropdown.classList.add('active');
-                    notifBtn.setAttribute('aria-expanded', 'true');
-                    updateCounters();
-                }
-            });
-
-            document.addEventListener('click', function (e) {
-                if (notifWrapper && !notifWrapper.contains(e.target)) {
-                    if (dropdown.classList.contains('active')) {
-                        dropdown.classList.remove('active');
-                        notifBtn.setAttribute('aria-expanded', 'false');
-                    }
-                }
-            });
-
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && dropdown.classList.contains('active')) {
-                    dropdown.classList.remove('active');
-                    notifBtn.setAttribute('aria-expanded', 'false');
-                    notifBtn.focus();
-                }
+        // Обновление счетчиков при открытии модального окна уведомлений
+        if (sidebarNotifBtn) {
+            sidebarNotifBtn.addEventListener('click', function () {
+                updateCounters();
             });
         }
-
-        // Интерактивность колокольчика в боковой панели (рядом с Рабочей областью)
-        if (sidebarNotifBtn && sidebarNotifTray) {
-            sidebarNotifBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                var isVisible = sidebarNotifTray.style.display !== 'none';
-                if (isVisible) {
-                    sidebarNotifTray.style.display = 'none';
-                    sidebarNotifBtn.classList.remove('active');
-                    sidebarNotifBtn.setAttribute('aria-expanded', 'false');
-                } else {
-                    sidebarNotifTray.style.display = 'block';
-                    sidebarNotifBtn.classList.add('active');
-                    sidebarNotifBtn.setAttribute('aria-expanded', 'true');
-                    updateCounters();
-                }
+        if (notifBtn) {
+            notifBtn.addEventListener('click', function () {
+                updateCounters();
             });
         }
 
@@ -1016,12 +978,12 @@
                             tagTickets.classList.add('hidden');
                         }
                     }
-                    if (sidebarTagTickets) {
+                    if (modalTagTickets) {
                         if (newTickets > 0) {
-                            sidebarTagTickets.textContent = '🔥 ' + newTickets;
-                            sidebarTagTickets.classList.remove('hidden');
+                            modalTagTickets.textContent = '🔥 ' + newTickets + ' новых заявок';
+                            modalTagTickets.classList.remove('hidden');
                         } else {
-                            sidebarTagTickets.classList.add('hidden');
+                            modalTagTickets.classList.add('hidden');
                         }
                     }
 
@@ -1033,12 +995,12 @@
                             tagReplies.classList.add('hidden');
                         }
                     }
-                    if (sidebarTagReplies) {
+                    if (modalTagReplies) {
                         if (studentReplies > 0) {
-                            sidebarTagReplies.textContent = '💬 ' + studentReplies;
-                            sidebarTagReplies.classList.remove('hidden');
+                            modalTagReplies.textContent = '💬 ' + studentReplies + ' ответов';
+                            modalTagReplies.classList.remove('hidden');
                         } else {
-                            sidebarTagReplies.classList.add('hidden');
+                            modalTagReplies.classList.add('hidden');
                         }
                     }
 
@@ -1050,12 +1012,12 @@
                             tagPart.classList.add('hidden');
                         }
                     }
-                    if (sidebarTagPart) {
+                    if (modalTagPart) {
                         if (newParts > 0) {
-                            sidebarTagPart.textContent = '🤝 ' + newParts;
-                            sidebarTagPart.classList.remove('hidden');
+                            modalTagPart.textContent = '🤝 ' + newParts + ' партнёрств';
+                            modalTagPart.classList.remove('hidden');
                         } else {
-                            sidebarTagPart.classList.add('hidden');
+                            modalTagPart.classList.add('hidden');
                         }
                     }
 
@@ -1082,7 +1044,7 @@
                             }
                         }
                         if (itemsList) itemsList.innerHTML = html;
-                        if (sidebarItemsList) sidebarItemsList.innerHTML = html;
+                        if (modalItemsList) modalItemsList.innerHTML = html;
                     }
                 })
                 .catch(function (err) {
