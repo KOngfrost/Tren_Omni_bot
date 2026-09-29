@@ -8,10 +8,10 @@
 - Назначение суперадминов: только действующий суперадмин
 """
 
-from datetime import datetime, timedelta, timezone
 import logging
 import secrets
 import time
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
@@ -19,9 +19,16 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from core.admin_presence import get_online_ids
 from core.database import async_session_maker
 from core.models import Admin, Department, Log, User, UserRole, WebRole, WebUser
-from web.dependencies import get_admin_scope, is_superadmin, require_auth
+from core.time_utils import format_app_datetime, humanize_last_seen, now_app_tz
+from web.dependencies import (
+    get_admin_scope,
+    is_superadmin,
+    is_temporary,
+    require_auth,
+)
 from web.routes.auth import require_crud_rate_limit
 from web.security.csrf import get_csrf_token
 from web.security.middleware import sanitize_html
@@ -31,6 +38,22 @@ from web.templating import templates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Временный администратор ведёт диалог с отделом, но не управляет учётными
+# записями. Сообщение единое для всех защищаемых эндпоинтов.
+TEMPORARY_ADMIN_FORBIDDEN = "Временный администратор не имеет прав на создание или удаление учетных записей."
+
+
+def _deny_temporary_admin(request: Request, user: dict):
+    """Отклонить запрос временного администратора на управление учётными записями.
+
+    Возвращает RedirectResponse либо None, если ограничение не применимо.
+    Вызывается ПЕРВЫМ в эндпоинтах, до любых действий с БД.
+    """
+    if not is_temporary(user):
+        return None
+    request.session["flash_error"] = TEMPORARY_ADMIN_FORBIDDEN
+    return RedirectResponse(url="/admin/admins/", status_code=302)
 
 
 @router.get("/")
@@ -44,10 +67,21 @@ async def admins_page(request: Request, user=Depends(require_auth)):
     IDOR-защита:
     - Суперадмин видит всех админов.
     - Обычный админ — только тех, кто привязан к его отделу.
+
+    Каждая карточка получает статус присутствия (Онлайн/Офлайн/Истёк) на основе
+    ключей admin:heartbeat:* в Redis и полей WebUser.last_login_at/expires_at.
     """
     admins: list[Admin] = []
     departments: list[Department] = []
     db_error: bool = False
+
+    # Присутствие читается ВНЕ транзакции с БД: сбой Redis не должен ломать
+    # страницу целиком — в худшем случае все карточки покажут «Офлайн».
+    try:
+        online_ids = await get_online_ids()
+    except Exception as exc:  # pragma: no cover - защитный контур
+        logger.debug("Не удалось прочитать индикатор активности: %s", exc)
+        online_ids = set()
 
     try:
         async with async_session_maker() as session:
@@ -110,8 +144,73 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "csrf_token": get_csrf_token(request),
             "created_credentials": _pop_fresh_created_credentials(request.session),
             "session_id": request.state.session_id,
+            # Индикатор активности и права временного администратора.
+            "presence_of": lambda wu: _presence_status(wu, online_ids),
+            "viewer_is_temporary": is_temporary(user),
+            "online_count": len(online_ids),
         },
     )
+
+
+def _presence_status(web_user: WebUser | None, online_ids: set[int]) -> dict:
+    """Собрать данные индикатора активности для карточки администратора.
+
+    Логика приоритетов:
+    1. Учётка отключена или срок истёк -> «Истёк» (красный), даже если ключ
+       heartbeat ещё жив: доступ всё равно заблокирован на входе.
+    2. Активен менее 15 минут (живой ключ в Redis) -> «Онлайн» (зелёный).
+    3. Иначе -> «Офлайн» с временем последнего визита по МСК.
+    """
+    if web_user is None:
+        return {
+            "state": "offline",
+            "label": "Офлайн",
+            "icon": "⚪",
+            "css": "status-dot-offline",
+            "badge": "badge-secondary",
+            "last_seen": "Веб-доступ не выдан",
+            "expires_label": "",
+            "has_expiry": False,
+        }
+
+    expires_label = ""
+    if web_user.expires_at:
+        expires_label = format_app_datetime(web_user.expires_at, "%d.%m.%Y %H:%M")
+
+    base = {
+        "expires_label": expires_label,
+        "has_expiry": bool(expires_label),
+        "last_seen": humanize_last_seen(web_user.last_login_at),
+    }
+
+    if not web_user.is_active or web_user.is_expired:
+        return {
+            **base,
+            "state": "expired",
+            "label": "Истёк",
+            "icon": "🔴",
+            "css": "status-dot-expired",
+            "badge": "badge-danger",
+        }
+
+    if web_user.id in online_ids:
+        return {
+            **base,
+            "state": "online",
+            "label": "Онлайн",
+            "icon": "🟢",
+            "css": "status-dot-online",
+            "badge": "badge-completed",
+        }
+
+    return {
+        **base,
+        "state": "offline",
+        "label": "Офлайн",
+        "icon": "⚪",
+        "css": "status-dot-offline",
+        "badge": "badge-secondary",
+    }
 
 
 def _pop_fresh_created_credentials(session: dict) -> dict | None:
@@ -131,9 +230,42 @@ async def add_qa_admin(request: Request, user=Depends(require_auth)):
     return await add_admin(request, user)
 
 
+def _resolve_expiry(form, admin_type: str):
+    """Рассчитать срок действия для временного администратора.
+
+    Возвращает (expires_at, error). error — готовый текст для flash_error,
+    если значение некорректно. Для постоянных админов срок не задаётся.
+    """
+    if admin_type != "temp":
+        return None, None
+
+    preset = str(form.get("duration_preset", "24")).strip()
+    try:
+        if preset == "custom":
+            hours = int(form.get("custom_hours", 0))
+            if hours < 1:
+                return None, "Количество часов должно быть положительным числом"
+        else:
+            hours = int(preset)
+    except (ValueError, TypeError):
+        return None, "Некорректное значение срока действия"
+
+    if hours <= 0:
+        return None, None  # 0 = бессрочно
+    return now_app_tz() + timedelta(hours=hours), None
+
+
 @router.post("/")
 async def add_admin(request: Request, user=Depends(require_auth)):
-    """Добавление нового администратора (с VK ID или временного/QA с настраиваемым сроком)."""
+    """Добавление нового администратора (с VK ID или временного/QA с настраиваемым сроком).
+
+    Безопасность: временный администратор не может создавать учётные записи
+    даже с ролью superadmin — проверка is_temporary выполняется до разбора формы.
+    """
+    denied = _deny_temporary_admin(request, user)
+    if denied is not None:
+        return denied
+
     await require_crud_rate_limit(request)
     form = await request.form()
 
@@ -167,97 +299,33 @@ async def add_admin(request: Request, user=Depends(require_auth)):
     web_role = WebRole.SUPERADMIN if role_str == "superadmin" else WebRole.DEPARTMENT_ADMIN
 
     # Расчёт срока действия для временного администратора
-    expires_at = None
-    if admin_type == "temp":
-        preset = str(form.get("duration_preset", "24")).strip()
-        try:
-            if preset == "custom":
-                custom_hours = int(form.get("custom_hours", 0))
-                if custom_hours < 1:
-                    request.session["flash_error"] = "Количество часов должно быть положительным числом"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-                hours = custom_hours
-            else:
-                hours = int(preset)
-            if hours > 0:
-                expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
-        except (ValueError, TypeError):
-            request.session["flash_error"] = "Некорректное значение срока действия"
-            return RedirectResponse(url="/admin/admins/", status_code=302)
+    expires_at, expiry_error = _resolve_expiry(form, admin_type)
+    if expiry_error:
+        request.session["flash_error"] = expiry_error
+        return RedirectResponse(url="/admin/admins/", status_code=302)
 
     try:
         async with async_session_maker() as session:
             if admin_type == "temp":
-                if not username:
-                    username = f"qa_{secrets.token_hex(4)}"
-                if not password:
-                    password = secrets.token_urlsafe(12)
-
-                existing = await session.scalar(select(WebUser).where(WebUser.username == username))
-                if existing:
-                    request.session["flash_error"] = f"Логин '{username}' уже занят"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-
-                web_user = WebUser(
+                return await _create_temp_admin(
+                    request,
+                    session,
                     username=username,
-                    password_hash=hash_password(password),
-                    role=web_role,
-                    department_id=dept_id,
-                    admin_id=None,
-                    is_active=True,
+                    password=password,
+                    web_role=web_role,
+                    dept_id=dept_id,
                     expires_at=expires_at,
                 )
-                session.add(web_user)
-                await session.commit()
-
-                if expires_at:
-                    duration_str = f"действует до {expires_at.strftime('%d.%m.%Y %H:%M UTC')}"
-                else:
-                    duration_str = "бессрочный доступ"
-                request.session["flash_success"] = f"Временный/QA администратор '{username}' успешно создан ({duration_str})."
-                request.session["created_credentials"] = {
-                    "username": username,
-                    "password": password,
-                    "created_at": time.time(),
-                }
-                return RedirectResponse(url="/admin/admins/", status_code=302)
-            else:
-                # Постоянный администратор с VK ID
-                try:
-                    vk_id = _parse_vk_id(form)
-                except ValueError:
-                    request.session["flash_error"] = "VK ID должен быть числом"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-
-                full_name = sanitize_html(str(form.get("full_name", "")).strip())
-                if not username:
-                    username = f"dept_admin_{vk_id}"
-                if not password:
-                    password = secrets.token_urlsafe(12)
-
-                existing = await session.scalar(select(WebUser).where(WebUser.username == username))
-                if existing:
-                    request.session["flash_error"] = f"Логин '{username}' уже занят"
-                    return RedirectResponse(url="/admin/admins/", status_code=302)
-
-                await _create_admin_records(
-                    session=session,
-                    vk_id=vk_id,
-                    full_name=full_name,
-                    department_id_raw=str(dept_id) if dept_id is not None else None,
-                    admin_department_id=user_get_department_id(user),
-                    user_is_super=is_superadmin(user),
-                    role=role_str,
-                    username=username,
-                    password_hash=hash_password(password),
-                )
-                request.session["flash_success"] = "Администратор успешно добавлен"
-                request.session["created_credentials"] = {
-                    "username": username,
-                    "password": password,
-                    "created_at": time.time(),
-                }
-                return RedirectResponse(url="/admin/admins/", status_code=302)
+            return await _create_permanent_admin(
+                request,
+                session,
+                form,
+                role_str=role_str,
+                dept_id=dept_id,
+                username=username,
+                password=password,
+                user=user,
+            )
     except ValueError as e:
         request.session["flash_error"] = str(e)
         return RedirectResponse(url="/admin/admins/", status_code=302)
@@ -265,6 +333,102 @@ async def add_admin(request: Request, user=Depends(require_auth)):
         logger.exception("Не удалось добавить администратора")
         request.session["flash_error"] = "Не удалось сохранить администратора. Попробуйте позже."
         return RedirectResponse(url="/admin/admins/", status_code=302)
+
+
+async def _create_temp_admin(
+    request: Request,
+    session: AsyncSession,
+    *,
+    username: str,
+    password: str,
+    web_role: WebRole,
+    dept_id: int | None,
+    expires_at,
+) -> RedirectResponse:
+    """Создать временного / QA-администратора (без привязки к VK Admin)."""
+    if not username:
+        username = f"qa_{secrets.token_hex(4)}"
+    if not password:
+        password = secrets.token_urlsafe(12)
+
+    existing = await session.scalar(select(WebUser).where(WebUser.username == username))
+    if existing:
+        request.session["flash_error"] = f"Логин '{username}' уже занят"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    session.add(
+        WebUser(
+            username=username,
+            password_hash=hash_password(password),
+            role=web_role,
+            department_id=dept_id,
+            admin_id=None,
+            is_active=True,
+            expires_at=expires_at,
+        )
+    )
+    await session.commit()
+
+    # Срок показываем в МСК — он вычислен в now_app_tz().
+    duration_str = (
+        f"действует до {format_app_datetime(expires_at, '%d.%m.%Y %H:%M')} МСК"
+        if expires_at
+        else "бессрочный доступ"
+    )
+    request.session["flash_success"] = (
+        f"Временный/QA администратор '{username}' успешно создан ({duration_str})."
+    )
+    request.session["created_credentials"] = {
+        "username": username,
+        "password": password,
+        "created_at": time.time(),
+    }
+    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+
+async def _create_permanent_admin(
+    request: Request,
+    session: AsyncSession,
+    form,
+    *,
+    role_str: str,
+    dept_id: int | None,
+    username: str,
+    password: str,
+    user: dict,
+) -> RedirectResponse:
+    """Создать постоянного администратора, привязанного к VK ID."""
+    vk_id = _parse_vk_id(form)
+
+    full_name = sanitize_html(str(form.get("full_name", "")).strip())
+    if not username:
+        username = f"dept_admin_{vk_id}"
+    if not password:
+        password = secrets.token_urlsafe(12)
+
+    existing = await session.scalar(select(WebUser).where(WebUser.username == username))
+    if existing:
+        request.session["flash_error"] = f"Логин '{username}' уже занят"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    await _create_admin_records(
+        session=session,
+        vk_id=vk_id,
+        full_name=full_name,
+        department_id_raw=str(dept_id) if dept_id is not None else None,
+        admin_department_id=user_get_department_id(user),
+        user_is_super=is_superadmin(user),
+        role=role_str,
+        username=username,
+        password_hash=hash_password(password),
+    )
+    request.session["flash_success"] = "Администратор успешно добавлен"
+    request.session["created_credentials"] = {
+        "username": username,
+        "password": password,
+        "created_at": time.time(),
+    }
+    return RedirectResponse(url="/admin/admins/", status_code=302)
 
 
 def _parse_vk_id(form) -> int:
@@ -353,11 +517,16 @@ async def delete_admin(request: Request, admin_id: int, user=Depends(require_aut
     """Удаление администратора (POST с CSRF-токеном и подтверждением).
 
     Безопасность:
+    - Временный администратор не может удалять учётные записи
     - Rate limiting: не более 20 запросов на IP за 5 минут
     - Только суперадмин может удалять администраторов
     - Нельзя удалить самого себя или последнего суперадмина
     - При удалении Admin также удаляется связанный WebUser (если есть)
     """
+    denied = _deny_temporary_admin(request, user)
+    if denied is not None:
+        return denied
+
     await require_crud_rate_limit(request)
     if not is_superadmin(user):
         request.session["flash_error"] = "Только суперадмин может удалять администраторов"
@@ -424,6 +593,10 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
     - Нельзя удалить самого себя
     - Нельзя удалить последнего суперадмина
     """
+    denied = _deny_temporary_admin(request, user)
+    if denied is not None:
+        return denied
+
     await require_crud_rate_limit(request)
     if not is_superadmin(user):
         request.session["flash_error"] = "Только суперадмин может удалять веб-пользователей"

@@ -1606,6 +1606,79 @@ tbody tr:hover {
     color: var(--primary, #3b82f6);
 }
 
+/* Обращение без отдела («Общие вопросы»): приглушённый акцент темы,
+   чтобы отличать от обычного бейджа отдела, но не пугать. */
+.badge-general {
+    background: var(--status-transferred-bg);
+    color: var(--status-transferred);
+    border: 1px dashed var(--status-transferred);
+    font-weight: 600;
+}
+
+/* Пометка общего обращения в выпадающем центре уведомлений. */
+.notifications-item-general {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--status-transferred);
+    background: var(--status-transferred-bg);
+    border: 1px solid var(--status-transferred-bg);
+    padding: 1px 7px;
+    border-radius: var(--r-xs);
+    white-space: nowrap;
+}
+
+/* ---------- Виджет «Общие (без отдела)» на дашборде ---------- */
+.unassigned-card {
+    margin-bottom: 20px;
+}
+
+.unassigned-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.unassigned-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 180px;
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--bg-surface-2);
+}
+
+.unassigned-stat-alert {
+    border-color: var(--status-transferred);
+    background: var(--status-transferred-bg);
+}
+
+.unassigned-label {
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.unassigned-value {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text-primary);
+}
+
+.unassigned-hint {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.unassigned-hint.muted {
+    color: var(--text-tertiary);
+}
+
 /* ---------- Forms ---------- */
 .form-group {
     margin-bottom: 16px;
@@ -2259,6 +2332,95 @@ input[type="file"]::file-selector-button:hover {
     color: var(--text-tertiary);
     font-size: 12.5px;
     font-weight: 600;
+}
+
+/* ---------- Индикатор активности администратора (Онлайн / Офлайн / Истёк) ---------- */
+
+/* Обёртка нужна, чтобы точка позиционировалась относительно аватара,
+   а не карточки: карточка растягивается, точка «уезжала» бы от аватара. */
+.admin-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+    line-height: 0;
+}
+
+/* Точка «висит» на правом нижнем углу аватара — как в мессенджерах. */
+.admin-avatar-wrap .status-dot {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    z-index: 1;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: var(--r-full);
+    border: 2px solid var(--bg-surface-2);
+    background: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.status-dot-online {
+    background: var(--status-done);
+    box-shadow: 0 0 0 2px var(--status-done-bg);
+    /* Мягкая пульсация: индикатор «дышит», привлекая внимание без мигания. */
+    animation: statusPulse 2.4s ease-in-out infinite;
+}
+
+.status-dot-offline {
+    background: var(--status-anon);
+    box-shadow: 0 0 0 2px var(--status-anon-bg);
+}
+
+.status-dot-expired {
+    background: var(--danger);
+    box-shadow: 0 0 0 2px var(--danger-bg);
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.6; transform: scale(0.88); }
+}
+
+/* Уважаем системную настройку «уменьшить движение»: оставляем цвет,
+   отключаем только анимацию. */
+@media (prefers-reduced-motion: reduce) {
+    .status-dot-online {
+        animation: none;
+    }
+}
+
+.admin-last-seen {
+    color: var(--text-tertiary);
+    font-size: 12.5px;
+    flex-basis: 100%;
+}
+
+.presence-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 20px;
+    padding: 12px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--bg-surface-2);
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.presence-summary .muted {
+    color: var(--text-tertiary);
+}
+
+/* Кнопка, заблокированная для временного администратора: не прячем её,
+   а гасим — иначе непонятно, куда делась возможность добавить админа. */
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: saturate(0.6);
 }
 
 /* ---------- FAQ accordion ---------- */

@@ -4,6 +4,13 @@
 - SUPERADMIN: полный доступ ко всем отделам и настройкам.
 - DEPARTMENT_ADMIN: просмотр и управление заявками и контентом своего отдела.
 
+Временный администратор (срок expires_at или созданный без привязки к VK Admin):
+- может просматривать дашборд/заявки, отвечать студентам, менять статусы,
+  читать базу знаний и FAQ;
+- НЕ может создавать и удалять учётные записи (проверка в admin_panel.py).
+  Флаг is_temporary вычисляется ЗДЕСЬ, на основе БД, а не из строки роли в
+  сессии: роль у временного админа может быть любой, доверять ей нельзя.
+
 Безопасность:
 - department_id для DEPARTMENT_ADMIN проверяется через базу данных (web_users),
   что исключает горизонтальную эскалацию прав.
@@ -16,6 +23,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.admin_presence import touch_presence
 from core.bot_core import get_admin_scope_for_vk_id  # noqa: F401
 from core.database import async_session_maker
 from core.models import Department, WebRole, WebUser
@@ -27,6 +35,21 @@ logger = logging.getLogger(__name__)
 def get_current_user(request: Request) -> dict | None:
     """Данные пользователя из сессии или None."""
     return request.session.get("user")
+
+
+def is_temporary_user(web_user: WebUser | None) -> bool:
+    """Временный ли это администратор.
+
+    Временными считаются:
+    - учётные записи с ограниченным сроком (expires_at) — временные и QA;
+    - учётные записи без привязки к VK-админу (admin_id IS NULL) — созданные
+      из веб-панели без VK ID.
+
+    Функция принимает ОБЪЕКТ БД, а не словарь сессии: источник истины — база.
+    """
+    if web_user is None:
+        return False
+    return web_user.expires_at is not None or web_user.admin_id is None
 
 
 def _is_api_request(request: Request) -> bool:
@@ -75,12 +98,24 @@ async def _verify_web_user(
     if web_user is None or not web_user.is_active:
         _deny_session(request, is_api)
 
+    # Отметка присутствия: ключ admin:heartbeat:{id} с TTL 15 минут.
+    # Ошибка записи не должна ломать запрос — индикатор «Онлайн» важен,
+    # но не настолько, чтобы отказывать администратору в доступе.
+    try:
+        await touch_presence(web_user.id)
+    except Exception as exc:  # pragma: no cover - защитный контур
+        logger.debug("Не удалось обновить индикатор активности: %s", exc)
+
     canonical = {
         "username": web_user.username,
         "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
         "web_user_id": web_user.id,
         "department_id": web_user.department_id,
         "admin_id": web_user.admin_id,
+        # Флаг вычисляется из БД, а не из роли: временный админ может иметь
+        # роль superadmin, но прав на управление учётными записями не получает.
+        "is_temporary": is_temporary_user(web_user),
+        "expires_at": web_user.expires_at,
     }
     request.session["user"] = canonical
     return canonical
@@ -178,6 +213,30 @@ def is_superadmin(user: dict) -> bool:
 def can_write(user: dict) -> bool:
     """Проверка наличия прав на изменение данных."""
     return role_of(user) in (WebRole.SUPERADMIN, WebRole.DEPARTMENT_ADMIN)
+
+
+def is_temporary(user: dict) -> bool:
+    """Временный ли администратор (по каноническому объекту сессии).
+
+    Основной источник — флаг is_temporary, вычисленный из БД в _verify_web_user.
+    Дополнительно перепроверяем expires_at напрямую, чтобы корректно обработать
+    сессии, созданные до обновления кода (в них флага ещё нет).
+
+    Сессия bootstrap-суперадмина из .env считается постоянной: у неё нет ни
+    web_user_id, ни срока действия, и она является аварийным входом.
+    """
+    if user.get("is_temporary"):
+        return True
+    return user.get("expires_at") is not None
+
+
+def can_manage_accounts(user: dict) -> bool:
+    """Может ли администратор создавать/удалять учётные записи.
+
+    Временный администратор сохраняет работу с заявками, но управлять
+    учётными записями не может — даже если ему назначена роль SUPERADMIN.
+    """
+    return not is_temporary(user)
 
 
 async def require_writer(request: Request) -> dict:

@@ -27,7 +27,7 @@ from bots.telegram.handlers.backup import (
     rotate_old_backups,
 )
 from bots.telegram.handlers.maintenance import render_maintenance_content
-from bots.telegram.handlers.status import render_status_content
+from bots.telegram.handlers.status import render_metrics_content, render_status_content
 from bots.telegram.handlers.two_factor import render_two_factor_content
 from bots.telegram.keyboards import get_main_reply_keyboard
 from bots.telegram.monitor_service import MonitorService
@@ -102,6 +102,7 @@ async def setup_bot_commands(
         # 2. Установка чистого, лаконичного списка слэш-команд
         clean_commands = [
             BotCommand(command="status", description="📊 Состояние сервера и контейнеров"),
+            BotCommand(command="metrics", description="📈 Показатели сайта и бота"),
             BotCommand(command="panel", description="📱 Открыть веб-панель (Mini App)"),
             BotCommand(command="restart", description="🔄 Перезапуск контейнеров и сервисов"),
             BotCommand(command="logs", description="📋 Просмотр свежих логов контейнера"),
@@ -181,6 +182,7 @@ __all__ = [
     "get_main_reply_keyboard",
     "perform_database_backup",
     "render_maintenance_content",
+    "render_metrics_content",
     "render_status_content",
     "render_two_factor_content",
     "rotate_old_backups",

@@ -11,13 +11,30 @@
         <div class="page-desc">Управление доступом: суперадмины имеют полный доступ, администраторы — в рамках отдела</div>
     </div>
     <div class="actions">
+        {% if viewer_is_temporary %}
+        <button class="btn btn-success" disabled title="Временный администратор не может создавать учётные записи">Добавить админа</button>
+        {% else %}
         <button class="btn btn-success" data-open-modal="modal">Добавить админа</button>
+        {% endif %}
     </div>
 </div>
+
+{% if viewer_is_temporary %}
+<div class="alert alert-warning">
+    Вы вошли как <strong>временный администратор</strong>: просмотр заявок, ответы студентам и смена статусов доступны,
+    а создание и удаление учётных записей — нет.
+</div>
+{% endif %}
 
 {% if db_error %}
 <div class="alert alert-error">База данных недоступна — список администраторов не загружен. Проверьте, что PostgreSQL запущен (docker-compose up -d).</div>
 {% endif %}
+
+<div class="presence-summary">
+    <span class="status-dot status-dot-online" aria-hidden="true"></span>
+    <strong>{{ online_count }}</strong>
+    <span class="muted">администраторов онлайн за последние 15 минут</span>
+</div>
 
 <div class="card">
     
@@ -43,12 +60,16 @@
     </div>
     <div class="admins-grid">
         {% for admin in superadmins %}
+        {% set presence = presence_of(admin.web_user) %}
         <div class="admin-card admin-card-superadmin">
             <div class="admin-card-top">
-                <div class="admin-avatar">
-                    {% set name = admin.user.full_name if admin.user else 'SA' %}
-                    {% set parts = name.split(' ') %}
-                    {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
+                <div class="admin-avatar-wrap">
+                    <div class="admin-avatar">
+                        {% set name = admin.user.full_name if admin.user else 'SA' %}
+                        {% set parts = name.split(' ') %}
+                        {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
+                    </div>
+                    <span class="status-dot {{ presence.css }}" title="{{ presence.label }}"></span>
                 </div>
                 <div class="admin-card-top-info">
                     {% set full_name = admin.user.full_name if admin.user else 'Суперадмин' %}
@@ -64,21 +85,26 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-completed">Суперадмин</span>
+                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
+                {% if presence.has_expiry and presence.state != 'expired' %}
+                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">⏳ До {{ presence.expires_label }}</span>
+                {% endif %}
                 <span class="admin-dept">Все отделы</span>
             </div>
             <div class="admin-card-footer">
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
+                <span class="admin-last-seen">Был в сети: {{ presence.last_seen }}</span>
                 {% endif %}
                 <div class="admin-card-actions">
-                    {% if admin.web_user and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
+                    {% if admin.web_user and not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ admin.web_user.id }}/delete"
                           data-confirm="Отозвать доступ к веб-панели для пользователя {{ admin.web_user.username }}?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-secondary btn-small" title="Отозвать доступ к веб-панели">Отозвать веб-доступ</button>
                     </form>
                     {% endif %}
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                    {% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] %}
                     <form method="post" action="/admin/admins/{{ admin.id }}/delete"
                           data-confirm="Удалить этого суперадмина?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -103,12 +129,16 @@
     </div>
     <div class="admins-grid">
         {% for admin in dept_admins %}
+        {% set presence = presence_of(admin.web_user) %}
         <div class="admin-card">
             <div class="admin-card-top">
-                <div class="admin-avatar">
-                    {% set name = admin.user.full_name if admin.user else 'VK' %}
-                    {% set parts = name.split(' ') %}
-                    {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
+                <div class="admin-avatar-wrap">
+                    <div class="admin-avatar">
+                        {% set name = admin.user.full_name if admin.user else 'VK' %}
+                        {% set parts = name.split(' ') %}
+                        {{ (parts[0][:1] ~ (parts[1][:1] if parts|length > 1 else '')) | upper }}
+                    </div>
+                    <span class="status-dot {{ presence.css }}" title="{{ presence.label }}"></span>
                 </div>
                 <div class="admin-card-top-info">
                     {% set full_name = admin.user.full_name if admin.user else 'Без имени' %}
@@ -124,21 +154,26 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-new">Админ отдела</span>
+                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
+                {% if presence.has_expiry and presence.state != 'expired' %}
+                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">⏳ До {{ presence.expires_label }}</span>
+                {% endif %}
                 <span class="admin-dept">{{ admin.department.name if admin.department else 'Без отдела' }}</span>
             </div>
             <div class="admin-card-footer">
                 {% if admin.web_user %}
                 <span class="admin-login">Логин: {{ admin.web_user.username }}</span>
+                <span class="admin-last-seen">Был в сети: {{ presence.last_seen }}</span>
                 {% endif %}
                 <div class="admin-card-actions">
-                    {% if admin.web_user and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
+                    {% if admin.web_user and not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ admin.web_user.id }}/delete"
                           data-confirm="Отозвать доступ к веб-панели для пользователя {{ admin.web_user.username }}?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-secondary btn-small" title="Отозвать доступ к веб-панели">Отозвать веб-доступ</button>
                     </form>
                     {% endif %}
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+                    {% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] %}
                     <form method="post" action="/admin/admins/{{ admin.id }}/delete"
                           data-confirm="Удалить этого админа?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -164,9 +199,13 @@
     </div>
     <div class="admins-grid">
         {% for qa_user in qa_users %}
+        {% set presence = presence_of(qa_user) %}
         <div class="admin-card">
             <div class="admin-card-top">
-                <div class="admin-avatar">ВА</div>
+                <div class="admin-avatar-wrap">
+                    <div class="admin-avatar">ВА</div>
+                    <span class="status-dot {{ presence.css }}" title="{{ presence.label }}"></span>
+                </div>
                 <div class="admin-card-top-info">
                     <div class="admin-name">{{ qa_user.username }}</div>
                     <div class="admin-vk">Без привязки к VK</div>
@@ -174,12 +213,13 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-warning">Временный доступ</span>
+                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
                 {% if qa_user.expires_at %}
                     {% if qa_user.is_expired %}
                     <span class="badge badge-danger">Срок истёк</span>
                     {% else %}
-                    <span class="badge badge-info" title="Действует до {{ qa_user.expires_at.strftime('%d.%m.%Y %H:%M') }} UTC">
-                        До {{ qa_user.expires_at.strftime('%d.%m %H:%M') }}
+                    <span class="badge badge-info" title="Действует до {{ presence.expires_label }} МСК">
+                        ⏳ До {{ presence.expires_label }}
                     </span>
                     {% endif %}
                 {% else %}
@@ -189,8 +229,9 @@
             </div>
             <div class="admin-card-footer">
                 <span class="admin-login">Роль: {{ 'Суперадмин' if qa_user.role.value == 'superadmin' else 'Админ отдела' }}</span>
+                <span class="admin-last-seen">Был в сети: {{ presence.last_seen }}</span>
                 <div class="admin-card-actions">
-                    {% if user.role in ['SUPERADMIN', 'superadmin'] and qa_user.id != user.get('web_user_id') %}
+                    {% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and qa_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ qa_user.id }}/delete"
                           data-confirm="Удалить временного/QA-администратора {{ qa_user.username }}?">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -12,6 +12,10 @@ from aiogram.types import (
 
 from core.config import get_settings
 
+# Срезы карточки статуса: инфраструктура или бизнес-показатели.
+STATUS_VIEW_INFRA = "infra"
+STATUS_VIEW_APP = "app"
+
 
 def get_main_reply_keyboard(webapp_url: str | None = None) -> ReplyKeyboardMarkup:
     """Главная клавиатура команд с поддержкой кнопки Telegram Mini App."""
@@ -22,10 +26,10 @@ def get_main_reply_keyboard(webapp_url: str | None = None) -> ReplyKeyboardMarku
         rows.append([KeyboardButton(text="📱 Веб-панель", web_app=WebAppInfo(url=url))])
 
     rows.extend([
-        [KeyboardButton(text="📊 Статус"), KeyboardButton(text="🔄 Перезапуск")],
-        [KeyboardButton(text="📋 Логи"), KeyboardButton(text="💾 Бэкап")],
-        [KeyboardButton(text="🚧 Техработы"), KeyboardButton(text="🔐 2FA")],
-        [KeyboardButton(text="ℹ️ Помощь")],
+        [KeyboardButton(text="📊 Статус"), KeyboardButton(text="📈 Статистика")],
+        [KeyboardButton(text="🔄 Перезапуск"), KeyboardButton(text="📋 Логи")],
+        [KeyboardButton(text="💾 Бэкап"), KeyboardButton(text="🚧 Техработы")],
+        [KeyboardButton(text="🔐 2FA"), KeyboardButton(text="ℹ️ Помощь")],
     ])
 
     return ReplyKeyboardMarkup(
@@ -34,8 +38,16 @@ def get_main_reply_keyboard(webapp_url: str | None = None) -> ReplyKeyboardMarku
     )
 
 
-def get_status_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardMarkup:
-    """Инлайн-клавиатура для карточки статуса сервера."""
+def get_status_inline_keyboard(
+    webapp_url: str | None = None,
+    view: str = STATUS_VIEW_INFRA,
+) -> InlineKeyboardMarkup:
+    """Инлайн-клавиатура для карточки статуса.
+
+    `view` переключает карточку между двумя срезами:
+    - STATUS_VIEW_INFRA («🖥 Железо и контейнеры») — CPU/RAM/Диск/Docker;
+    - STATUS_VIEW_APP («📊 Показатели сайта и бота») — бизнес-метрики.
+    """
     url = webapp_url or get_settings().TELEGRAM_WEBAPP_URL
     buttons: list[list[InlineKeyboardButton]] = []
 
@@ -43,6 +55,21 @@ def get_status_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardM
         buttons.append([
             InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
         ])
+
+    # Переключатель вида карточки: активный срез помечен галочкой.
+    if view == STATUS_VIEW_APP:
+        infra_btn = InlineKeyboardButton(
+            text="🖥 Железо и контейнеры", callback_data="status:view:infra"
+        )
+        app_btn = InlineKeyboardButton(text="✅ Показатели сайта и бота", callback_data="status:noop")
+    else:
+        infra_btn = InlineKeyboardButton(
+            text="✅ Железо и контейнеры", callback_data="status:noop"
+        )
+        app_btn = InlineKeyboardButton(
+            text="📊 Показатели сайта и бота", callback_data="status:view:app"
+        )
+    buttons.append([infra_btn, app_btn])
 
     buttons.extend([
         [
@@ -116,6 +143,30 @@ def get_two_factor_inline_keyboard(enabled: bool) -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+def get_metrics_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardMarkup:
+    """Инлайн-клавиатура карточки бизнес-метрик (сайт + бот)."""
+    url = webapp_url or get_settings().TELEGRAM_WEBAPP_URL
+    buttons: list[list[InlineKeyboardButton]] = []
+
+    if url and url.startswith("https://"):
+        buttons.append([
+            InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
+        ])
+
+    buttons.extend([
+        [
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="metrics:refresh"),
+            InlineKeyboardButton(text="🖥 Железо и контейнеры", callback_data="status:view:infra"),
+        ],
+        [
+            InlineKeyboardButton(text="📊 Статус сервера", callback_data="status:view:infra"),
+            InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
+        ],
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_reboot_confirmation_keyboard() -> InlineKeyboardMarkup:

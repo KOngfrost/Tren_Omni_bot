@@ -1,10 +1,14 @@
 """
-Утилиты для контроля синхронизации системного времени.
+Утилиты для контроля синхронизации системного времени и единого формата дат.
 
 Зачем это нужно:
 Если часы на сервере приложения и в СУБД PostgreSQL расходятся (дрейф времени),
 это приводит к неверной сортировке тикетов, сбоям в расписании ежедневных отчётов
 и некорректным таймстампом аудита.
+
+Модуль также служит ЕДИНЫМ источником времени для всего проекта: `now_app_tz()`
+и `format_app_datetime()` гарантируют, что веб-панель, API и Telegram-мониторинг
+показывают одно и то же время в часовом поясе из .env (APP_TIMEZONE).
 """
 
 import logging
@@ -26,6 +30,95 @@ def get_app_tz() -> ZoneInfo:
     return ZoneInfo(settings.APP_TIMEZONE)
 
 
+def now_app_tz() -> datetime:
+    """Текущее время СТРОГО в часовом поясе приложения (APP_TIMEZONE).
+
+    Единая точка получения «сейчас» для всего проекта. Заменяет разрозненные
+    `datetime.now(UTC)` и локальные `strftime` без таймзоны, из-за которых
+    интерфейсы показывали разное время для одних и тех же событий.
+    """
+    return datetime.now(get_app_tz())
+
+
+def format_app_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
+    """Единый форматтер дат проекта с гарантированной конвертацией в APP_TIMEZONE.
+
+    Наивные datetime (например, из SQLite в тестах) считаются UTC — именно в
+    этом поясе приложение пишет все колонки `DateTime(timezone=True)`.
+    """
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    try:
+        return dt.astimezone(get_app_tz()).strftime(fmt)
+    except Exception:  # pragma: no cover - защита от битых данных в БД
+        return dt.strftime(fmt)
+
+
+_MONTHS_GENITIVE = (
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+# Понедельник = 0 (совпадает с datetime.date.weekday()).
+_WEEKDAYS = (
+    "понедельник",
+    "вторник",
+    "среда",
+    "четверг",
+    "пятница",
+    "суббота",
+    "воскресенье",
+)
+
+
+def humanize_last_seen(dt: datetime | None) -> str:
+    """Человекочитаемое время последнего визита по МСК.
+
+    «Только что», «12 мин назад», «сегодня в 15:42», «вчера в 09:10»,
+    «12 сентября в 18:03» или «Не входил», если визита не было.
+
+    Названия дней и месяцев заданы явно, а не через strftime('%A'), чтобы вывод
+    не зависел от локали системы (в контейнерах её обычно нет).
+    """
+    if dt is None:
+        return "Не входил"
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    local = dt.astimezone(get_app_tz())
+    now = now_app_tz()
+
+    seconds = (now - local).total_seconds()
+
+    # Отрицательное значение = часы БД/хоста спешат; не показываем «-3 мин назад».
+    if seconds < 300:
+        return "Только что"
+    if seconds < 3600:
+        return f"{int(seconds // 60)} мин назад"
+
+    day_shift = (now.date() - local.date()).days
+    if day_shift == 0:
+        return f"сегодня в {local:%H:%M}"
+    if day_shift == 1:
+        return f"вчера в {local:%H:%M}"
+    if 1 < day_shift < 7:
+        return f"{_WEEKDAYS[local.weekday()]} в {local:%H:%M}"
+
+    return f"{local.day} {_MONTHS_GENITIVE[local.month - 1]} в {local:%H:%M}"
+
+
 async def check_time_sync(session) -> dict:
     """Проверяет синхронизацию системного времени приложения и сервера PostgreSQL.
 
@@ -38,6 +131,11 @@ async def check_time_sync(session) -> dict:
         db_raw = db_res.scalar()
         if db_raw is None:
             return {"status": "error", "detail": "failed_to_query_time", "synchronized": False}
+
+        # Некоторые драйверы (SQLite в тестах) отдают CURRENT_TIMESTAMP строкой,
+        # а не datetime — приводим к типу явно, иначе сравнение падает.
+        if isinstance(db_raw, str):
+            db_raw = datetime.fromisoformat(db_raw)
 
         # Приводим время БД к UTC для корректного сравнения
         db_time = db_raw.replace(tzinfo=UTC) if db_raw.tzinfo is None else db_raw.astimezone(UTC)

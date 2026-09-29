@@ -9,7 +9,6 @@
 """
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,7 +17,7 @@ from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
-from core.models import Department, Ticket, User
+from core.models import Department, Ticket, TicketStatus, User
 from core.ticket_service import (
     StatusTransitionError,
     assign_ticket_department,
@@ -26,6 +25,7 @@ from core.ticket_service import (
     get_ticket_messages,
     reply_to_ticket,
 )
+from core.time_utils import format_app_datetime, now_app_tz
 from web.constants import STATUS_CHOICES, TICKET_FILTER_CHOICES, resolve_ticket_status
 from web.dependencies import (
     get_admin_scope,
@@ -89,6 +89,51 @@ def _build_ticket_search_filter(clean_q: str):
     return None
 
 
+def _build_ticket_filters(
+    *,
+    is_super: bool,
+    dept_id: int | None,
+    dept_filter_id: int | None,
+    only_unassigned: bool,
+    resolved_status: TicketStatus | None,
+    query: str,
+) -> list[Any]:
+    """Собрать список условий WHERE для реестра заявок.
+
+    Область видимости (IDOR):
+    - суперадмин — все заявки, плюс явный фильтр по отделу из формы;
+    - админ отдела — СВОЙ отдел И общие обращения (department_id IS NULL),
+      но никогда чужие отделы. Общие обращения видны всем админам, потому что
+      за ними не закреплён владелец: иначе они останутся необработанными.
+
+    Фильтр отдела из формы работает только у суперадмина: админ отдела иначе
+    мог бы сузить выборку и решить, что чужих заявок не существует.
+    """
+    filters: list[Any] = []
+
+    if not is_super:
+        if dept_id is None:
+            # Админ без отдела не должен видеть даже общие обращения.
+            filters.append(Ticket.id == -1)
+        else:
+            filters.append(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+    elif only_unassigned:
+        filters.append(Ticket.department_id.is_(None))
+    elif dept_filter_id is not None:
+        filters.append(Ticket.department_id == dept_filter_id)
+
+    if resolved_status is not None:
+        filters.append(Ticket.status == resolved_status)
+
+    clean_q = (query or "").strip()
+    if clean_q:
+        search_filter = _build_ticket_search_filter(clean_q)
+        if search_filter is not None:
+            filters.append(search_filter)
+
+    return filters
+
+
 @router.get("/")
 async def tickets_page(
     request: Request,
@@ -119,9 +164,16 @@ async def tickets_page(
     offset: int = (current_page - 1) * clean_page_size
     total_pages: int = 1
 
+    # department_id: None -> фильтр по отделу, "none" -> только обращения
+    # без отдела (department_id IS NULL). Пустая строка -> без фильтра.
     dept_filter_id: int | None = None
-    if department_id is not None and str(department_id).strip().isdigit():
-        dept_filter_id = int(str(department_id).strip())
+    only_unassigned: bool = False
+    if department_id is not None:
+        raw_dept = str(department_id).strip().lower()
+        if raw_dept in ("none", "null", "unassigned", "empty"):
+            only_unassigned = True
+        elif raw_dept.isdigit():
+            dept_filter_id = int(raw_dept)
 
     resolved_status = resolve_ticket_status(status)
 
@@ -129,34 +181,21 @@ async def tickets_page(
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope(session, user)
 
+            filters = _build_ticket_filters(
+                is_super=is_super,
+                dept_id=dept_id,
+                dept_filter_id=dept_filter_id,
+                only_unassigned=only_unassigned,
+                resolved_status=resolved_status,
+                query=q,
+            )
+
             count_stmt = (
                 select(func.count(Ticket.id))
                 .outerjoin(User, Ticket.user_id == User.id)
                 .outerjoin(Department, Ticket.department_id == Department.id)
+                .where(*filters)
             )
-            filters: list = []
-
-            # IDOR разграничение
-            if not is_super:
-                if dept_id is None:
-                    filters.append(Ticket.id == -1)
-                else:
-                    filters.append(Ticket.department_id == dept_id)
-            elif dept_filter_id is not None:
-                filters.append(Ticket.department_id == dept_filter_id)
-
-            # Фильтр по статусу
-            if resolved_status is not None:
-                filters.append(Ticket.status == resolved_status)
-
-            # Полнотекстовый гибкий поиск
-            clean_q = q.strip()
-            if clean_q:
-                search_filter = _build_ticket_search_filter(clean_q)
-                if search_filter is not None:
-                    filters.append(search_filter)
-
-            count_stmt = count_stmt.where(*filters)
             total = int((await session.scalar(count_stmt)) or 0)
 
             stmt = (
@@ -199,6 +238,7 @@ async def tickets_page(
             "query": q,
             "selected_status": resolved_status.value if resolved_status else "",
             "selected_department": dept_filter_id,
+            "only_unassigned": only_unassigned,
             "session_id": request.state.session_id,
         },
     )
@@ -337,8 +377,9 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
     )
 
     if is_ajax:
-        from core.time_utils import get_app_tz
-        now_dt = datetime.now(get_app_tz())
+        # Единый источник времени проекта: now_app_tz() и format_app_datetime()
+        # из core.time_utils, чтобы клиент показал тот же МСК, что и панель.
+        now_dt = now_app_tz()
         return {
             "success": True,
             "ticket_id": ticket_id,
@@ -348,7 +389,7 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
                 "author_type": "ADMIN",
                 "message": message,
                 "created_at": now_dt.isoformat(),
-                "created_at_display": format_datetime(now_dt, "%d.%m.%Y %H:%M") + " МСК",
+                "created_at_display": format_app_datetime(now_dt, "%d.%m.%Y %H:%M") + " МСК",
             },
         }
 

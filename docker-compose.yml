@@ -18,6 +18,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
       PGDATA: /var/lib/postgresql/data/pgdata
+      # Системное время СУБД — по APP_TIMEZONE из .env. Без этого логи
+      # PostgreSQL пишутся в UTC и расходятся с интерфейсами панели.
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -78,6 +81,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER is required}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - POSTGRES_DB=${POSTGRES_DB:?POSTGRES_DB is required}
+      # Логи и статистика PgBouncer в часовом поясе приложения (МСК).
+      - TZ=${APP_TIMEZONE:-Europe/Moscow}
     healthcheck:
       # psql идёт через сам пул: проверяются не только порт и процесс,
       # но и успешная аутентификация SCRAM и работоспособность auth_query.
@@ -132,6 +137,8 @@ services:
       - DB_HOST=pgbouncer
       - DB_PORT=6432
       - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
+      - TZ=${APP_TIMEZONE:-Europe/Moscow}
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -180,6 +187,8 @@ services:
       - DB_HOST=pgbouncer
       - DB_PORT=6432
       - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
+      - TZ=${APP_TIMEZONE:-Europe/Moscow}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -281,6 +290,8 @@ services:
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
+      - TZ=${APP_TIMEZONE:-Europe/Moscow}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/backups/oss_bot:/var/backups/oss_bot

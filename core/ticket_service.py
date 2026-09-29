@@ -25,6 +25,7 @@ from core.models import (
     TicketMessage,
     TicketStatus,
     User,
+    UserRole,
 )
 from core.outbox import add_outbox_message, fire_outbox_delivery
 
@@ -680,8 +681,20 @@ async def create_ticket(
         )
 
         scheduled = False
+        student_info = mask_anonymous_data(user.full_name if user else None, ticket.is_anonymous)
+        dorm_info = (
+            f" ({user.dormitory})"
+            if (user and user.dormitory and not ticket.is_anonymous)
+            else ""
+        )
+
+        # Маршрутизация уведомлений:
+        # - заявка отдела (department_id IS NOT NULL) -> только админы этого отдела;
+        # - общее обращение (department_id IS NULL) -> ВСЕ админы, потому что
+        #   никто не закреплён за заявкой и иначе она останется без внимания.
+        # Суперадмины получают уведомления в обоих случаях: они отвечают за все отделы.
         if department and department.id:
-            admins = list(
+            dept_admins = list(
                 (
                     await session.scalars(
                         select(Admin)
@@ -690,16 +703,19 @@ async def create_ticket(
                     )
                 ).all()
             )
-            for admin in admins:
+            super_admins = list(
+                (
+                    await session.scalars(
+                        select(Admin)
+                        .options(selectinload(Admin.user))
+                        .where(Admin.role == UserRole.SUPERADMIN)
+                    )
+                ).all()
+            )
+            # Дедупликация: суперадмин может быть одновременно и в отделе.
+            recipients = {admin.id: admin for admin in (*dept_admins, *super_admins)}
+            for admin in recipients.values():
                 if admin.user and admin.user.vk_id:
-                    student_info = mask_anonymous_data(
-                        user.full_name if user else None, ticket.is_anonymous
-                    )
-                    dorm_info = (
-                        f" ({user.dormitory})"
-                        if (user and user.dormitory and not ticket.is_anonymous)
-                        else ""
-                    )
                     add_outbox_message(
                         session,
                         admin.user.vk_id,
@@ -708,6 +724,31 @@ async def create_ticket(
                             f"От: {student_info}{dorm_info}\n"
                             f"Тема: {topic}\n\n"
                             f"Текст: {description}\n\n"
+                            f"👉 Для работы напишите: «Заявка #{ticket.id}»"
+                        ),
+                    )
+                    scheduled = True
+        else:
+            # Общее обращение: без отдела -> рассылаем всем активным админам.
+            all_admins = list(
+                (
+                    await session.scalars(
+                        select(Admin).options(selectinload(Admin.user)).where(Admin.user_id.is_not(None))
+                    )
+                ).all()
+            )
+            for admin in all_admins:
+                if admin.user and admin.user.vk_id:
+                    add_outbox_message(
+                        session,
+                        admin.user.vk_id,
+                        (
+                            f"📩 Новое общее обращение #{ticket.id} [Общий вопрос]\n"
+                            f"От: {student_info}{dorm_info}\n"
+                            f"Тема: {topic}\n\n"
+                            f"Текст: {description}\n\n"
+                            "Обращение не закреплено за отделом — ответьте первым "
+                            "или передайте его в профильный отдел.\n"
                             f"👉 Для работы напишите: «Заявка #{ticket.id}»"
                         ),
                     )
@@ -742,6 +783,10 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
         # Ответ студента переводит заявку в статус NEW (Новое / Требует ответа),
         # чтобы администраторы видели её в очереди нерассмотренных и загорался огонёк/счётчик
         old_status_value = ticket.status.value
+        # Заявка была закрыта и студент её «оживил» — сообщаем об этом явно.
+        # (Раньше здесь стояла переменная `reopened`, которой нигде нет:
+        #  любой ответ студента в закрытую заявку падал с NameError.)
+        reopened = ticket.status in COMPLETED_STATUSES
         ticket.status = TicketStatus.NEW
         add_ticket_message(
             session,
@@ -760,22 +805,39 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
         )
 
         scheduled = False
-        # Уведомляем администраторов отдела через outbox
-        if ticket.department and ticket.department_id:
-            admins = await session.scalars(
-                select(Admin)
-                .options(selectinload(Admin.user))
-                .where(Admin.department_id == ticket.department_id)
-            )
-            for admin in admins:
-                if admin.user and admin.user.vk_id:
-                    subject = "Повторно открыто" if reopened else "Новый ответ студента"
-                    add_outbox_message(
-                        session,
-                        admin.user.vk_id,
-                        (f"⚠️ {subject}\n\nСтудент ответил на заявку #{ticket.id}:\n\n{message}"),
+        # Уведомляем ответственных администраторов через outbox.
+        # Общее обращение (без отдела) получат все — иначе ответ студенту
+        # некому будет разобрать: за заявкой никого не закреплено.
+        if ticket.department_id:
+            admins = list(
+                (
+                    await session.scalars(
+                        select(Admin)
+                        .options(selectinload(Admin.user))
+                        .where(Admin.department_id == ticket.department_id)
                     )
-                    scheduled = True
+                ).all()
+            )
+        else:
+            admins = list(
+                (
+                    await session.scalars(
+                        select(Admin)
+                        .options(selectinload(Admin.user))
+                        .where(Admin.user_id.is_not(None))
+                    )
+                ).all()
+            )
+
+        for admin in admins:
+            if admin.user and admin.user.vk_id:
+                subject = "Повторно открыто" if reopened else "Новый ответ студента"
+                add_outbox_message(
+                    session,
+                    admin.user.vk_id,
+                    (f"⚠️ {subject}\n\nСтудент ответил на заявку #{ticket.id}:\n\n{message}"),
+                )
+                scheduled = True
             # WebUser уведомления через VK не отправляются (нет vk_id)
 
     if scheduled:

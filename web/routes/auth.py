@@ -465,7 +465,10 @@ async def _authenticate(
             if not web_user.is_active:
                 verify_dummy_password(password)
                 return None
-            if web_user.expires_at is not None and web_user.expires_at <= datetime.now(UTC):
+            # Проверяем срок через свойство модели: оно само приводит наивные
+            # даты (SQLite) к UTC. Прямое сравнение с datetime.now(UTC)
+            # падало с TypeError на offset-naive значениях.
+            if web_user.is_expired:
                 logger.warning("LOGIN BLOCKED: account expired for %s (expired at %s)", web_user.username, web_user.expires_at)
                 verify_dummy_password(password)
                 return None

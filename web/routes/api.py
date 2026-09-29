@@ -27,6 +27,7 @@ from core.models import (
     TicketStatus,
     WebUser,
 )
+from core.time_utils import format_app_datetime
 from web.dependencies import get_admin_scope, require_auth, require_superadmin
 from web.routes.auth import require_crud_rate_limit
 from web.schemas import MAX_DEPARTMENT_NAME_LEN, DepartmentNamePayload
@@ -374,11 +375,19 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
             is_super, dept_id = await get_admin_scope(session, user)
 
             base_scope = [Ticket.status == TicketStatus.NEW]
+            # Админ отдела видит свои заявки И общие обращения (department_id IS NULL):
+            # у них нет владельца, поэтому скрывать их от админов нельзя — иначе
+            # они останутся необработанными. Заявки других отделов по-прежнему скрыты.
             if not is_super and dept_id:
-                base_scope.append(Ticket.department_id == dept_id)
+                base_scope.append(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
 
-            new_scope = base_scope + [or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
-            reply_scope = base_scope + [and_(Ticket.response_text.is_not(None), Ticket.response_text != "")]
+            new_scope = [*base_scope, or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
+            reply_scope = [
+                *base_scope,
+                and_(Ticket.response_text.is_not(None), Ticket.response_text != ""),
+            ]
 
             new_tickets_count = (
                 await session.scalar(select(func.count(Ticket.id)).where(*new_scope))
@@ -409,12 +418,15 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
 
             for t in tickets:
                 is_reply = bool(t.response_text and t.response_text.strip())
-                dept_name = t.department.name if t.department else "Общий отдел"
+                is_general = t.department_id is None
+                dept_name = t.department.name if t.department else "Без отдела"
                 preview = (t.description or "").strip()
                 if len(preview) > 90:
                     preview = preview[:90] + "..."
                 created_str = (
-                    f"{t.created_at.strftime('%d.%m %H:%M')} МСК" if t.created_at else ""
+                    f"{format_app_datetime(t.created_at, '%d.%m %H:%M')} МСК"
+                    if t.created_at
+                    else ""
                 )
 
                 if is_reply:
@@ -426,6 +438,9 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                         "icon": "💬",
                         "badge_class": "badge-reply",
                         "department": dept_name,
+                        # Помечаем общие обращения: у них нет отдела-владельца.
+                        "is_general": is_general,
+                        "general_label": "Общее обращение" if is_general else "",
                         "text": preview or "Студент направил дополнение к заявке",
                         "time": created_str,
                         "url": f"/tickets/?open={t.id}",
@@ -439,6 +454,8 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                         "icon": "🔥",
                         "badge_class": "badge-ticket",
                         "department": dept_name,
+                        "is_general": is_general,
+                        "general_label": "Общее обращение" if is_general else "",
                         "text": preview or (t.topic or "Новое обращение"),
                         "time": created_str,
                         "url": f"/tickets/?open={t.id}",

@@ -1,6 +1,5 @@
 from collections.abc import Callable
-from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -20,6 +19,7 @@ from core.i18n import (
     ngettext as n_,
 )
 from core.ticket_service import status_label
+from core.time_utils import format_app_datetime, humanize_last_seen
 from web.constants import status_badge_class
 from web.security.csrf import get_csrf_token
 from web.security.middleware import csp_nonce
@@ -137,21 +137,19 @@ templates.env.globals["css_version"] = _get_css_version()
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:
-    """Форматирует дату/время с автоматическим переводом в часовой пояс приложения (Europe/Moscow)."""
-    if not dt:
-        return "—"
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    try:
-        app_tz = ZoneInfo(settings.APP_TIMEZONE)
-        return dt.astimezone(app_tz).strftime(fmt)
-    except Exception:
-        return dt.strftime(fmt)
+    """Фильтр `format_dt`: дата в часовом поясе приложения (APP_TIMEZONE).
+
+    Обёртка над core.time_utils.format_app_datetime — единая точка правды
+    для всех шаблонов, чтобы даты в веб-панели и в Telegram совпадали.
+    """
+    return format_app_datetime(dt, fmt)
 
 
 templates.env.filters["status_label"] = status_label
 templates.env.filters["status_badge"] = status_badge_class
 templates.env.filters["format_dt"] = format_datetime
+# Фильтр «человеческого» времени последнего визита: {{ user.last_login_at|humanize }}
+templates.env.filters["humanize"] = humanize_last_seen
 
 # Фильтр для плюрализации в шаблонах: {{ count|ticket_plural("заявка|заявки|заявок") }}
 def ticket_plural(count: int, forms: str) -> str:

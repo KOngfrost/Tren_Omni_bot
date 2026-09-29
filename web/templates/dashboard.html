@@ -39,6 +39,33 @@
     </div>
 </div>
 
+<!-- Обращения без отдела выделены отдельным блоком: в общей сводке они
+     растворяются среди заявок конкретных отделов и теряются. -->
+<div class="card unassigned-card">
+    <div class="card-header">
+        <h2>📌 Общие (без отдела)</h2>
+        <a href="/tickets/?department_id=none" class="btn btn-secondary btn-small">Открыть список →</a>
+    </div>
+    <div class="unassigned-stats">
+        <div class="unassigned-stat">
+            <span class="unassigned-label">Всего общих обращений</span>
+            <span class="unassigned-value" data-counter>{{ unassigned_total }}</span>
+        </div>
+        <div class="unassigned-stat {% if unassigned_new > 0 %}unassigned-stat-alert{% endif %}">
+            <span class="unassigned-label">Новых, требуют внимания</span>
+            <span class="unassigned-value" data-counter>{{ unassigned_new }}</span>
+        </div>
+    </div>
+    {% if unassigned_new > 0 %}
+    <p class="unassigned-hint">
+        ⚠️ Эти обращения не закреплены за отделом — распределите их,
+        чтобы они не потерялись. <a href="/tickets/?department_id=none&amp;status={{ 'Новое' }}">Показать новые общие →</a>
+    </p>
+    {% else %}
+    <p class="unassigned-hint muted">Новых нераспределённых обращений нет.</p>
+    {% endif %}
+</div>
+
 <div class="card">
     <div class="card-header">
         <h2>Последние заявки</h2>

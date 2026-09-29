@@ -39,6 +39,7 @@
             {% for dept in departments %}
             <option value="{{ dept.id }}" {% if selected_department == dept.id %}selected{% endif %}>{{ dept.name }}</option>
             {% endfor %}
+            <option value="none" {% if only_unassigned %}selected{% endif %}>📌 Без отдела (общие)</option>
         </select>
         <button type="submit" class="btn btn-secondary btn-small">Применить</button>
     </form>
@@ -67,7 +68,13 @@
                             {{ ticket.user.full_name or '—' }}
                         {% endif %}
                     </td>
-                    <td data-label="Отдел">{{ ticket.department.name if ticket.department else '—' }}</td>
+                    <td data-label="Отдел">
+                        {% if ticket.department %}
+                            {{ ticket.department.name }}
+                        {% else %}
+                        <span class="badge badge-general">Общее обращение</span>
+                        {% endif %}
+                    </td>
                     <td data-label="Статус">
                         <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
                     </td>

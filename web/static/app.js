@@ -1035,6 +1035,9 @@
                                         '<div class="notifications-item-title-row">' +
                                             '<span class="notifications-item-title">' + escapeHtml(item.title) + '</span> ' +
                                             '<span class="notifications-item-badge badge-' + escapeHtml(item.type) + '">' + escapeHtml(item.type_label) + '</span>' +
+                                            // Общее обращение (без отдела) помечаем явно:
+                                            // за ним не закреплён ни один отдел.
+                                            (item.is_general ? '<span class="notifications-item-general">📌 ' + escapeHtml(item.general_label || 'Общее обращение') + '</span>' : '') +
                                         '</div>' +
                                         (item.department ? '<div class="notifications-item-dept">' + escapeHtml(item.department) + '</div>' : '') +
                                         (item.text ? '<div class="notifications-item-text">' + escapeHtml(item.text) + '</div>' : '') +

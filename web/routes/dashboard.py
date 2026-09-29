@@ -28,6 +28,8 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
     db_error: bool = False
     recent_tickets: list[Ticket] = []
     ticket_counts: dict[TicketStatus, int] = {}
+    unassigned_total: int = 0
+    unassigned_new: int = 0
 
     try:
         async with async_session_maker() as session:
@@ -42,6 +44,19 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
                 select(Ticket.status, func.count(Ticket.id)).where(*scope).group_by(Ticket.status)
             )
             ticket_counts = {status: count for status, count in rows.all() if status is not None}
+
+            # Обращения без отдела («Общие вопросы») не должны теряться в общей
+            # куче: считаем их ОТДЕЛЬНО, одним запросом с группировкой статуса.
+            unassigned_rows = await session.execute(
+                select(Ticket.status, func.count(Ticket.id))
+                .where(Ticket.department_id.is_(None))
+                .group_by(Ticket.status)
+            )
+            unassigned_by_status = {
+                status: count for status, count in unassigned_rows.all() if status is not None
+            }
+            unassigned_total = sum(unassigned_by_status.values())
+            unassigned_new = unassigned_by_status.get(TicketStatus.NEW, 0)
 
             # Последние заявки
             recent_stmt = (
@@ -71,6 +86,8 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
             "request": request,
             "user": user,
             "stats": stats,
+            "unassigned_total": unassigned_total,
+            "unassigned_new": unassigned_new,
             "recent_tickets": recent_tickets,
             "db_error": db_error,
             "active": "dashboard",
