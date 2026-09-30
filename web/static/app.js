@@ -381,88 +381,15 @@
     window.toggleTheme = toggleTheme;
     window.setGlassEffect = setGlassEffect;
 
-    // ==========================================
-    // Акцентный цвет (настройка пользователем)
-    // ==========================================
-    var ACCENT_KEY = 'app_accent_color';
-    var ACCENT_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-
-    function applyAccent(hex) {
-        if (!ACCENT_RE.test(hex)) return false;
-        document.documentElement.style.setProperty('--user-accent', hex);
-        return true;
-    }
-
-    function setAccentColor(hex) {
-        if (!applyAccent(hex)) return;
-        try {
-            localStorage.setItem(ACCENT_KEY, hex);
-            document.cookie = ACCENT_KEY + '=' + hex + '; path=/; max-age=31536000; SameSite=Lax';
-        } catch (e) {}
-        var picker = document.getElementById('accent_color');
-        if (picker) picker.value = hex;
-        var label = document.getElementById('accentValue');
-        if (label) label.textContent = hex;
-        syncHueSlider();
-    }
-
-    // HSL -> HEX: ползунок оттенка должен отражать выбранный цвет
-    // и vice versa, иначе они «рассинхронизируются» при загрузке страницы.
-    function hexToHsl(hex) {
-        var r = parseInt(hex.slice(1, 3), 16) / 255;
-        var g = parseInt(hex.slice(3, 5), 16) / 255;
-        var b = parseInt(hex.slice(5, 7), 16) / 255;
-        var max = Math.max(r, g, b), min = Math.min(r, g, b);
-        var h = 0, s = 0, l = (max + min) / 2;
-        var d = max - min;
-        if (d !== 0) {
-            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-            if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
-            else if (max === g) h = (b - r) / d + 2;
-            else h = (r - g) / d + 4;
-            h *= 60;
+    // Очистка устаревших значений пользовательского акцентного цвета (панель оформлена в едином брендовом розовом цвете иконки сайта)
+    try {
+        if (localStorage.getItem('app_accent_color')) {
+            localStorage.removeItem('app_accent_color');
         }
-        return { h: h, s: s, l: l };
-    }
-
-    function hslToHex(h, s, l) {
-        function f(n) {
-            var k = (n + h / 30) % 12;
-            var a = s * Math.min(l, 1 - l);
-            var c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-            return Math.round(255 * c).toString(16).padStart(2, '0');
+        if (document.cookie.indexOf('app_accent_color=') !== -1) {
+            document.cookie = 'app_accent_color=; path=/; max-age=0';
         }
-        return '#' + f(0) + f(8) + f(4);
-    }
-
-    function syncHueSlider() {
-        var slider = document.getElementById('accent_hue');
-        var picker = document.getElementById('accent_color');
-        if (!slider || !picker || !ACCENT_RE.test(picker.value)) return;
-        slider.value = Math.round(hexToHsl(picker.value).h);
-    }
-
-    window.setAccentColor = setAccentColor;
-
-    // Ползунок оттенка должен стартовать согласованным с текущим цветом.
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { syncHueSlider(); });
-    } else {
-        syncHueSlider();
-    }
-
-    document.addEventListener('input', function (event) {
-        if (event.target.id === 'accent_color') {
-            setAccentColor(event.target.value);
-        } else if (event.target.id === 'accent_hue') {
-            var picker = document.getElementById('accent_color');
-            if (!picker) return;
-            // Насыщенность/яркость берём у текущего цвета: ползунок меняет
-            // только оттенок, сохраняя «характер» выбранного акцента.
-            var cur = ACCENT_RE.test(picker.value) ? hexToHsl(picker.value) : { s: 0.55, l: 0.7 };
-            setAccentColor(hslToHex(Number(event.target.value), cur.s, cur.l));
-        }
-    });
+    } catch (e) {}
 
     var SVG_EYE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
     var SVG_EYE_OFF = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';

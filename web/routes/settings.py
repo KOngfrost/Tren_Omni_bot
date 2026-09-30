@@ -18,10 +18,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Акцентный цвет: пользователь выбирает его ползунком. Принимаем только
-# «безопасный» hex вида #RRGGBB, иначе значение попадёт прямо в CSS-переменную
-# и станет вектором инъекции через style.
-DEFAULT_ACCENT_COLOR = "#df86a9"
+# Брендовый цвет по умолчанию: цвет иконки сайта #fd60c9
+DEFAULT_ACCENT_COLOR = "#fd60c9"
 _ACCENT_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 

@@ -42,11 +42,11 @@
     100% { background-position: 200% 0; }
 }
 
-/* ---------- Design tokens (Dark / Default: черный и оттенки, нежный лавандово-персидский розовый, белый и оттенки) ---------- */
+/* ---------- Design tokens (Dark / Default: черный и оттенки, розовый цвет иконки сайта #fd60c9 и его оттенки, белый и оттенки) ---------- */
 :root,
 html[data-theme="dark"] {
     --bg-page: #000000;
-    --bg-gradient: radial-gradient(circle at 18% 15%, rgba(223, 134, 169, 0.08) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(204, 112, 150, 0.05) 0%, transparent 45%), #000000;
+    --bg-gradient: radial-gradient(circle at 18% 15%, rgba(253, 96, 201, 0.08) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(224, 74, 168, 0.05) 0%, transparent 45%), #000000;
     --bg-surface: #0a0a0d;
     --bg-surface-2: #121217;
     --bg-surface-3: #1a1a22;
@@ -56,29 +56,30 @@ html[data-theme="dark"] {
     --text-tertiary: #94a3b8;
     --text-inverse: #000000;
 
-    /* Розовый акцент: благородный приглушенный лавандово-розовый / персидский / телесный */
-    --primary: #df86a9;
-    --primary-hover: #ebb0c6;
-    --primary-gradient: linear-gradient(135deg, #ebb0c6 0%, #cc7096 100%);
-    --primary-soft: rgba(223, 134, 169, 0.12);
-    --primary-glow: 0 0 14px rgba(223, 134, 169, 0.25);
+    /* Розовый акцент: брендовый цвет иконки сайта #fd60c9 и его гармоничные оттенки */
+    --primary: #fd60c9;
+    --primary-hover: #fe82d5;
+    --primary-active: #e04aa8;
+    --primary-gradient: linear-gradient(135deg, #fd60c9 0%, #ff8fe0 100%);
+    --primary-soft: rgba(253, 96, 201, 0.12);
+    --primary-glow: 0 0 16px rgba(253, 96, 201, 0.35);
 
-    /* Статусы в гармоничных оттенках персидского и лавандового розового */
-    --status-new: #df86a9;
-    --status-new-bg: rgba(223, 134, 169, 0.14);
-    --status-progress: #c97499;
-    --status-progress-bg: rgba(201, 116, 153, 0.14);
-    --status-done: #eec0d3;
-    --status-done-bg: rgba(238, 192, 211, 0.14);
-    --status-transferred: #c493b0;
-    --status-transferred-bg: rgba(196, 147, 176, 0.14);
+    /* Статусы в гармоничных оттенках розового иконки сайта */
+    --status-new: #fd60c9;
+    --status-new-bg: rgba(253, 96, 201, 0.14);
+    --status-progress: #e04aa8;
+    --status-progress-bg: rgba(224, 74, 168, 0.14);
+    --status-done: #ff8fe0;
+    --status-done-bg: rgba(255, 143, 224, 0.14);
+    --status-transferred: #c95cb3;
+    --status-transferred-bg: rgba(201, 92, 179, 0.14);
     --status-anon: #a1a1aa;
     --status-anon-bg: rgba(161, 161, 170, 0.14);
 
-    --danger: #d46888;
-    --danger-bg: rgba(212, 104, 136, 0.14);
-    --success: #df86a9;
-    --success-bg: rgba(223, 134, 169, 0.14);
+    --danger: #e04a75;
+    --danger-bg: rgba(224, 74, 117, 0.14);
+    --success: #fd60c9;
+    --success-bg: rgba(253, 96, 201, 0.14);
 
     --line: #202028;
     --line-strong: #2e2e3a;
@@ -90,9 +91,9 @@ html[data-theme="dark"] {
     --bg-glass: rgba(10, 10, 14, 0.85);
     --bg-glass-card: rgba(14, 14, 18, 0.78);
     --border-glass: rgba(255, 255, 255, 0.08);
-    --border-glass-hover: rgba(223, 134, 169, 0.35);
+    --border-glass-hover: rgba(253, 96, 201, 0.35);
     --glass-blur: blur(18px) saturate(190%);
-    --glass-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 20px 0 rgba(223, 134, 169, 0.03);
+    --glass-shadow: 0 10px 32px 0 rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 20px 0 rgba(253, 96, 201, 0.03);
 
     --r-xs: 4px;
     --r-sm: 8px;
@@ -101,10 +102,10 @@ html[data-theme="dark"] {
     --r-full: 9999px;
 }
 
-/* ---------- Светлая тема (Light Mode: белый и оттенки, приглушенный лавандово-розовый, шрифт черный и оттенки) ---------- */
+/* ---------- Светлая тема (Light Mode: белый и оттенки, розовый иконки сайта и его оттенки, шрифт черный и оттенки) ---------- */
 html[data-theme="light"] {
     --bg-page: #ffffff;
-    --bg-gradient: radial-gradient(circle at 10% 10%, rgba(184, 91, 130, 0.03) 0%, transparent 40%), radial-gradient(circle at 90% 85%, rgba(209, 117, 155, 0.02) 0%, transparent 45%), #ffffff;
+    --bg-gradient: radial-gradient(circle at 18% 15%, rgba(253, 96, 201, 0.05) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(216, 43, 153, 0.03) 0%, transparent 45%), #ffffff;
     --bg-surface: #ffffff;
     --bg-surface-2: #f8fafc;
     --bg-surface-3: #f1f5f9;
@@ -114,29 +115,29 @@ html[data-theme="light"] {
     --text-tertiary: #52525b;
     --text-inverse: #ffffff;
 
-    /* Розовый акцент: глубокий сдержанный персидский розовый */
-    --primary: #b85b82;
-    --primary-hover: #a3496f;
-    --primary-gradient: linear-gradient(135deg, #c76d93 0%, #a84871 100%);
-    --primary-soft: rgba(184, 91, 130, 0.08);
-    --primary-glow: 0 4px 14px rgba(184, 91, 130, 0.18);
+    /* Розовый акцент: контрастные оттенки розового иконки для белого фона */
+    --primary: #d82b99;
+    --primary-hover: #b81b7e;
+    --primary-gradient: linear-gradient(135deg, #d82b99 0%, #e04aa8 100%);
+    --primary-soft: rgba(253, 96, 201, 0.10);
+    --primary-glow: 0 4px 14px rgba(216, 43, 153, 0.20);
 
-    /* Статусы в сдержанных тонах */
-    --status-new: #b85b82;
-    --status-new-bg: rgba(184, 91, 130, 0.08);
-    --status-progress: #9d436b;
-    --status-progress-bg: rgba(157, 67, 107, 0.08);
-    --status-done: #843257;
-    --status-done-bg: rgba(132, 50, 87, 0.08);
-    --status-transferred: #a6567c;
-    --status-transferred-bg: rgba(166, 86, 124, 0.08);
+    /* Статусы в гармоничных оттенках */
+    --status-new: #d82b99;
+    --status-new-bg: rgba(253, 96, 201, 0.10);
+    --status-progress: #b81b7e;
+    --status-progress-bg: rgba(184, 27, 126, 0.10);
+    --status-done: #941362;
+    --status-done-bg: rgba(148, 19, 98, 0.10);
+    --status-transferred: #a62074;
+    --status-transferred-bg: rgba(166, 32, 116, 0.10);
     --status-anon: #71717a;
     --status-anon-bg: rgba(113, 113, 122, 0.08);
 
-    --danger: #9d436b;
-    --danger-bg: rgba(157, 67, 107, 0.08);
-    --success: #b85b82;
-    --success-bg: rgba(184, 91, 130, 0.08);
+    --danger: #be185d;
+    --danger-bg: rgba(190, 24, 93, 0.10);
+    --success: #d82b99;
+    --success-bg: rgba(253, 96, 201, 0.10);
 
     --line: #e2e8f0;
     --line-strong: #cbd5e1;
@@ -148,9 +149,9 @@ html[data-theme="light"] {
     --bg-glass: rgba(255, 255, 255, 0.94);
     --bg-glass-card: rgba(255, 255, 255, 0.90);
     --border-glass: rgba(0, 0, 0, 0.08);
-    --border-glass-hover: rgba(225, 29, 72, 0.35);
+    --border-glass-hover: rgba(216, 43, 153, 0.35);
     --glass-blur: blur(16px) saturate(180%);
-    --glass-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(225, 29, 72, 0.03), inset 0 1px 1px 0 #ffffff;
+    --glass-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(216, 43, 153, 0.03), inset 0 1px 1px 0 #ffffff;
 }
 
 /* ---------- Reset & base ---------- */
@@ -522,7 +523,7 @@ body.no-scroll {
     font-size: 0;
     letter-spacing: 0.5px;
     flex-shrink: 0;
-    box-shadow: 0 2px 10px rgba(223, 134, 169, 0.28);
+    box-shadow: 0 2px 10px rgba(253, 96, 201, 0.3);
 }
 
 .brand-name {
@@ -1146,19 +1147,19 @@ body.no-scroll {
 .notifications-item-badge.badge-new_ticket {
     background: var(--primary-soft);
     color: var(--primary);
-    border: 1px solid rgba(223, 134, 169, 0.4);
+    border: 1px solid rgba(253, 96, 201, 0.4);
 }
 
 .notifications-item-badge.badge-student_reply {
-    background: rgba(196, 147, 176, 0.18);
-    color: #dfa8c5;
-    border: 1px solid rgba(196, 147, 176, 0.4);
+    background: rgba(224, 74, 168, 0.16);
+    color: #fe82d5;
+    border: 1px solid rgba(224, 74, 168, 0.4);
 }
 
 .notifications-item-badge.badge-partnership {
-    background: rgba(235, 176, 198, 0.16);
-    color: #ebb0c6;
-    border: 1px solid rgba(235, 176, 198, 0.4);
+    background: rgba(253, 96, 201, 0.16);
+    color: #ff8fe0;
+    border: 1px solid rgba(253, 96, 201, 0.4);
 }
 
 .notifications-item-dept,
@@ -1300,25 +1301,28 @@ body.no-scroll {
 
 .btn-primary,
 .btn-success {
-    background: linear-gradient(135deg, #df86a9 0%, #c4688f 100%);
-    border: 1px solid rgba(223, 134, 169, 0.5);
-    color: #ffffff;
-    box-shadow: 0 2px 10px rgba(196, 104, 143, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-    font-weight: 600;
+    background: #fd60c9;
+    border: 1px solid rgba(253, 96, 201, 0.8);
+    color: #000000;
+    box-shadow: 0 2px 10px rgba(253, 96, 201, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    font-weight: 700;
 }
 
 .btn-primary:hover,
 .btn-success:hover {
-    background: linear-gradient(135deg, #ebb0c6 0%, #cf7299 100%);
-    border-color: #ebb0c6;
+    background: #fe82d5;
+    border-color: #fe82d5;
+    color: #000000;
     transform: translateY(-1.5px);
-    box-shadow: 0 5px 16px rgba(196, 104, 143, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    box-shadow: 0 5px 18px rgba(253, 96, 201, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .btn-primary:active,
 .btn-success:active {
+    background: #e04aa8;
+    color: #000000;
     transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(196, 104, 143, 0.2);
+    box-shadow: 0 1px 3px rgba(253, 96, 201, 0.2);
 }
 
 .btn-secondary {
@@ -1335,17 +1339,19 @@ body.no-scroll {
 
 html[data-theme="light"] .btn-primary,
 html[data-theme="light"] .btn-success {
-    background: linear-gradient(135deg, #c76d93 0%, #a84871 100%);
-    border-color: #a84871;
+    background: #d82b99;
+    border-color: #d82b99;
     color: #ffffff;
-    box-shadow: 0 2px 8px rgba(168, 72, 113, 0.22);
+    box-shadow: 0 2px 8px rgba(216, 43, 153, 0.25);
+    font-weight: 700;
 }
 
 html[data-theme="light"] .btn-primary:hover,
 html[data-theme="light"] .btn-success:hover {
-    background: linear-gradient(135deg, #b85b82 0%, #943960 100%);
-    border-color: #943960;
-    box-shadow: 0 4px 14px rgba(168, 72, 113, 0.3);
+    background: #b81b7e;
+    border-color: #b81b7e;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(216, 43, 153, 0.35);
 }
 
 html[data-theme="light"] .btn-secondary {
@@ -1693,7 +1699,7 @@ tbody tr:hover {
     border: 1px solid var(--line);
     border-radius: var(--r-lg, 16px);
     background:
-        linear-gradient(135deg, var(--user-accent, #df86a9) 0%, transparent 55%),
+        linear-gradient(135deg, var(--primary, #fd60c9) 0%, transparent 55%),
         var(--bg-surface-2);
     position: relative;
     overflow: hidden;
@@ -2600,131 +2606,73 @@ a > .icon:last-child {
     min-width: 36px;
 }
 
-/* ---------- Акцентный цвет (настройка пользователем) ---------- */
-/* --user-accent задаётся из cookie в base.html и переопределяет --primary,
-   поэтому вся гамма акцента (кнопки, ссылки, бейджи) следует за выбором. */
-:root {
-    --user-accent: #df86a9;
-}
-
-.btn-primary,
-.btn-success {
-    background: var(--user-accent);
-    border-color: var(--user-accent);
-    color: #12060c;
-}
-.btn-primary:hover,
-.btn-success:hover {
-    background: var(--user-accent);
-    filter: brightness(1.12);
-    border-color: var(--user-accent);
-    color: #12060c;
-}
-
-/* ---------- Ползунок акцентного цвета ---------- */
-.accent-picker {
+/* ---------- Отдельный блок сохранения настроек в самом низу страницы (не подвал, отдельный div) ---------- */
+.settings-save-block {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-}
-
-.accent-swatch {
-    width: 56px;
-    height: 40px;
-    padding: 0;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--r-sm);
-    background: none;
-    cursor: pointer;
-    overflow: hidden;
-}
-.accent-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
-.accent-swatch::-webkit-color-swatch { border: none; border-radius: 4px; }
-.accent-swatch::-moz-color-swatch { border: none; border-radius: 4px; }
-
-.accent-hue-slider {
-    flex: 1 1 220px;
-    min-width: 180px;
-    height: 10px;
-    appearance: none;
-    -webkit-appearance: none;
-    background: linear-gradient(
-        90deg,
-        #ff4d4d, #ffb84d, #ffe94d, #6bff6b,
-        #4de2ff, #4d7dff, #b84dff, #ff4dd4
-    );
-    border-radius: var(--r-full);
-    outline: none;
-    cursor: pointer;
-}
-.accent-hue-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--user-accent);
-    border: 2px solid #fff;
-    box-shadow: var(--shadow-sm);
-    cursor: grab;
-}
-.accent-hue-slider::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--user-accent);
-    border: 2px solid #fff;
-    cursor: grab;
-}
-
-.accent-preview {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-top: 14px;
-}
-.accent-preview .btn {
-    pointer-events: none;
-}
-.accent-value {
-    font-family: var(--font-mono, monospace);
-    font-size: 12.5px;
-    color: var(--text-tertiary);
-}
-
-/* ---------- Кнопка сохранения: всегда внизу ---------- */
-/* position: fixed, а не sticky: sticky работает только в пределах своего
-   контейнера, а панель настроек длинная и содержит несколько форм —
-   кнопка «уезжала» бы вверх вместе с концом формы оформления.
-   Отступ снизу у контейнера (padding-bottom) не даёт панели закрыться. */
-.settings-actions-bar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 30;
-    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    padding: 14px 20px;
-    background: var(--bg-glass, rgba(10, 10, 14, 0.85));
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid var(--line);
+    padding: 24px 20px;
+    margin-top: 28px;
+    margin-bottom: 36px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+    gap: 12px;
+}
+
+.settings-save-block .btn {
+    min-width: 170px;
+    padding: 10px 28px;
+    font-size: 14.5px;
+    font-weight: 700;
+    border-radius: var(--r-sm);
+    color: #000000;
+    background: var(--primary);
+    border: 1px solid rgba(253, 96, 201, 0.7);
+    box-shadow: 0 2px 10px rgba(253, 96, 201, 0.25);
+    transition: all 0.2s ease;
+}
+
+.settings-save-block .btn:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: #000000;
+    box-shadow: 0 4px 16px rgba(253, 96, 201, 0.4);
+    transform: translateY(-1.5px);
+}
+
+.settings-save-block .btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(253, 96, 201, 0.2);
+}
+
+html[data-theme="light"] .settings-save-block .btn {
+    color: #ffffff;
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(216, 43, 153, 0.25);
+}
+
+html[data-theme="light"] .settings-save-block .btn:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(216, 43, 153, 0.35);
 }
 
 .settings-save-status {
-    display: none;
-    color: var(--success);
+    color: var(--primary);
     font-weight: 600;
     font-size: 13.5px;
+    display: none;
+    transition: opacity 0.2s ease;
 }
 
 .settings-container {
-    /* Место под закреплённую панель, чтобы она не перекрывала контент. */
-    padding-bottom: 96px;
+    padding-bottom: 24px;
 }
 
 /* ---------- FAQ accordion ---------- */
@@ -2915,7 +2863,7 @@ html[data-theme="light"] .auth-page-wrapper::after {
     width: 44px;
     height: 44px;
     border-radius: 11px;
-    box-shadow: 0 2px 14px rgba(223, 134, 169, 0.28);
+    box-shadow: 0 2px 14px rgba(253, 96, 201, 0.3);
 }
 
 .login-brand h1 {
@@ -4574,60 +4522,6 @@ input:checked + .slider:before {
     font-size: 15px;
     color: var(--text-primary);
     line-height: 1.4;
-}
-
-/* Settings action bar (в самом низу и по центру) */
-.settings-actions-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    margin: 36px auto 44px auto;
-    text-align: center;
-    gap: 12px;
-}
-
-.settings-actions-bar .btn {
-    min-width: 220px;
-    padding: 13px 36px;
-    font-size: 15px;
-    font-weight: 600;
-}
-
-/* Кнопка сохранить настройки всегда зафиксирована внизу экрана (sticky) */
-.settings-sticky-footer {
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg-surface);
-    border: 1px solid var(--line);
-    padding: 14px 24px;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 16px;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: var(--r-md);
-    margin-top: 24px;
-}
-
-.settings-sticky-footer .btn {
-    min-width: 200px;
-    padding: 11px 28px;
-    font-size: 14.5px;
-    font-weight: 600;
-}
-
-.settings-save-status {
-    color: var(--success);
-    font-weight: 600;
-    font-size: 14px;
-    display: none;
-    transition: opacity 0.2s ease;
 }
 
 @media (max-width: 768px) {

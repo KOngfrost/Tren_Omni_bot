@@ -465,11 +465,12 @@ class TestAccentColor:
         assert normalize_accent_color(raw) is None
 
     def test_default_color_is_valid(self):
+        assert DEFAULT_ACCENT_COLOR == "#fd60c9"
         assert normalize_accent_color(DEFAULT_ACCENT_COLOR) == DEFAULT_ACCENT_COLOR
 
     @pytest.mark.asyncio
-    async def test_theme_saves_accent_cookie(self, db_session_maker, monkeypatch):
-        """Акцентный цвет сохраняется в cookie и применяется на странице."""
+    async def test_theme_saves_preferences(self, db_session_maker, monkeypatch):
+        """Настройки темы и эффектов сохраняются, кнопка сохранения оформлена отдельным блоком."""
         monkeypatch.setattr(settings, "SESSION_SECRET_KEY", "test_settings_secret_key_123456789")
         monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
 
@@ -483,18 +484,16 @@ class TestAccentColor:
                 data={
                     "theme": "dark",
                     "glass_effect": "true",
-                    "accent_color": "#22AA55",
                     "csrf_token": await _csrf(client),
                 },
                 headers={"Accept": "application/json"},
             )
             assert resp.status_code == 200
-            assert resp.json()["accent_color"] == "#22aa55"
-            assert "app_accent_color=#22aa55" in resp.headers.get("set-cookie", "")
+            assert resp.json()["glass_effect"] is True
 
             page = await client.get("/settings/")
-            assert 'id="accent_color"' in page.text
-            assert "#22aa55" in page.text
+            assert "settings-save-block" in page.text
+            assert 'id="btnSaveSettings"' in page.text
 
     @pytest.mark.asyncio
     async def test_invalid_accent_falls_back_to_default(self, db_session_maker, monkeypatch):
@@ -520,21 +519,30 @@ class TestAccentColor:
             assert resp.json()["accent_color"] == DEFAULT_ACCENT_COLOR
 
     @pytest.mark.asyncio
-    async def test_settings_page_has_accent_slider(self, db_session_maker, monkeypatch):
-        """На странице настроек есть ползунок акцентного цвета."""
+    async def test_settings_page_has_separate_save_div_and_no_color_picker(
+        self, db_session_maker, monkeypatch
+    ):
+        """Настройка цвета убрана (используется единый розовый как у иконки сайта),
+        а кнопка сохранения вынесена в отдельный div в самом низу страницы, а не в подвал.
+        """
         monkeypatch.setattr(settings, "SESSION_SECRET_KEY", "test_settings_secret_key_123456789")
         monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             async with db_session_maker() as session:
-                await _login_vk_admin(client, "accent_slider", "AccentPass123", session)
+                await _login_vk_admin(client, "save_div_admin", "AccentPass123", session)
             resp = await client.get("/settings/")
 
         assert resp.status_code == 200
-        assert "Акцентный цвет" in resp.text
-        assert 'id="accent_hue"' in resp.text
-        assert "accent-hue-slider" in resp.text
+        # Ползунок и настройка цвета удалены
+        assert 'id="accent_hue"' not in resp.text
+        assert 'id="accent_color"' not in resp.text
+        assert "accent-hue-slider" not in resp.text
+        # Кнопка сохранения — отдельный div внизу, не плавающий подвал
+        assert "settings-save-block" in resp.text
+        assert "settings-sticky-footer" not in resp.text
+        assert 'id="btnSaveSettings"' in resp.text
 
 
 # ==========================================

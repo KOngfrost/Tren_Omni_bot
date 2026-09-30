@@ -21,13 +21,6 @@
     <link rel="dns-prefetch" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token|default('') }}">
-    {# Акцентный цвет из cookie. Значение уже провалидировано на сервере
-       (normalize_accent_color) и является hex вида #RRGGBB, поэтому безопасно
-       подставлять в style-атрибут. --user-accent переопределяет --primary. #}
-    {% set accent = request.cookies.get('app_accent_color', '') if request else '' %}
-    {% if accent and accent|length in (4, 7) and accent[0] == '#' %}
-    <style nonce="{{ csp_nonce('style') }}">:root{--user-accent:{{ accent }};}</style>
-    {% endif %}
     <script nonce="{{ csp_nonce('script') }}">
         (function() {
             try {
@@ -50,15 +43,12 @@
                 if (glass === 'false') {
                     document.documentElement.classList.add('disable-glass');
                 }
-                // Акцентный цвет: cookie — источник истины, localStorage —
-                // быстрый кэш для мгновенного применения без перезагрузки.
-                var accent = localStorage.getItem('app_accent_color');
-                if (!accent) {
-                    var ma = document.cookie.match(/(^|;)\s*app_accent_color=([^;]+)/);
-                    if (ma) accent = decodeURIComponent(ma[2]);
+                // Очистка устаревших значений пользовательского акцента
+                if (localStorage.getItem('app_accent_color')) {
+                    localStorage.removeItem('app_accent_color');
                 }
-                if (accent && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(accent)) {
-                    document.documentElement.style.setProperty('--user-accent', accent);
+                if (document.cookie.indexOf('app_accent_color=') !== -1) {
+                    document.cookie = 'app_accent_color=; path=/; max-age=0';
                 }
             } catch (e) {}
             window.CSRF_TOKEN = "{{ csrf_token|default('') }}";

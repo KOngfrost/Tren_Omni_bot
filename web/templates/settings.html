@@ -107,41 +107,6 @@
                 </label>
             </div>
         </div>
-
-        <!-- Раздел акцентного цвета -->
-        <div class="card settings-section-card">
-            <div class="card-header">
-                <h2>Акцентный цвет</h2>
-            </div>
-            <p style="color: var(--text-secondary); font-size: 13.5px; margin-bottom: 18px;">
-                Цвет кнопок, ссылок и активных элементов панели. Сохраняется
-                индивидуально для вашей учётной записи и применяется сразу.
-            </p>
-
-            <div class="accent-picker">
-                <input type="color" id="accent_color" name="accent_color"
-                       class="accent-swatch" value="{{ accent_color }}"
-                       aria-label="Выбор акцентного цвета">
-                <input type="range" id="accent_hue" class="accent-hue-slider"
-                       min="0" max="359" step="1" aria-label="Оттенок акцентного цвета">
-                <span id="accentValue" class="accent-value">{{ accent_color }}</span>
-            </div>
-
-            <div class="accent-preview">
-                <span class="btn btn-primary">Основная кнопка</span>
-                <span class="btn btn-secondary">Вторичная</span>
-                <span class="badge badge-completed">Бейдж</span>
-                <a href="#preview" class="preview-link">Пример ссылки</a>
-            </div>
-        </div>
-
-        <!-- Кнопка «Сохранить настройки» всегда зафиксирована внизу экрана -->
-        <div class="settings-sticky-footer">
-            <span id="saveStatus" class="settings-save-status"></span>
-            <button type="submit" class="btn btn-primary" id="btnSaveSettings">
-                {{ icon('check', 16) }} Сохранить настройки
-            </button>
-        </div>
     </form>
 
     <!-- Раздел 2FA: глобальный мастер-переключатель (только суперадмин)
@@ -276,15 +241,12 @@
         </div>
     </div>
 
-    <!-- Кнопка сохранения оформления: закреплена у нижнего края окна,
-         поэтому видна на любом месте длинной страницы настроек.
-         Атрибут form связывает её с формой оформления выше, хотя сама
-         расположена вне неё (вложенные формы в HTML запрещены). -->
-    <div class="settings-actions-bar">
+    <!-- Отдельный блок сохранения настроек в самом низу страницы (не подвал, отдельный div) -->
+    <div class="settings-save-block">
         <button type="submit" form="settingsForm" class="btn btn-primary" id="btnSaveSettings">
             Сохранить настройки
         </button>
-        <span id="saveStatus" class="settings-save-status">Настройки применены</span>
+        <span id="saveStatus" class="settings-save-status"></span>
     </div>
 </div>
 
@@ -294,6 +256,7 @@
         const themeRadios = document.querySelectorAll('input[name="theme"]');
         const glassToggle = document.getElementById('glass_effect');
         const saveStatus = document.getElementById('saveStatus');
+        const settingsForm = document.getElementById('settingsForm');
 
         function applyPreview() {
             let selected = 'dark';
@@ -317,25 +280,53 @@
         themeRadios.forEach(r => {
             r.addEventListener('change', () => {
                 applyPreview();
-                showNotice();
+                showNotice('Предпросмотр темы применён');
             });
         });
 
         if (glassToggle) {
             glassToggle.addEventListener('change', () => {
                 applyPreview();
-                showNotice();
+                showNotice('Эффект стекла обновлён');
             });
         }
 
-        function showNotice() {
+        function showNotice(text) {
             if (saveStatus) {
                 saveStatus.style.display = 'inline-block';
-                saveStatus.textContent = 'Настройки применены';
+                saveStatus.textContent = text || 'Настройки сохранены';
                 setTimeout(() => {
                     saveStatus.style.display = 'none';
                 }, 2500);
             }
+        }
+
+        if (settingsForm) {
+            settingsForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const btn = document.getElementById('btnSaveSettings');
+                if (btn) btn.disabled = true;
+                try {
+                    const formData = new FormData(settingsForm);
+                    const res = await fetch('/settings/theme', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: formData
+                    });
+                    if (res.ok) {
+                        showNotice('Настройки успешно сохранены');
+                    } else {
+                        settingsForm.submit();
+                    }
+                } catch(err) {
+                    settingsForm.submit();
+                } finally {
+                    if (btn) btn.disabled = false;
+                }
+            });
         }
 
         const btnToggle2FA = document.getElementById('btnToggle2FA');
@@ -355,18 +346,6 @@
                 const msg = btnPersonal2FA.getAttribute('data-confirm');
                 if (msg && !window.confirm(msg)) {
                     e.preventDefault();
-                }
-            });
-        }
-
-        // Акцентный цвет: сервер уже отдал нормализованный hex, подставляем
-        // его в слайдер оттенка, чтобы тот не «прыгал» при загрузке.
-        const accentPicker = document.getElementById('accent_color');
-        const hueSlider = document.getElementById('accent_hue');
-        if (hueSlider && accentPicker) {
-            window.addEventListener('load', function () {
-                if (typeof window.setAccentColor === 'function') {
-                    window.setAccentColor(accentPicker.value);
                 }
             });
         }
