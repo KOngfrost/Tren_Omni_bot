@@ -71,11 +71,26 @@ def test_meta_tags_and_canonical(web_client):
 
 
 def test_cookie_banner_present(web_client):
-    """Проверка наличия баннера cookie и ссылок на правовые документы."""
+    """Проверка наличия баннера cookie, кнопки отказа, предупреждения и ссылок на правовые документы."""
     res = web_client.get("/auth/login")
     assert res.status_code == 200
     assert 'id="cookie-consent-banner"' in res.text
     assert 'id="cookie-consent-accept-btn"' in res.text
+    assert 'id="cookie-consent-decline-btn"' in res.text
+    assert 'id="cookie-decline-warning-modal"' in res.text
+    assert "/legal/privacy" in res.text
+
+
+def test_legal_agreements_gate_present(web_client):
+    """Проверка наличия обязательного окна соглашений (152-ФЗ) и запрета на доступ без согласия."""
+    res = web_client.get("/auth/login")
+    assert res.status_code == 200
+    assert 'id="legal-agreements-modal"' in res.text
+    assert 'id="legal-agreements-accept-btn"' in res.text
+    assert 'id="legal-agreements-decline-btn"' in res.text
+    assert 'id="legal-gate-blocked-view"' in res.text
+    assert "/legal/terms" in res.text
+    assert "/legal/consent" in res.text
     assert "/legal/privacy" in res.text
 
 

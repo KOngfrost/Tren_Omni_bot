@@ -787,11 +787,21 @@
 
     /**
      * Баннер согласия на использование файлов cookie (152-ФЗ)
+     * - При согласии: сохраняем в localStorage, больше никогда не напоминаем.
+     * - При отказе: предупреждаем о частичной работе сайта, спрашиваем каждый раз (не сохраняем в localStorage).
+     * - Исключение: отказ от cookie не блокирует пользование страницей.
      */
     function initCookieConsent() {
         var banner = document.getElementById('cookie-consent-banner');
         if (!banner) return;
 
+        var warningModal = document.getElementById('cookie-decline-warning-modal');
+        var acceptBtn = document.getElementById('cookie-consent-accept-btn');
+        var declineBtn = document.getElementById('cookie-consent-decline-btn');
+        var warnConfirmDeclineBtn = document.getElementById('cookie-warning-confirm-decline-btn');
+        var warnAcceptBtn = document.getElementById('cookie-warning-accept-btn');
+
+        // Если пользователь один раз согласился — больше никогда не напоминаем
         try {
             if (localStorage.getItem('cookie_consent_accepted') === 'true') {
                 banner.style.display = 'none';
@@ -799,18 +809,118 @@
             }
         } catch (e) {}
 
+        // Если пользователь отказался в рамках текущей сессии вкладки — не мешаем переходам,
+        // но НЕ сохраняем в localStorage: при перезагрузке или новом визите спросим снова
+        try {
+            if (sessionStorage.getItem('cookie_consent_declined') === 'true') {
+                banner.style.display = 'none';
+                return;
+            }
+        } catch (e) {}
+
         banner.style.display = 'flex';
 
-        var acceptBtn = document.getElementById('cookie-consent-accept-btn');
+        function acceptCookies() {
+            try {
+                localStorage.setItem('cookie_consent_accepted', 'true');
+                sessionStorage.removeItem('cookie_consent_declined');
+            } catch (e) {}
+            if (warningModal) warningModal.style.display = 'none';
+            banner.classList.add('is-hiding');
+            setTimeout(function () {
+                banner.style.display = 'none';
+            }, 300);
+        }
+
         if (acceptBtn) {
-            acceptBtn.addEventListener('click', function () {
+            acceptBtn.addEventListener('click', acceptCookies);
+        }
+        if (warnAcceptBtn) {
+            warnAcceptBtn.addEventListener('click', acceptCookies);
+        }
+
+        if (declineBtn) {
+            declineBtn.addEventListener('click', function () {
+                if (warningModal) {
+                    warningModal.style.display = 'flex';
+                }
+            });
+        }
+
+        if (warnConfirmDeclineBtn) {
+            warnConfirmDeclineBtn.addEventListener('click', function () {
                 try {
-                    localStorage.setItem('cookie_consent_accepted', 'true');
+                    // Не сохраняем в localStorage — спрашивать каждый раз при новом визите/перезагрузке
+                    sessionStorage.setItem('cookie_consent_declined', 'true');
                 } catch (e) {}
+                if (warningModal) warningModal.style.display = 'none';
                 banner.classList.add('is-hiding');
                 setTimeout(function () {
                     banner.style.display = 'none';
                 }, 300);
+            });
+        }
+    }
+
+    /**
+     * Обязательные соглашения сервиса (152-ФЗ, Пользовательское соглашение):
+     * - Запрет на пользование страницей без соглашений (исключение: куки)
+     * - Если один раз согласились — не напоминать больше (localStorage)
+     * - Если отказались — спрашивать каждый раз (блокировка доступа + повторный запрос при перезагрузке)
+     * - Страницы /legal/* не блокируются, чтобы пользователь мог прочитать документы
+     */
+    function initLegalAgreementsGate() {
+        var modal = document.getElementById('legal-agreements-modal');
+        if (!modal) return;
+
+        var pathname = window.location.pathname || '';
+        // На страницах правовых документов не блокируем чтение текстов
+        var isLegalDocPage = pathname.indexOf('/legal/') === 0;
+
+        try {
+            if (localStorage.getItem('legal_agreements_accepted') === 'true') {
+                modal.style.display = 'none';
+                return;
+            }
+        } catch (e) {}
+
+        var promptView = document.getElementById('legal-gate-prompt-view');
+        var blockedView = document.getElementById('legal-gate-blocked-view');
+        var acceptBtn = document.getElementById('legal-agreements-accept-btn');
+        var declineBtn = document.getElementById('legal-agreements-decline-btn');
+        var reconsiderBtn = document.getElementById('legal-agreements-reconsider-btn');
+
+        // Показываем окно соглашений
+        modal.style.display = 'flex';
+        if (promptView) promptView.style.display = 'block';
+        if (blockedView) blockedView.style.display = 'none';
+
+        if (!isLegalDocPage) {
+            document.body.classList.add('legal-blocked-scroll');
+        }
+
+        function acceptAgreements() {
+            try {
+                localStorage.setItem('legal_agreements_accepted', 'true');
+            } catch (e) {}
+            modal.style.display = 'none';
+            document.body.classList.remove('legal-blocked-scroll');
+        }
+
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', acceptAgreements);
+        }
+        if (reconsiderBtn) {
+            reconsiderBtn.addEventListener('click', acceptAgreements);
+        }
+
+        if (declineBtn) {
+            declineBtn.addEventListener('click', function () {
+                // Если отказались: блокируем пользование страницей ("запрет на пользование страницей без соглашений")
+                // И не сохраняем в localStorage, чтобы спрашивать каждый раз
+                if (promptView) promptView.style.display = 'none';
+                if (blockedView) blockedView.style.display = 'block';
+                document.body.classList.add('legal-blocked-scroll');
             });
         }
     }
@@ -1087,10 +1197,12 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             initCookieConsent();
+            initLegalAgreementsGate();
             initNavCounters();
         });
     } else {
         initCookieConsent();
+        initLegalAgreementsGate();
         initNavCounters();
     }
 })();
