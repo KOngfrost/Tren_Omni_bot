@@ -4253,17 +4253,109 @@ html[data-theme="light"] .btn-cookie-accept:hover {
     margin: 14px 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--line);
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 10px 12px;
 }
 
 .legal-doc-item {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 12px;
+}
+
+.legal-doc-item.legal-doc-clickable {
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.legal-doc-item.legal-doc-clickable:hover {
+    background: rgba(253, 96, 201, 0.07);
+    border-color: rgba(253, 96, 201, 0.18);
+}
+
+.legal-doc-checkbox {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.legal-custom-checkbox {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.05);
+    color: transparent;
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.legal-custom-checkbox svg {
+    transform: scale(0.5);
+    transition: transform 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.legal-doc-checkbox:focus-visible + .legal-custom-checkbox {
+    outline: 2px solid #fd60c9;
+    outline-offset: 2px;
+}
+
+.legal-doc-checkbox:checked + .legal-custom-checkbox {
+    background: #fd60c9;
+    border-color: #fd60c9;
+    color: #000000;
+    box-shadow: 0 0 12px rgba(253, 96, 201, 0.45);
+}
+
+.legal-doc-checkbox:checked + .legal-custom-checkbox svg {
+    transform: scale(1);
+    stroke: #000000;
+}
+
+.legal-doc-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.legal-doc-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.legal-read-link {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #fd60c9;
+    text-decoration: none;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(253, 96, 201, 0.12);
+    border: 1px solid rgba(253, 96, 201, 0.25);
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.legal-read-link:hover {
+    background: rgba(253, 96, 201, 0.24);
+    color: #fe82d5;
+    border-color: rgba(253, 96, 201, 0.5);
+    text-decoration: none;
 }
 
 .legal-check-icon {
@@ -4289,6 +4381,7 @@ html[data-theme="light"] .btn-cookie-accept:hover {
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    flex: 1;
 }
 
 .legal-doc-desc {
@@ -4337,13 +4430,24 @@ html[data-theme="light"] .btn-cookie-accept:hover {
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(253, 96, 201, 0.4);
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.btn-modal-accept:hover {
+.btn-modal-accept:hover:not(:disabled):not(.is-disabled) {
     background: #fe82d5;
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(253, 96, 201, 0.55);
+}
+
+.btn-modal-accept:disabled,
+.btn-modal-accept.is-disabled {
+    opacity: 0.38 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    background: rgba(253, 96, 201, 0.2) !important;
+    color: rgba(255, 255, 255, 0.45) !important;
 }
 
 .btn-modal-decline {
@@ -4366,6 +4470,51 @@ html[data-theme="light"] .btn-cookie-accept:hover {
 
 .legal-blocked-scroll {
     overflow: hidden !important;
+}
+
+/* Нижняя фиксированная плашка для страниц правовых документов */
+.legal-doc-sticky-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    background: rgba(14, 14, 18, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(253, 96, 201, 0.35);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6), 0 0 20px rgba(253, 96, 201, 0.12);
+    animation: cookieSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.legal-doc-sticky-text {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #ffffff;
+}
+
+.legal-doc-sticky-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@media (max-width: 600px) {
+    .legal-doc-sticky-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px 16px;
+    }
+    .legal-doc-sticky-actions button {
+        width: 100%;
+        text-align: center;
+    }
 }
 
 /* Светлая тема */
@@ -4396,9 +4545,46 @@ html[data-theme="light"] .legal-docs-checklist {
     border-color: #e2e8f0;
 }
 
+html[data-theme="light"] .legal-doc-item.legal-doc-clickable:hover {
+    background: rgba(216, 43, 153, 0.06);
+    border-color: rgba(216, 43, 153, 0.2);
+}
+
+html[data-theme="light"] .legal-custom-checkbox {
+    border-color: #cbd5e1;
+    background: #ffffff;
+}
+
+html[data-theme="light"] .legal-doc-checkbox:checked + .legal-custom-checkbox {
+    background: #d82b99;
+    border-color: #d82b99;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(216, 43, 153, 0.35);
+}
+
+html[data-theme="light"] .legal-doc-checkbox:checked + .legal-custom-checkbox svg {
+    stroke: #ffffff;
+}
+
+html[data-theme="light"] .legal-read-link {
+    color: #d82b99;
+    background: rgba(216, 43, 153, 0.08);
+    border-color: rgba(216, 43, 153, 0.22);
+}
+
+html[data-theme="light"] .legal-read-link:hover {
+    background: rgba(216, 43, 153, 0.16);
+    color: #b81b7e;
+    border-color: rgba(216, 43, 153, 0.4);
+}
+
 html[data-theme="light"] .legal-check-icon {
     background: rgba(216, 43, 153, 0.14);
     color: #d82b99;
+}
+
+html[data-theme="light"] .legal-blocked-p {
+    color: #0f172a;
 }
 
 html[data-theme="light"] .btn-modal-accept {
@@ -4407,15 +4593,31 @@ html[data-theme="light"] .btn-modal-accept {
     box-shadow: 0 4px 12px rgba(216, 43, 153, 0.3);
 }
 
-html[data-theme="light"] .btn-modal-accept:hover {
+html[data-theme="light"] .btn-modal-accept:hover:not(:disabled):not(.is-disabled) {
     background: #b81b7e;
     box-shadow: 0 6px 16px rgba(216, 43, 153, 0.45);
+}
+
+html[data-theme="light"] .btn-modal-accept:disabled,
+html[data-theme="light"] .btn-modal-accept.is-disabled {
+    background: rgba(216, 43, 153, 0.18) !important;
+    color: rgba(0, 0, 0, 0.35) !important;
 }
 
 html[data-theme="light"] .btn-modal-decline {
     background: #f1f5f9;
     border-color: #cbd5e1;
     color: #334155;
+}
+
+html[data-theme="light"] .legal-doc-sticky-bar {
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid rgba(216, 43, 153, 0.3);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .legal-doc-sticky-text {
+    color: #0f172a;
 }
 
 html[data-theme="light"] .btn-modal-decline:hover {

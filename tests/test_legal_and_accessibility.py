@@ -82,13 +82,18 @@ def test_cookie_banner_present(web_client):
 
 
 def test_legal_agreements_gate_present(web_client):
-    """Проверка наличия обязательного окна соглашений (152-ФЗ) и запрета на доступ без согласия."""
+    """Проверка наличия обязательного окна соглашений (152-ФЗ), 3 интерактивных чекбоксов и запрета на доступ без согласия."""
     res = web_client.get("/auth/login")
     assert res.status_code == 200
     assert 'id="legal-agreements-modal"' in res.text
     assert 'id="legal-agreements-accept-btn"' in res.text
     assert 'id="legal-agreements-decline-btn"' in res.text
     assert 'id="legal-gate-blocked-view"' in res.text
+    assert 'id="legal-check-terms"' in res.text
+    assert 'id="legal-check-privacy"' in res.text
+    assert 'id="legal-check-consent"' in res.text
+    assert 'id="legal-doc-sticky-bar"' in res.text
+    assert 'id="legal-open-gate-btn"' in res.text
     assert "/legal/terms" in res.text
     assert "/legal/consent" in res.text
     assert "/legal/privacy" in res.text

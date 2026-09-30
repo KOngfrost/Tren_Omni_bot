@@ -387,42 +387,54 @@
                 </div>
                 <div class="legal-modal-body">
                     <p>Для использования страниц и сервисов платформы необходимо ознакомиться и принять обязательные условия обслуживания:</p>
-                    <div class="legal-docs-checklist">
-                        <div class="legal-doc-item">
-                            <span class="legal-check-icon" aria-hidden="true">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <div class="legal-docs-checklist" id="legal-docs-checklist">
+                        <label class="legal-doc-item legal-doc-clickable" for="legal-check-terms">
+                            <input type="checkbox" id="legal-check-terms" class="legal-doc-checkbox" aria-label="Принять Пользовательское соглашение">
+                            <span class="legal-custom-checkbox" aria-hidden="true">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </span>
                             <div class="legal-doc-text">
-                                <a href="/legal/terms" target="_blank" class="cookie-link">Пользовательское соглашение</a>
+                                <div class="legal-doc-title-row">
+                                    <span class="legal-doc-title">Пользовательское соглашение</span>
+                                    <a href="/legal/terms" target="_blank" class="cookie-link legal-read-link" title="Открыть текст соглашения в новой вкладке" onclick="event.stopPropagation();">Читать</a>
+                                </div>
                                 <span class="legal-doc-desc">Правила использования сервиса, права и обязанности</span>
                             </div>
-                        </div>
-                        <div class="legal-doc-item">
-                            <span class="legal-check-icon" aria-hidden="true">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        </label>
+                        <label class="legal-doc-item legal-doc-clickable" for="legal-check-privacy">
+                            <input type="checkbox" id="legal-check-privacy" class="legal-doc-checkbox" aria-label="Принять Политику обработки персональных данных">
+                            <span class="legal-custom-checkbox" aria-hidden="true">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </span>
                             <div class="legal-doc-text">
-                                <a href="/legal/privacy" target="_blank" class="cookie-link">Политика обработки персональных данных</a>
+                                <div class="legal-doc-title-row">
+                                    <span class="legal-doc-title">Политика обработки персональных данных</span>
+                                    <a href="/legal/privacy" target="_blank" class="cookie-link legal-read-link" title="Открыть текст политики в новой вкладке" onclick="event.stopPropagation();">Читать</a>
+                                </div>
                                 <span class="legal-doc-desc">Порядок защиты, цели сбора и хранение данных (152-ФЗ)</span>
                             </div>
-                        </div>
-                        <div class="legal-doc-item">
-                            <span class="legal-check-icon" aria-hidden="true">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                        </label>
+                        <label class="legal-doc-item legal-doc-clickable" for="legal-check-consent">
+                            <input type="checkbox" id="legal-check-consent" class="legal-doc-checkbox" aria-label="Принять Согласие на обработку персональных данных">
+                            <span class="legal-custom-checkbox" aria-hidden="true">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </span>
                             <div class="legal-doc-text">
-                                <a href="/legal/consent" target="_blank" class="cookie-link">Согласие на обработку персональных данных</a>
+                                <div class="legal-doc-title-row">
+                                    <span class="legal-doc-title">Согласие на обработку персональных данных</span>
+                                    <a href="/legal/consent" target="_blank" class="cookie-link legal-read-link" title="Открыть текст согласия в новой вкладке" onclick="event.stopPropagation();">Читать</a>
+                                </div>
                                 <span class="legal-doc-desc">Подтверждение законности обработки обращений и данных</span>
                             </div>
-                        </div>
+                        </label>
                     </div>
                     <div class="legal-note-text">
-                        Использование функционала платформы без согласий запрещено. При отказе доступ к странице блокируется, а запрос будет показан снова при следующем открытии сайта.
+                        Отметьте все пункты для подтверждения. Использование страниц платформы без согласий запрещено. При отказе доступ блокируется, а запрос будет показан снова при следующем открытии сайта.
                     </div>
                 </div>
                 <div class="legal-modal-footer">
                     <button type="button" class="btn-modal-decline" id="legal-agreements-decline-btn">Отказаться</button>
-                    <button type="button" class="btn-modal-accept" id="legal-agreements-accept-btn">Принять все соглашения</button>
+                    <button type="button" class="btn-modal-accept is-disabled" id="legal-agreements-accept-btn" disabled aria-disabled="true">Принять все соглашения</button>
                 </div>
             </div>
 
@@ -446,6 +458,16 @@
                     <button type="button" class="btn-modal-accept" id="legal-agreements-reconsider-btn">Принять условия и продолжить</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Панель подтверждения на страницах правовых документов (/legal/*) -->
+    <div id="legal-doc-sticky-bar" class="legal-doc-sticky-bar" style="display: none;">
+        <div class="legal-doc-sticky-text">
+            Ознакомились с документами? Для перехода к сервису подтвердите согласия.
+        </div>
+        <div class="legal-doc-sticky-actions">
+            <button type="button" class="btn-modal-accept" id="legal-open-gate-btn">Принять соглашения</button>
         </div>
     </div>
 

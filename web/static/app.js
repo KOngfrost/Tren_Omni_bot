@@ -864,60 +864,162 @@
 
     /**
      * Обязательные соглашения сервиса (152-ФЗ, Пользовательское соглашение):
-     * - Запрет на пользование страницей без соглашений (исключение: куки)
-     * - Если один раз согласились — не напоминать больше (localStorage)
-     * - Если отказались — спрашивать каждый раз (блокировка доступа + повторный запрос при перезагрузке)
-     * - Страницы /legal/* не блокируются, чтобы пользователь мог прочитать документы
+     * - 3 кликабельных чекбокса: условия активируются по очереди или в любом порядке,
+     *   кнопка "Принять все соглашения" загорается и становится доступной только после выбора всех 3 чекбоксов.
+     * - Документы (/legal/*) можно прочитать свободно без всплывающего окна соглашений.
+     * - При попытке перехода со страниц документов на любые другие разделы без принятия условий —
+     *   переход блокируется и открывается окно соглашений ("с отказом никуда пройти нельзя").
+     * - Если один раз согласились — сохраняем в localStorage и больше не спрашиваем.
+     * - Если отказались — спрашиваем каждый раз при новом посещении (запрет доступа без согласий).
      */
     function initLegalAgreementsGate() {
         var modal = document.getElementById('legal-agreements-modal');
         if (!modal) return;
 
         var pathname = window.location.pathname || '';
-        // На страницах правовых документов не блокируем чтение текстов
         var isLegalDocPage = pathname.indexOf('/legal/') === 0;
-
-        try {
-            if (localStorage.getItem('legal_agreements_accepted') === 'true') {
-                modal.style.display = 'none';
-                return;
-            }
-        } catch (e) {}
 
         var promptView = document.getElementById('legal-gate-prompt-view');
         var blockedView = document.getElementById('legal-gate-blocked-view');
         var acceptBtn = document.getElementById('legal-agreements-accept-btn');
         var declineBtn = document.getElementById('legal-agreements-decline-btn');
         var reconsiderBtn = document.getElementById('legal-agreements-reconsider-btn');
+        var stickyBar = document.getElementById('legal-doc-sticky-bar');
+        var openGateBtn = document.getElementById('legal-open-gate-btn');
 
-        // Показываем окно соглашений
-        modal.style.display = 'flex';
-        if (promptView) promptView.style.display = 'block';
-        if (blockedView) blockedView.style.display = 'none';
+        var checkTerms = document.getElementById('legal-check-terms');
+        var checkPrivacy = document.getElementById('legal-check-privacy');
+        var checkConsent = document.getElementById('legal-check-consent');
 
-        if (!isLegalDocPage) {
+        var isAccepted = false;
+        try {
+            isAccepted = (localStorage.getItem('legal_agreements_accepted') === 'true');
+        } catch (e) {}
+
+        if (isAccepted) {
+            modal.style.display = 'none';
+            if (stickyBar) stickyBar.style.display = 'none';
+            return;
+        }
+
+        // Проверка состояния 3-х чекбоксов и включение кнопки "Принять"
+        function updateAcceptButtonState() {
+            var termsOk = checkTerms ? !!checkTerms.checked : true;
+            var privOk = checkPrivacy ? !!checkPrivacy.checked : true;
+            var consOk = checkConsent ? !!checkConsent.checked : true;
+            var allChecked = termsOk && privOk && consOk;
+
+            if (acceptBtn) {
+                acceptBtn.disabled = !allChecked;
+                if (allChecked) {
+                    acceptBtn.removeAttribute('aria-disabled');
+                    acceptBtn.classList.remove('is-disabled');
+                } else {
+                    acceptBtn.setAttribute('aria-disabled', 'true');
+                    acceptBtn.classList.add('is-disabled');
+                }
+            }
+        }
+
+        if (checkTerms) checkTerms.addEventListener('change', updateAcceptButtonState);
+        if (checkPrivacy) checkPrivacy.addEventListener('change', updateAcceptButtonState);
+        if (checkConsent) checkConsent.addEventListener('change', updateAcceptButtonState);
+        updateAcceptButtonState();
+
+        function showAgreementsModal() {
+            modal.style.display = 'flex';
             document.body.classList.add('legal-blocked-scroll');
+            var isDeclined = false;
+            try {
+                isDeclined = (sessionStorage.getItem('legal_agreements_declined') === 'true');
+            } catch (_) {}
+
+            if (isDeclined) {
+                if (promptView) promptView.style.display = 'none';
+                if (blockedView) blockedView.style.display = 'block';
+            } else {
+                if (promptView) promptView.style.display = 'block';
+                if (blockedView) blockedView.style.display = 'none';
+            }
+        }
+
+        if (isLegalDocPage) {
+            // На страницах правовых документов не мешаем читать текст:
+            // скрываем модальное окно и показываем нижнюю плашку подтверждения
+            modal.style.display = 'none';
+            if (stickyBar) stickyBar.style.display = 'flex';
+
+            if (openGateBtn) {
+                openGateBtn.addEventListener('click', function () {
+                    if (promptView) promptView.style.display = 'block';
+                    if (blockedView) blockedView.style.display = 'none';
+                    modal.style.display = 'flex';
+                    document.body.classList.add('legal-blocked-scroll');
+                });
+            }
+
+            // Перехват любых попыток уйти со страниц документов без принятия соглашений
+            document.addEventListener('click', function (e) {
+                var anchor = e.target.closest('a');
+                if (!anchor) return;
+                var href = anchor.getAttribute('href');
+                if (!href || href === '#' || href.indexOf('javascript:') === 0) return;
+
+                try {
+                    var targetUrl = new URL(anchor.href, window.location.origin);
+                    if (targetUrl.origin === window.location.origin) {
+                        // Переход внутри платформы
+                        if (targetUrl.pathname.indexOf('/legal/') !== 0) {
+                            // Попытка перейти на страницу не из правового раздела (/legal/*)
+                            e.preventDefault();
+                            e.stopPropagation();
+                            showAgreementsModal();
+                        }
+                    }
+                } catch (_) {}
+            }, true);
+        } else {
+            // На всех остальных страницах сразу блокируем и требуем согласий
+            showAgreementsModal();
         }
 
         function acceptAgreements() {
+            var termsOk = checkTerms ? !!checkTerms.checked : true;
+            var privOk = checkPrivacy ? !!checkPrivacy.checked : true;
+            var consOk = checkConsent ? !!checkConsent.checked : true;
+            if (!termsOk || !privOk || !consOk) return;
+
             try {
                 localStorage.setItem('legal_agreements_accepted', 'true');
+                sessionStorage.removeItem('legal_agreements_declined');
             } catch (e) {}
+
             modal.style.display = 'none';
             document.body.classList.remove('legal-blocked-scroll');
+            if (stickyBar) stickyBar.style.display = 'none';
         }
 
         if (acceptBtn) {
             acceptBtn.addEventListener('click', acceptAgreements);
         }
+
         if (reconsiderBtn) {
-            reconsiderBtn.addEventListener('click', acceptAgreements);
+            reconsiderBtn.addEventListener('click', function () {
+                // Переключаем обратно на форму с чекбоксами для подтверждения
+                try {
+                    sessionStorage.removeItem('legal_agreements_declined');
+                } catch (_) {}
+                if (blockedView) blockedView.style.display = 'none';
+                if (promptView) promptView.style.display = 'block';
+                updateAcceptButtonState();
+            });
         }
 
         if (declineBtn) {
             declineBtn.addEventListener('click', function () {
-                // Если отказались: блокируем пользование страницей ("запрет на пользование страницей без соглашений")
-                // И не сохраняем в localStorage, чтобы спрашивать каждый раз
+                try {
+                    sessionStorage.setItem('legal_agreements_declined', 'true');
+                } catch (e) {}
                 if (promptView) promptView.style.display = 'none';
                 if (blockedView) blockedView.style.display = 'block';
                 document.body.classList.add('legal-blocked-scroll');
