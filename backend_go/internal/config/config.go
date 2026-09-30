@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 )
@@ -15,6 +16,7 @@ type Config struct {
 	TwoFactorEnabled  bool
 	CORSOrigins       string
 	AppVersion        string
+	AppEnv            string
 }
 
 func getEnv(key, defaultVal string) string {
@@ -38,16 +40,27 @@ func LoadConfig() *Config {
 	tgAdminID, _ := strconv.ParseInt(getEnv("TELEGRAM_ADMIN_ID", "0"), 10, 64)
 	twoFactorEnabled, _ := strconv.ParseBool(getEnv("TWO_FACTOR_ENABLED", "true"))
 	corsOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, http://127.0.0.1:3000, http://localhost:8000")
+	appEnv := getEnv("APP_ENV", "development")
+
+	sessionSecret := getEnv("SESSION_SECRET_KEY", "")
+	if appEnv == "production" {
+		if sessionSecret == "" || sessionSecret == "change_me_super_secret_key_32_chars" || len(sessionSecret) < 32 {
+			log.Fatal("CRITICAL: SESSION_SECRET_KEY не задан, является плейсхолдером или короче 32 символов в production")
+		}
+	} else if sessionSecret == "" {
+		sessionSecret = "dev_fallback_secret_key_minimum_32_chars_local"
+	}
 
 	return &Config{
 		Port:             port,
 		DatabaseURL:      dbURL,
 		RedisURL:         redisURL,
-		SessionSecretKey: getEnv("SESSION_SECRET_KEY", "change_me_super_secret_key_32_chars"),
+		SessionSecretKey: sessionSecret,
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramAdminID:  tgAdminID,
 		TwoFactorEnabled: twoFactorEnabled,
 		CORSOrigins:      corsOrigins,
-		AppVersion:       getEnv("APP_VERSION", "0.8.8.4"),
+		AppVersion:       getEnv("APP_VERSION", "0.8.8.7"),
+		AppEnv:           appEnv,
 	}
 }

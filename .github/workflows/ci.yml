@@ -148,6 +148,8 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Scan dependencies for CVEs
-        run: pip-audit -r requirements.txt
-      - name: Scan git history for secrets
-        run: python scratch/scan_secrets.py || true
+        run: pip-audit -r requirements.txt -r requirements-dev.txt
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

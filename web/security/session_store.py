@@ -1,13 +1,14 @@
 """Redis-backed сессионное middleware для распределённого хранения сессий с TTL."""
 
 import base64
-import hashlib
 import json
 import logging
 import secrets
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from itsdangerous import BadSignature, Signer
 from starlette.datastructures import MutableHeaders
 from starlette.requests import HTTPConnection
@@ -20,13 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 def _derive_fernet_key(secret_key: str) -> bytes:
-    """Детерминированно вывести 32-байтный Fernet-ключ из секрета сессий.
-
-    Fernet требует ключ в виде url-safe Base64 от ровно 32 байт; секрет
-    приложения произвольной длины сворачивается SHA-256.
-    """
-    digest = hashlib.sha256(secret_key.encode("utf-8")).digest()
-    return base64.urlsafe_b64encode(digest)
+    """Детерминированно вывести 32-байтный Fernet-ключ через HKDF (RFC 5869)."""
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"oss-bot-session-kdf-v1",
+        info=b"fernet-fallback-session-key",
+    )
+    derived = hkdf.derive(secret_key.encode("utf-8"))
+    return base64.urlsafe_b64encode(derived)
 
 
 class RedisSessionMiddleware:

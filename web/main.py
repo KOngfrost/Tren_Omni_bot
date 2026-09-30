@@ -19,7 +19,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -34,6 +34,7 @@ from core.database import async_session_maker
 # Настраиваем логирование при старте веб-панели
 from core.logging_config import setup_logging
 from core.sentry import init_sentry
+from web.dependencies import require_superadmin
 from web.security.csrf import CSRFMiddleware
 from web.security.middleware import (
     MaintenanceMiddleware,
@@ -196,8 +197,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Authorization", "Accept", "X-Requested-With"],
 )
 
 # 2. CSRF защита для всех POST-запросов
@@ -738,11 +739,17 @@ async def health():
             logger.warning("Healthcheck: не удалось определить bootstrap-режим: %s", exc)
             bootstrap = None
 
+        safe_bootstrap: dict[str, object] | None = None
+        if bootstrap is not None:
+            safe_bootstrap = dict(bootstrap)
+            # SEC-004: Скрываем логин bootstrap-администратора из публичного ответа
+            safe_bootstrap.pop("bootstrap_username", None)
+
         return {
             "status": "ok",
             "time_sync": time_sync,
             "bootstrap_mode": None if bootstrap is None else bootstrap.get("bootstrap_mode"),
-            "bootstrap": bootstrap,
+            "bootstrap": safe_bootstrap,
         }
     except Exception:
         logger.exception("Healthcheck: БД недоступна")
@@ -750,3 +757,21 @@ async def health():
             content={"status": "error", "detail": "database unavailable"},
             status_code=503,
         )
+
+
+@app.get("/health/detailed")
+async def health_detailed(user: dict = Depends(require_superadmin)):
+    """Детальная системная диагностика: доступна строго суперадминистраторам."""
+    from core.bootstrap_guard import bootstrap_mode_status
+    from core.startup_guard import startup_summary
+
+    async with async_session_maker() as session:
+        bootstrap = await bootstrap_mode_status(session, settings)
+
+    return {
+        "status": "ok",
+        "app_version": settings.APP_VERSION,
+        "bootstrap": bootstrap,
+        "startup_summary": startup_summary(settings),
+    }
+

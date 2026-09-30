@@ -157,7 +157,7 @@ class Settings(BaseSettings):
         return _load_or_create_dev_secret()
 
     SESSION_HTTPS_ONLY: bool = False
-    SESSION_SAME_SITE: str = "lax"
+    SESSION_SAME_SITE: str = "strict"
     TRUSTED_PROXIES: set[str] = Field(default_factory=set)
     WEB_ADMIN_USERNAME: str = ""
     WEB_ADMIN_PASSWORD: str = ""
@@ -337,7 +337,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _adjust_session_same_site(self) -> Self:
         if not self.SESSION_SAME_SITE:
-            self.SESSION_SAME_SITE = "lax"
+            self.SESSION_SAME_SITE = "strict"
         return self
 
 

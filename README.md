@@ -1,4 +1,4 @@
-# OSS Bot v0.8.8.4 🎓
+# OSS Bot v0.8.8.7 🎓
 
 [![CI](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml/badge.svg)](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

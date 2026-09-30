@@ -594,9 +594,14 @@ async def login(request: Request):
 
         if user_data is None:
             await _record_failed_attempt(client_ip)
+            masked_user = (
+                f"{username[0]}***{username[-1]}"
+                if len(username) > 2
+                else ("***" if username else "<empty>")
+            )
             await _log_action(
                 "web_login_failed",
-                f"Неудачный вход с IP {client_ip} (username={username!r})",
+                f"Неудачный вход с IP {client_ip} (username={masked_user!r})",
             )
             logger.warning("Неудачная попытка входа с IP %s", client_ip)
             request.session["flash_error"] = "Неверный логин или пароль"
@@ -646,7 +651,7 @@ async def login(request: Request):
                 session,
                 vk_admin_id=int(vk_admin_id),
                 otp_code=otp_code,
-                reason="Одноразовый код для входа в панель управления OSS Bot",
+                reason="🔐 Одноразовый код для входа в панель управления OSS Bot",
             )
             logger.info(
                 "2FA OTP код отправлен в VK для админа vk_id=%s (username=%s)",
@@ -846,7 +851,7 @@ async def two_factor_resend(request: Request, session: AsyncSession = Depends(ge
         session,
         vk_admin_id=int(vk_admin_id),
         otp_code=otp_code,
-        reason="Новый одноразовый код для входа в панель управления OSS Bot",
+        reason="🔐 Новый одноразовый код для входа в панель управления OSS Bot",
     )
 
     request.session["2fa_error"] = f"Новый код отправлен в ВК. Доступно отправок: {remaining}."

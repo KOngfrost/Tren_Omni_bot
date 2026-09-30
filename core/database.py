@@ -169,8 +169,3 @@ def run_migrations(max_retries: int = 5, retry_delay: float = 2.0) -> None:
 async def dispose_engine() -> None:
     if engine is not None:
         await engine.dispose()
-
-
-async def get_session() -> AsyncIterator[AsyncSession]:
-    async with async_session_maker() as session:
-        yield session

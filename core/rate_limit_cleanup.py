@@ -29,6 +29,12 @@ CLEANUP_INTERVAL_SECONDS = int(os.environ.get("RATE_LIMIT_CLEANUP_INTERVAL_SECON
 # что использовались в горячем пути.
 RETENTION_HOURS = 24
 
+# DATA-001: Срок хранения записей системного аудита (дней)
+AUDIT_LOG_RETENTION_DAYS = int(os.environ.get("AUDIT_LOG_RETENTION_DAYS", "90"))
+
+# DATA-003: Срок хранения успешно доставленных сообщений Outbox (дней)
+OUTBOX_SENT_RETENTION_DAYS = int(os.environ.get("OUTBOX_SENT_RETENTION_DAYS", "14"))
+
 # Централизованный список очищаемых таблиц: (имя таблицы, колонка со временем).
 _CLEANUP_TABLES = (
     ("crud_attempts", "attempted_at"),
@@ -37,11 +43,12 @@ _CLEANUP_TABLES = (
 
 
 async def purge_stale_attempts(now: datetime | None = None) -> dict[str, int]:
-    """Удалить записи старше RETENTION_HOURS из таблиц rate-limit.
+    """Удалить устаревшие записи из rate-limit таблиц, logs и vk_outbox.
 
     Возвращает {таблица: число удалённых строк}.
     """
-    cutoff = (now or datetime.now(UTC)) - timedelta(hours=RETENTION_HOURS)
+    current_time = now or datetime.now(UTC)
+    cutoff = current_time - timedelta(hours=RETENTION_HOURS)
     deleted: dict[str, int] = {}
     async with async_session_maker() as session:
         for table, ts_column in _CLEANUP_TABLES:
@@ -56,6 +63,35 @@ async def purge_stale_attempts(now: datetime | None = None) -> dict[str, int]:
                 await session.rollback()
                 logger.warning("Rate-limit cleanup: ошибка очистки %s", table, exc_info=True)
                 deleted[table] = 0
+
+        # DATA-001: Очистка старых логов аудита (>90 дней)
+        try:
+            log_cutoff = current_time - timedelta(days=AUDIT_LOG_RETENTION_DAYS)
+            result = await session.execute(
+                text("DELETE FROM logs WHERE created_at < :cutoff"),
+                {"cutoff": log_cutoff},
+            )
+            deleted["logs"] = getattr(result, "rowcount", 0)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.warning("Retention cleanup: ошибка очистки logs", exc_info=True)
+            deleted["logs"] = 0
+
+        # DATA-003: Очистка доставленных сообщений Outbox (>14 дней)
+        try:
+            outbox_cutoff = current_time - timedelta(days=OUTBOX_SENT_RETENTION_DAYS)
+            result = await session.execute(
+                text("DELETE FROM vk_outbox WHERE status = 'sent' AND created_at < :cutoff"),
+                {"cutoff": outbox_cutoff},
+            )
+            deleted["vk_outbox"] = getattr(result, "rowcount", 0)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.warning("Retention cleanup: ошибка очистки vk_outbox", exc_info=True)
+            deleted["vk_outbox"] = 0
+
     return deleted
 
 

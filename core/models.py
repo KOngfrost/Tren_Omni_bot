@@ -396,7 +396,10 @@ class LoginAttempt(Base):
     """
 
     __tablename__ = "login_attempts"
-    __table_args__ = (Index("ix_login_attempts_ip_created", "ip", "attempted_at"),)
+    __table_args__ = (
+        Index("ix_login_attempts_ip_created", "ip", "attempted_at"),
+        Index("ix_login_attempts_ip_success_attempted", "ip", "success", "attempted_at"),
+    )
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     ip = mapped_column(String(64), nullable=False)

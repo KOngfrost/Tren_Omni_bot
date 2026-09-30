@@ -32,6 +32,12 @@
         path_regexp "(?i)(\.\./|\.\.\\|%2e%2e)"
     }
     respond @path_traversal 400
+
+    # 4. Блокировка внешнего доступа к внутренним метрикам (SEC-005)
+    @blocked_metrics {
+        path /metrics*
+    }
+    respond @blocked_metrics 403
 }
 
 (common_proxy) {

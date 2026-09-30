@@ -251,7 +251,14 @@ func GetDepartments(c *fiber.Ctx) error {
 		return nil
 	}
 
-	rows, err := database.Pool.Query(ctx, "SELECT id, name FROM departments ORDER BY name ASC")
+	query := `
+		SELECT d.id, d.name, COUNT(t.id) AS ticket_count
+		FROM departments d
+		LEFT JOIN tickets t ON t.department_id = d.id
+		GROUP BY d.id, d.name
+		ORDER BY d.name ASC
+	`
+	rows, err := database.Pool.Query(ctx, query)
 	if err != nil {
 		return respondDatabaseError(c, "выборка отделов", err)
 	}
@@ -260,13 +267,9 @@ func GetDepartments(c *fiber.Ctx) error {
 	depts := make([]DepartmentItem, 0)
 	for rows.Next() {
 		var d DepartmentItem
-		if err := rows.Scan(&d.ID, &d.Name); err != nil {
-			return respondDatabaseError(c, "чтение списка отделов", err)
-		}
-
 		var ticketCount int
-		if err := database.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tickets WHERE department_id = $1", d.ID).Scan(&ticketCount); err != nil {
-			return respondDatabaseError(c, "подсчёт тикетов отдела", err)
+		if err := rows.Scan(&d.ID, &d.Name, &ticketCount); err != nil {
+			return respondDatabaseError(c, "чтение списка отделов", err)
 		}
 		d.Usage = &DepartmentUsage{Tickets: ticketCount}
 		depts = append(depts, d)

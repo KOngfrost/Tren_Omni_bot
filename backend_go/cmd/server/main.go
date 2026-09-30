@@ -89,9 +89,13 @@ func main() {
 	// Тикеты
 	api.Get("/tickets/", handlers.GetTickets)
 
-	// Аутентификация
+	// Аутентификация: централизована в FastAPI (Argon2id, 2FA, lockout, logs)
 	api.Get("/auth/me", handlers.AuthMe)
-	api.Post("/auth/login", handlers.Login)
+	api.Post("/auth/login", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"detail": "Аутентификация через Go API отключена в целях безопасности. Используйте веб-панель /auth/login.",
+		})
+	})
 	api.Post("/auth/telegram-webapp", handlers.TelegramWebAppAuth(cfg))
 	api.Post("/auth/logout", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"success": true})
