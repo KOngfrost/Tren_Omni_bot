@@ -34,9 +34,14 @@ LOGS_PER_PAGE = 100
 async def logs_page(
     request: Request,
     page: str | int = 1,
+    actor: str | None = None,
     user=Depends(require_superadmin),
 ):
-    """Отображение системного журнала действий (только для суперадминистраторов)."""
+    """Журнал аудита: полная история действий в веб-панели.
+
+    Поддерживает фильтр по типу субъекта (web/system/anonymous/bot): при
+    большом потоке записей без фильтра журнал становится нечитаемым.
+    """
     logs: list[Log] = []
     db_error: bool = False
     total: int = 0
@@ -46,8 +51,15 @@ async def logs_page(
         current_page = 1
     offset: int = (current_page - 1) * LOGS_PER_PAGE
 
+    # Значение фильтра приходит из строки запроса, поэтому проверяем по
+    # белому списку — иначе в SQL попадёт произвольная строка.
+    valid_actors = {"web", "system", "anonymous", "bot"}
+    actor_filter = actor if actor in valid_actors else None
+
     try:
         async with async_session_maker() as session:
+            conditions = [Log.actor_type == actor_filter] if actor_filter else []
+
             logs_stmt = (
                 select(Log)
                 .options(selectinload(Log.user))
@@ -56,6 +68,10 @@ async def logs_page(
                 .limit(LOGS_PER_PAGE)
             )
             count_stmt = select(func.count(Log.id))
+            if conditions:
+                logs_stmt = logs_stmt.where(*conditions)
+                count_stmt = count_stmt.where(*conditions)
+
             logs_result = await session.execute(logs_stmt)
             logs = list(logs_result.scalars().all())
             total = int((await session.scalar(count_stmt)) or 0)
@@ -76,6 +92,7 @@ async def logs_page(
             "current_page": current_page,
             "total_pages": total_pages,
             "total_logs": total,
+            "filter_action": actor_filter,
             "csrf_token": get_csrf_token(request),
             "session_id": request.state.session_id,
         },
@@ -98,13 +115,23 @@ async def export_logs(user=Depends(require_superadmin)):
     except Exception:
         logs = []
 
-    csv_content: str = "\ufeffID,Пользователь,Действие,Детали,Дата\n"
+    csv_content: str = "\ufeffID,Время,Субъект,Администратор,Действие,HTTP,Путь,IP,Ответ,Время_мс,Детали\n"
+    # Заголовки расширены под полный аудит: без HTTP-контекста и IP
+    # журнал не отвечает на вопрос «кто и откуда это сделал».
     for log in logs:
-        username: str = escape_for_csv((log.user.full_name or "Аноним") if log.user else "Аноним")
+        if log.actor_name:
+            actor: str = escape_for_csv(log.actor_name)
+        else:
+            actor = escape_for_csv((log.user.full_name or "Аноним") if log.user else "Аноним")
         action: str = escape_for_csv(log.action or "")
         details: str = escape_for_csv(sanitize_csv_field(log.details or ""))
         date_str: str = format_datetime(log.created_at, "%Y-%m-%d %H:%M") if log.created_at else ""
-        csv_content += f"{log.id},{username},{action},{details},{date_str}\n"
+        csv_content += (
+            f"{log.id},{date_str},{escape_for_csv(log.actor_type or '')},{actor},{action},"
+            f"{escape_for_csv(log.http_method or '')},{escape_for_csv(log.path or '')},"
+            f"{escape_for_csv(log.ip_address or '')},{log.status_code or ''},"
+            f"{log.duration_ms if log.duration_ms is not None else ''},{details}\n"
+        )
 
     filename_date = format_datetime(datetime.now(), "%Y-%m-%d")
     return Response(

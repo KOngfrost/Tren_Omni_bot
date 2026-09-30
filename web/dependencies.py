@@ -116,6 +116,10 @@ async def _verify_web_user(
         # роль superadmin, но прав на управление учётными записями не получает.
         "is_temporary": is_temporary_user(web_user),
         "expires_at": web_user.expires_at,
+        # Личный переключатель 2FA и признак применимости: без привязки
+        # к VK код подтверждения доставлять некуда.
+        "two_factor_enabled": bool(web_user.two_factor_enabled),
+        "two_factor_available": web_user.two_factor_available,
     }
     request.session["user"] = canonical
     return canonical

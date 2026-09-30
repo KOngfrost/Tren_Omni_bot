@@ -11,8 +11,10 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from core.admin_presence import ADMIN_PRESENCE_TTL_SECONDS, count_online
 from core.database import async_session_maker
-from core.models import Ticket, TicketStatus
+from core.models import Department, Ticket, TicketStatus
+from core.time_utils import day_start_app_tz
 from web.dependencies import get_admin_scope, require_auth
 from web.security.csrf import get_csrf_token
 from web.templating import templates
@@ -30,6 +32,9 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
     ticket_counts: dict[TicketStatus, int] = {}
     unassigned_total: int = 0
     unassigned_new: int = 0
+    completed_today: int = 0
+    departments_count: int = 0
+    online_admins: int = 0
 
     try:
         async with async_session_maker() as session:
@@ -58,6 +63,23 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
             unassigned_total = sum(unassigned_by_status.values())
             unassigned_new = unassigned_by_status.get(TicketStatus.NEW, 0)
 
+            # Решено сегодня — для верхней метрики на дашборде.
+            completed_today = int(
+                (
+                    await session.scalar(
+                        select(func.count(Ticket.id))
+                        .where(*scope)
+                        .where(Ticket.status.in_([TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO]))
+                        .where(Ticket.updated_at >= day_start_app_tz())
+                    )
+                )
+                or 0
+            )
+
+            departments_count = int(
+                await session.scalar(select(func.count(Department.id))) or 0
+            )
+
             # Последние заявки
             recent_stmt = (
                 select(Ticket)
@@ -72,12 +94,20 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
         logger.error("Не удалось загрузить статистику: %s", e)
         db_error = True
 
+    # Присутствие админов — для «живого» статуса в шапке. Сбой Redis не должен
+    # ломать страницу, поэтому ошибка гасится.
+    try:
+        online_admins = await count_online()
+    except Exception as exc:  # pragma: no cover - зависит от состояния Redis
+        logger.debug("Не удалось получить число администраторов онлайн: %s", exc)
+
     completed_statuses = [TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO]
     stats = {
         "total_tickets": sum(ticket_counts.values()),
         "in_progress": ticket_counts.get(TicketStatus.IN_PROGRESS, 0),
         "completed": sum(ticket_counts.get(s, 0) for s in completed_statuses),
         "new_tickets": ticket_counts.get(TicketStatus.NEW, 0),
+        "completed_today": completed_today,
     }
 
     return templates.TemplateResponse(
@@ -88,6 +118,9 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
             "stats": stats,
             "unassigned_total": unassigned_total,
             "unassigned_new": unassigned_new,
+            "departments_count": departments_count,
+            "online_admins": online_admins,
+            "presence_window": ADMIN_PRESENCE_TTL_SECONDS,
             "recent_tickets": recent_tickets,
             "db_error": db_error,
             "active": "dashboard",

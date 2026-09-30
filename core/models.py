@@ -1,4 +1,5 @@
 import enum
+from datetime import UTC
 
 from sqlalchemy import (
     BigInteger,
@@ -16,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.sql.expression import false, true
 
 
 class Base(DeclarativeBase):
@@ -183,6 +185,13 @@ class WebUser(Base):
         Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True
     )
     is_active = mapped_column(Boolean, default=True, nullable=False)
+    # Личный переключатель 2FA. Действует ТОЛЬКО для админов с привязкой к VK
+    # (admin_id IS NOT NULL): код подтверждения отправляется в VK.
+    # Временные учётные записи (admin_id IS NULL) 2FA не используют вовсе —
+    # для них подтверждение некуда доставлять.
+    two_factor_enabled = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at = mapped_column(DateTime(timezone=True), nullable=True)
@@ -194,10 +203,20 @@ class WebUser(Base):
     def is_expired(self) -> bool:
         if self.expires_at is None:
             return False
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        exp = self.expires_at if self.expires_at.tzinfo else self.expires_at.replace(tzinfo=timezone.utc)
+        from datetime import datetime
+        now = datetime.now(UTC)
+        exp = self.expires_at if self.expires_at.tzinfo else self.expires_at.replace(tzinfo=UTC)
         return now >= exp
+
+    @property
+    def two_factor_available(self) -> bool:
+        """Применима ли к этому аккаунту двухфакторная аутентификация.
+
+        Только если учётная запись привязана к VK-администратору: код
+        подтверждения отправляется в VK. Временные админы (admin_id IS NULL)
+        2FA не используют — второго канала доставки у них нет.
+        """
+        return self.admin_id is not None
 
 
 class ReportRun(Base):
@@ -326,13 +345,45 @@ class Registration(Base):
 
 
 class Log(Base):
+    """Журнал аудита.
+
+    Исторически здесь фиксировались только события входа. Теперь таблица
+    закрывает АБСОЛЮТНО все действия в веб-панели: кто (actor_*), что
+    сделал (action), по какому адресу (http_method/path), с какого IP,
+    каким был ответом (status_code) и за сколько миллисекунд.
+
+    Префиксы actor_ используются вместо FK на web_users, потому что журнал
+    должен переживать удаление учётной записи (в т.ч. авто-удаление
+    временных админов) — иначе история обрывалась бы вместе с аккаунтом.
+    """
+
     __tablename__ = "logs"
+    __table_args__ = (
+        Index("ix_logs_actor_created", "actor_type", "created_at"),
+        Index("ix_logs_http_created", "created_at"),
+    )
 
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action = mapped_column(String, nullable=False)
     details = mapped_column(Text, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # --- Аудит действий веб-панели -------------------------------------
+    # Тип субъекта: web | bot | system | anonymous
+    actor_type = mapped_column(String(16), nullable=True)
+    # Логин администратора, выполнившего действие (копия, не FK).
+    actor_name = mapped_column(String(64), nullable=True)
+    # HTTP-контекст запроса.
+    http_method = mapped_column(String(8), nullable=True)
+    path = mapped_column(String(255), nullable=True)
+    status_code = mapped_column(Integer, nullable=True)
+    duration_ms = mapped_column(Integer, nullable=True)
+    ip_address = mapped_column(String(64), nullable=True)
+    # True, если действие меняет данные (POST/PUT/PATCH/DELETE).
+    is_mutation = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
 
     user: Mapped["User | None"] = relationship("User", back_populates="logs")
 

@@ -36,7 +36,7 @@ from core.models import (
     User,
     VkOutbox,
 )
-from core.time_utils import check_time_sync, now_app_tz
+from core.time_utils import check_time_sync, day_start_app_tz
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +57,12 @@ def _session_maker():
 
 
 def day_start_in_app_tz():
-    """Начало сегодняшних суток в часовом поясе приложения.
+    """Начало суток по МСК.
 
-    Граница суток считается по МСК (APP_TIMEZONE), а не по UTC: «сегодня»
-    для администратора должно совпадать с его календарём.
+    Алиас к core.time_utils.day_start_app_tz: единый источник правды для
+    границы «сегодня» во всём проекте.
     """
-    return now_app_tz().replace(hour=0, minute=0, second=0, microsecond=0)
+    return day_start_app_tz()
 
 
 async def _count(session, stmt) -> int:

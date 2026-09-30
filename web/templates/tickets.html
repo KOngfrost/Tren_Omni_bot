@@ -39,7 +39,7 @@
             {% for dept in departments %}
             <option value="{{ dept.id }}" {% if selected_department == dept.id %}selected{% endif %}>{{ dept.name }}</option>
             {% endfor %}
-            <option value="none" {% if only_unassigned %}selected{% endif %}>📌 Без отдела (общие)</option>
+            <option value="none" {% if only_unassigned %}selected{% endif %}>Без отдела (общие)</option>
         </select>
         <button type="submit" class="btn btn-secondary btn-small">Применить</button>
     </form>
@@ -107,11 +107,11 @@
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if current_page > 1 %}
-        <a class="page-link" href="/tickets/?page={{ current_page - 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}">← Назад</a>
+        <a class="page-link" href="/tickets/?page={{ current_page - 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ 'none' if only_unassigned else (selected_department or '') }}">{{ icon('chevron-left', 14) }} Назад</a>
         {% endif %}
         <span class="page-info">Страница {{ current_page }} из {{ total_pages }} · заявок: {{ total_tickets }}</span>
         {% if current_page < total_pages %}
-        <a class="page-link" href="/tickets/?page={{ current_page + 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ selected_department or '' }}">Вперёд →</a>
+        <a class="page-link" href="/tickets/?page={{ current_page + 1 }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}&department_id={{ 'none' if only_unassigned else (selected_department or '') }}">Вперёд {{ icon('chevron-right', 14) }}</a>
         {% endif %}
     </div>
     {% else %}

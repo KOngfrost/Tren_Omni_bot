@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
+from core.audit import AuditMiddleware
 from core.config import settings
 from core.database import async_session_maker
 
@@ -87,6 +88,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cleanup_task = start_rate_limit_cleanup()
     logger.info("Фоновая очистка rate-limit журналов запущена")
 
+    # Автоудаление истёкших временных учётных записей. Первая чистка
+    # выполняется сразу при старте, дальше — по таймеру.
+    temp_admin_task: asyncio.Task[None] | None = None
+    try:
+        from core.temp_admin_cleanup import (
+            cleanup_expired_temporary_admins,
+            temp_admin_cleanup_loop,
+        )
+
+        await cleanup_expired_temporary_admins()
+        temp_admin_task = asyncio.create_task(temp_admin_cleanup_loop())
+        logger.info("Автоудаление истёкших временных администраторов запущено")
+    except Exception as exc:
+        logger.warning("Не удалось запустить очистку временных админов: %s", exc)
+
+    # Выгрузка буфера аудита в БД: события копятся в памяти во время
+    # обработки запросов, а записываются пакетами из этого цикла.
+    from core.audit import audit_flush_loop
+
+    audit_task: asyncio.Task[None] = asyncio.create_task(audit_flush_loop())
+    logger.info("Выгрузка журнала аудита запущена")
+
     # В callback-режиме FSM-состояния студентов ведутся в этом процессе.
     # При недоступном Redis они копятся в словаре-фоллбеке диспенсера,
     # поэтому их TTL-сборщик запускается здесь же (core/state_dispenser.py).
@@ -97,6 +120,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         state_maintenance_task = vk_bot.state_dispenser.start_maintenance()
         logger.info("Периодическая очистка FSM-состояний запущена")
     yield
+
+    # Дописываем накопленные события аудита перед остановкой, иначе
+    # последние действия не попадут в журнал.
+    try:
+        from core.audit import flush_audit_queue
+
+        audit_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await audit_task
+        await flush_audit_queue()
+        logger.info("Выгрузка журнала аудита остановлена")
+    except Exception as exc:
+        logger.debug("Не удалось дописать журнал аудита при остановке: %s", exc)
+
+    if temp_admin_task is not None:
+        temp_admin_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await temp_admin_task
+        logger.info("Автоудаление истёкших временных администраторов остановлено")
     if state_maintenance_task is not None:
         state_maintenance_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -198,6 +240,12 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # получал безопасные заголовки.
 _REQUEST_MAX_BODY_SIZE = 15 * 1024 * 1024
 app.add_middleware(RequestSizeLimitMiddleware, max_body_size=_REQUEST_MAX_BODY_SIZE)
+
+# 4.2 Полный аудит действий в веб-панели: каждое обработанное обращение
+# попадает в журнал (таблица logs). Стоит ВНЕ SecurityHeadersMiddleware,
+# чтобы записывать в том числе отказы безопасности. Служебные пути
+# (/static, /health) исключены внутри самого middleware.
+app.add_middleware(AuditMiddleware)
 
 
 # 5. Security Headers — X-Frame-Options, CSP, X-Content-Type-Options и др.
@@ -353,6 +401,7 @@ async def add_department_name(request: Request, call_next):
                     request.state.total_notifications_count = cached_counts.get("total_notifications_count", 0)
                 else:
                     from sqlalchemy import and_, func, or_, select
+
                     from core.models import PartnershipRequest, Ticket, TicketStatus
                     async with async_session_maker() as count_session:
                         is_super_count, user_dept_id = await get_admin_scope(count_session, user)

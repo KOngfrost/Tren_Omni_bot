@@ -1,6 +1,7 @@
 """Маршруты настроек пользовательского интерфейса и параметров профиля."""
 
 import logging
+import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -17,6 +18,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Акцентный цвет: пользователь выбирает его ползунком. Принимаем только
+# «безопасный» hex вида #RRGGBB, иначе значение попадёт прямо в CSS-переменную
+# и станет вектором инъекции через style.
+DEFAULT_ACCENT_COLOR = "#df86a9"
+_ACCENT_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+def normalize_accent_color(raw: str | None) -> str | None:
+    """Проверить и нормализовать hex акцентного цвета.
+
+    Возвращает None, если значение некорректно — тогда применяется тема
+    по умолчанию, а не «мусор» в CSS.
+    """
+    if not raw:
+        return None
+    value = str(raw).strip()
+    if not _ACCENT_RE.match(value):
+        return None
+    # Приводим к полному виду #RRGGBB: короткий #RGB разворачиваем.
+    if len(value) == 4:
+        value = "#" + "".join(ch * 2 for ch in value[1:])
+    return value.lower()
+
 
 @router.get("/", response_class=HTMLResponse)
 @router.get("", response_class=HTMLResponse)
@@ -27,7 +51,14 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
         saved_theme = "dark"
 
     glass_effect = request.cookies.get("app_glass_effect", "true") != "false"
-    two_factor_on = await is_two_factor_enabled()
+    accent_color = normalize_accent_color(request.cookies.get("app_accent_color")) or (
+        DEFAULT_ACCENT_COLOR
+    )
+    two_factor_global = await is_two_factor_enabled()
+
+    # Персональное состояние 2FA читаем из БД — источник истины, а не сессия.
+    two_factor_personal = bool(user.get("two_factor_enabled", True))
+    two_factor_available = bool(user.get("two_factor_available", False))
 
     return templates.TemplateResponse(
         "settings.html",
@@ -38,7 +69,10 @@ async def settings_page(request: Request, user: dict = Depends(require_auth)):
             "csrf_token": get_csrf_token(request),
             "current_theme": saved_theme,
             "glass_effect": glass_effect,
-            "two_factor_enabled": two_factor_on,
+            "accent_color": accent_color,
+            "two_factor_enabled": two_factor_global,
+            "two_factor_personal": two_factor_personal,
+            "two_factor_available": two_factor_available,
             "version": PROJECT_VERSION,
         },
     )
@@ -50,9 +84,14 @@ async def update_theme(
     user: dict = Depends(require_auth),
     theme: Literal["dark", "light", "system"] = Form("dark"),
     glass_effect: str | None = Form(None),
+    accent_color: str | None = Form(None),
 ):
-    """Сохранить предпочтения темы и визуальных эффектов."""
+    """Сохранить предпочтения темы, эффектов и акцентного цвета."""
     glass_enabled = glass_effect in ("true", "1", "on")
+    # Некорректный hex игнорируем и оставляем текущий/тему по умолчанию.
+    accent = normalize_accent_color(accent_color) or normalize_accent_color(
+        request.cookies.get("app_accent_color")
+    ) or DEFAULT_ACCENT_COLOR
 
     accept = request.headers.get("accept", "")
     is_ajax = "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
@@ -63,6 +102,7 @@ async def update_theme(
                 "success": True,
                 "theme": theme,
                 "glass_effect": glass_enabled,
+                "accent_color": accent,
             }
         )
     else:
@@ -88,6 +128,15 @@ async def update_theme(
         secure=cookie_secure,
         httponly=False,
     )
+    response.set_cookie(
+        key="app_accent_color",
+        value=accent,
+        max_age=31536000,
+        path="/",
+        samesite="lax",
+        secure=cookie_secure,
+        httponly=False,
+    )
     return response
 
 
@@ -99,7 +148,9 @@ async def toggle_2fa(
 ):
     """Включить или отключить двухфакторную аутентификацию (2FA) для панели.
 
-    Доступно только суперадминистраторам (SUPERADMIN).
+    Доступно только суперадминистраторам (SUPERADMIN). Это МАСТЕР-переключатель:
+    при его выключении 2FA не применяется ни к одному аккаунту, независимо от
+    личных настроек.
     """
     if str(user.get("role", "")).upper() != "SUPERADMIN":
         raise HTTPException(
@@ -123,5 +174,56 @@ async def toggle_2fa(
 
     status_msg = "включена" if is_enabled else "отключена"
     request.session["flash_success"] = f"Двухфакторная аутентификация (2FA) успешно {status_msg}."
+    return RedirectResponse(url="/settings/", status_code=303)
+
+
+@router.post("/2fa/personal")
+async def toggle_personal_2fa(
+    request: Request,
+    user: dict = Depends(require_auth),
+    enabled: str | None = Form(None),
+):
+    """Включить или отключить 2FA для СВОЕГО аккаунта.
+
+    Правила:
+    - каждый администратор с привязкой к VK решает сам, нужен ли ему второй
+      фактор; глобальный переключатель при этом остаётся мастер-режимом;
+    - без привязки к VK 2FA не применяется (код некуда доставить), поэтому
+      для временных / QA-учётных записей переключатель недоступен.
+    """
+    if not user.get("web_user_id"):
+        raise HTTPException(status_code=403, detail="Требуется постоянная учётная запись.")
+
+    web_user_id = int(user["web_user_id"])
+    want_enabled = enabled in ("true", "1", "on")
+
+    # core.database читаем в момент вызова, а не импортом: иначе подмена
+    # соединения в тестах не применится к этому обработчику.
+    from core import database
+    from core.models import WebUser
+
+    session = database.async_session_maker()
+    async with session:
+        web_user = await session.get(WebUser, web_user_id)
+        if web_user is None:
+            raise HTTPException(status_code=404, detail="Учётная запись не найдена.")
+
+        if not web_user.two_factor_available:
+            request.session["flash_error"] = (
+                "2FA недоступна: учётная запись не привязана к VK. "
+                "Код подтверждения некуда доставить."
+            )
+            return RedirectResponse(url="/settings/", status_code=303)
+
+        web_user.two_factor_enabled = want_enabled
+        await session.commit()
+
+    # Обновляем сессию, чтобы состояние совпадало с БД без перелогина.
+    session_user = request.session.get("user")
+    if isinstance(session_user, dict):
+        session_user["two_factor_enabled"] = want_enabled
+
+    action = "Включена" if want_enabled else "Отключена"
+    request.session["flash_success"] = f"2FA {action.lower()} для вашего аккаунта."
     return RedirectResponse(url="/settings/", status_code=303)
 

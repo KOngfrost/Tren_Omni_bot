@@ -83,6 +83,31 @@ _WEEKDAYS = (
 )
 
 
+def ensure_aware(dt: datetime | None) -> datetime | None:
+    """Привести datetime к timezone-aware, если он «naive».
+
+    Зачем: разные драйверы отдают даты по-разному. PostgreSQL возвращает
+    datetime с tzinfo, а SQLite (и, например, MySQL) — без него. Сравнение
+    naive и aware значений бросает TypeError, поэтому перед любым сравнением
+    с now_app_tz() нужно привести значение к одному виду.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=get_app_tz())
+    return dt
+
+
+def day_start_app_tz() -> datetime:
+    """Начало сегодняшних суток в часовом поясе приложения.
+
+    Граница суток считается по МСК (APP_TIMEZONE), а не по UTC: «сегодня»
+    для администратора должно совпадать с его календарём, а не со смещением
+    на 3 часа. Используется в метриках и отчётах за день.
+    """
+    return now_app_tz().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def humanize_last_seen(dt: datetime | None) -> str:
     """Человекочитаемое время последнего визита по МСК.
 
@@ -103,7 +128,7 @@ def humanize_last_seen(dt: datetime | None) -> str:
     seconds = (now - local).total_seconds()
 
     # Отрицательное значение = часы БД/хоста спешат; не показываем «-3 мин назад».
-    if seconds < 300:
+    if seconds < 150:
         return "Только что"
     if seconds < 3600:
         return f"{int(seconds // 60)} мин назад"

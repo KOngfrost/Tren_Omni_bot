@@ -136,7 +136,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      - APP_VERSION=${APP_VERSION:-0.8.8.6}
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     command: python main.py
@@ -186,7 +186,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      - APP_VERSION=${APP_VERSION:-0.8.8.6}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     healthcheck:
@@ -289,7 +289,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.8.5}
+      - APP_VERSION=${APP_VERSION:-0.8.8.6}
       # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     volumes:

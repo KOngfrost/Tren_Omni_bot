@@ -30,7 +30,12 @@ from core.models import (
     WebUser,
 )
 from core.ticket_service import create_ticket
-from core.time_utils import format_app_datetime, humanize_last_seen, now_app_tz
+from core.time_utils import (
+    day_start_app_tz,
+    format_app_datetime,
+    humanize_last_seen,
+    now_app_tz,
+)
 from web.dependencies import is_temporary, is_temporary_user
 from web.main import app
 from web.security.passwords import hash_password
@@ -415,7 +420,8 @@ async def test_dashboard_shows_unassigned_widget(db_session_maker):
         # Прямая ссылка на фильтр по нераспределённым заявкам.
         assert "/tickets/?department_id=none" in res.text
         assert "Всего общих обращений" in res.text
-        assert "Новых, требуют внимания" in res.text
+        # В переработанном дашборде строка подписана просто «Требуют внимания».
+        assert "Требуют внимания" in res.text
 
 
 # ============ 4. Единое время по МСК и индикатор активности ============
@@ -443,14 +449,23 @@ async def test_humanize_last_seen_variants():
     assert humanize_last_seen(None) == "Не входил"
     assert humanize_last_seen(now - timedelta(minutes=2)) == "Только что"
     assert humanize_last_seen(now - timedelta(minutes=20)).endswith("мин назад")
-    assert humanize_last_seen(now - timedelta(hours=3)).startswith("сегодня в ")
+    # «Три часа назад» — это сегодня или вчера в зависимости от времени суток
+    # запуска; жёстко требовать «сегодня» значило бы ронять тест после полуночи.
+    three_hours_ago = now - timedelta(hours=3)
+    expected_prefix = "сегодня в " if three_hours_ago.date() == now.date() else "вчера в "
+    assert humanize_last_seen(three_hours_ago).startswith(expected_prefix)
 
 
 async def test_presence_ttl_and_online_detection(db_session_maker):
-    """TTL присутствия — 15 минут, а heartbeat даёт статус «Онлайн»."""
+    """TTL присутствия — 120 секунд (конфиг), а heartbeat даёт «Онлайн»."""
     from core.admin_presence import get_online_ids, is_online, touch_presence
+    from core.config import settings
 
-    assert ADMIN_PRESENCE_TTL_SECONDS == 15 * 60
+    # TTL сокращён с 15 минут до 120 секунд: индикатор отражает текущую
+    # активность, а не «заходил в течение четверти часа». Значение берётся
+    # из конфигурации и ограничено снизу, чтобы не зависеть от .env.
+    assert ADMIN_PRESENCE_TTL_SECONDS == settings.ADMIN_PRESENCE_TTL_SECONDS
+    assert ADMIN_PRESENCE_TTL_SECONDS >= 30
 
     await clear_presence(999001)
     assert await is_online(999001) is False
@@ -504,7 +519,7 @@ async def test_collect_app_metrics_counts_business_data(db_session_maker):
     now = now_app_tz()
     async with db_session_maker() as session:
         dept_a, _ = await _seed_departments(session)
-        student = User(vk_id=900010, full_name="Студент", created_at=now - timedelta(hours=1))
+        student = User(vk_id=900010, full_name="Студент", created_at=day_start_app_tz())
         session.add(student)
         await session.flush()
         new_ticket = Ticket(
@@ -515,7 +530,9 @@ async def test_collect_app_metrics_counts_business_data(db_session_maker):
             department_id=dept_a.id,
             topic="Готово",
             status=TicketStatus.COMPLETED,
-            updated_at=now - timedelta(hours=1),
+            # Полночь текущих суток: заведомо «сегодня» в любой момент запуска
+            # (в отличие от «час назад» — это уже вчера вскоре после полуночи).
+            updated_at=day_start_app_tz(),
         )
         session.add_all([new_ticket, done_ticket])
         await session.flush()
@@ -524,7 +541,7 @@ async def test_collect_app_metrics_counts_business_data(db_session_maker):
                 ticket_id=new_ticket.id,
                 author_type=MessageAuthorType.USER,
                 message="Привет",
-                created_at=now - timedelta(hours=1),
+                created_at=day_start_app_tz(),
             ),
             VkOutbox(
                 vk_id=1, text="pending", status="pending",

@@ -108,35 +108,64 @@
             </div>
         </div>
 
-        <!-- Кнопка сохранения настроек оформления -->
-        <div class="settings-actions-bar">
+        <!-- Раздел акцентного цвета -->
+        <div class="card settings-section-card">
+            <div class="card-header">
+                <h2>Акцентный цвет</h2>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 13.5px; margin-bottom: 18px;">
+                Цвет кнопок, ссылок и активных элементов панели. Сохраняется
+                индивидуально для вашей учётной записи и применяется сразу.
+            </p>
+
+            <div class="accent-picker">
+                <input type="color" id="accent_color" name="accent_color"
+                       class="accent-swatch" value="{{ accent_color }}"
+                       aria-label="Выбор акцентного цвета">
+                <input type="range" id="accent_hue" class="accent-hue-slider"
+                       min="0" max="359" step="1" aria-label="Оттенок акцентного цвета">
+                <span id="accentValue" class="accent-value">{{ accent_color }}</span>
+            </div>
+
+            <div class="accent-preview">
+                <span class="btn btn-primary">Основная кнопка</span>
+                <span class="btn btn-secondary">Вторичная</span>
+                <span class="badge badge-completed">Бейдж</span>
+                <a href="#preview" class="preview-link">Пример ссылки</a>
+            </div>
+        </div>
+
+        <!-- Кнопка «Сохранить настройки» всегда зафиксирована внизу экрана -->
+        <div class="settings-sticky-footer">
+            <span id="saveStatus" class="settings-save-status"></span>
             <button type="submit" class="btn btn-primary" id="btnSaveSettings">
-                Сохранить настройки
+                {{ icon('check', 16) }} Сохранить настройки
             </button>
-            <span id="saveStatus" class="settings-save-status">
-                Настройки применены
-            </span>
         </div>
     </form>
 
-    <!-- Раздел двухфакторной аутентификации (2FA) для суперадминистратора -->
+    <!-- Раздел 2FA: глобальный мастер-переключатель (только суперадмин)
+         и ЛИЧНЫЙ переключатель текущего администратора. -->
     {% if user.role in ['SUPERADMIN', 'superadmin'] %}
     <div class="card settings-section-card">
         <div class="card-header">
             <h2>Двухфакторная аутентификация (2FA)</h2>
             {% if two_factor_enabled %}
-            <span class="badge" style="background: var(--status-done-bg); color: var(--status-done);">● Включена</span>
+            <span class="badge" style="background: var(--status-done-bg); color: var(--status-done);">{{ icon('check-circle', 13) }} Включена для панели</span>
             {% else %}
-            <span class="badge" style="background: var(--danger-bg); color: var(--danger);">○ Отключена</span>
+            <span class="badge" style="background: var(--danger-bg); color: var(--danger);">{{ icon('x', 13) }} Отключена для панели</span>
             {% endif %}
         </div>
         <div class="settings-toggle-row">
             <div class="settings-toggle-info">
                 <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">
-                    Подтверждение входа через ВКонтакте (OTP-код)
+                    Общий режим 2FA для всей панели
                 </div>
                 <div style="color: var(--text-secondary); font-size: 13.5px; line-height: 1.5;">
-                    При включённой 2FA после ввода логина и пароля бот отправляет 6-значный одноразовый код администратору в VK. При отключении 2FA авторизация происходит мгновенно по логину и паролю без запроса второго фактора.
+                    Это мастер-переключатель. Если он выключен, 2FA не применяется
+                    ни к одному аккаунту — даже тем, кто включил её лично.
+                    Каждый администратор с привязкой к VK дополнительно решает
+                    сам, нужна ли ему эта защита (переключатель ниже).
                 </div>
             </div>
                 <form method="POST" action="/settings/2fa" id="formToggle2FA" style="margin: 0; flex-shrink: 0;">
@@ -153,6 +182,58 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Личный переключатель 2FA текущего администратора -->
+    <div class="card settings-section-card">
+        <div class="card-header">
+            <h2>Моя двухфакторная аутентификация</h2>
+            {% if not two_factor_available %}
+            <span class="badge badge-secondary">{{ icon('info', 13) }} Недоступна</span>
+            {% elif two_factor_personal %}
+            <span class="badge" style="background: var(--status-done-bg); color: var(--status-done);">{{ icon('check-circle', 13) }} Включена</span>
+            {% else %}
+            <span class="badge badge-danger">{{ icon('x', 13) }} Выключена</span>
+            {% endif %}
+        </div>
+        <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+                <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">
+                    Второй фактор для моего аккаунта
+                </div>
+                <div style="color: var(--text-secondary); font-size: 13.5px; line-height: 1.5;">
+                    {% if two_factor_available %}
+                        При каждом входе в ваш аккаунт бот отправляет 6-значный
+                        одноразовый код в ВКонтакте. Настройка личная: изменяя её,
+                        вы не затрагиваете других администраторов.
+                        {% if not two_factor_enabled %}
+                            <br><strong>Обратите внимание:</strong> общий режим 2FA сейчас
+                            выключен, поэтому личная настройка не применяется.
+                        {% endif %}
+                    {% else %}
+                        Для вашей учётной записи 2FA не применяется: она не привязана
+                        к ВКонтакте, поэтому код подтверждения некуда доставить.
+                        Такие учётные записи — временные (с ограниченным сроком).
+                        Второй фактор можно включить только после привязки VK-аккаунта.
+                    {% endif %}
+                </div>
+            </div>
+            {% if two_factor_available %}
+            <form method="POST" action="/settings/2fa/personal" id="formPersonal2FA" style="margin: 0; flex-shrink: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="enabled" value="{{ 'false' if two_factor_personal else 'true' }}">
+                <button type="submit" id="btnPersonal2FA" class="btn {% if two_factor_personal %}btn-secondary{% else %}btn-primary{% endif %}" data-confirm="{{ 'Отключить 2FA только для вашего аккаунта?' if two_factor_personal else 'Включить 2FA для вашего аккаунта?' }}">
+                    {% if two_factor_personal %}
+                    Отключить для себя
+                    {% else %}
+                    Включить для себя
+                    {% endif %}
+                </button>
+            </form>
+            {% else %}
+            <span class="badge badge-secondary" style="flex-shrink: 0;">2FA не требуется</span>
+            {% endif %}
+        </div>
+    </div>
 
     <!-- Информация о профиле и системе -->
     <div class="card settings-section-card">
@@ -177,12 +258,14 @@
             <div class="settings-info-item">
                 <div class="settings-info-label">Двухфакторная аутентификация (2FA)</div>
                 <div class="settings-info-value">
-                    {% if user.admin_id and two_factor_enabled %}
-                    <span style="color: var(--success); font-weight: 600;">● Активна (через VK)</span>
-                    {% elif not user.admin_id %}
-                    <span style="color: var(--text-tertiary); font-weight: 600;">○ Не привязана (аккаунт без VK ID)</span>
+                    {% if not two_factor_available %}
+                        <span style="color: var(--text-tertiary); font-weight: 600;">Не применяется (временная учётная запись без VK)</span>
+                    {% elif not two_factor_enabled %}
+                        <span style="color: var(--danger); font-weight: 600;">{{ icon('x', 13) }} Общий режим 2FA выключен</span>
+                    {% elif two_factor_personal %}
+                        <span style="color: var(--success); font-weight: 600;">{{ icon('check-circle', 13) }} Активна (код в VK)</span>
                     {% else %}
-                    <span style="color: var(--danger); font-weight: 600;">○ Отключена (вход по паролю)</span>
+                        <span style="color: var(--danger); font-weight: 600;">{{ icon('x', 13) }} Выключена для вашего аккаунта</span>
                     {% endif %}
                 </div>
             </div>
@@ -191,6 +274,17 @@
                 <div class="settings-info-value">OSS Bot v{{ version|default(app_version) }}</div>
             </div>
         </div>
+    </div>
+
+    <!-- Кнопка сохранения оформления: закреплена у нижнего края окна,
+         поэтому видна на любом месте длинной страницы настроек.
+         Атрибут form связывает её с формой оформления выше, хотя сама
+         расположена вне неё (вложенные формы в HTML запрещены). -->
+    <div class="settings-actions-bar">
+        <button type="submit" form="settingsForm" class="btn btn-primary" id="btnSaveSettings">
+            Сохранить настройки
+        </button>
+        <span id="saveStatus" class="settings-save-status">Настройки применены</span>
     </div>
 </div>
 
@@ -250,6 +344,29 @@
                 const msg = btnToggle2FA.getAttribute('data-confirm');
                 if (msg && !window.confirm(msg)) {
                     e.preventDefault();
+                }
+            });
+        }
+
+        // Подтверждение личного переключателя 2FA.
+        const btnPersonal2FA = document.getElementById('btnPersonal2FA');
+        if (btnPersonal2FA) {
+            btnPersonal2FA.addEventListener('click', function(e) {
+                const msg = btnPersonal2FA.getAttribute('data-confirm');
+                if (msg && !window.confirm(msg)) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        // Акцентный цвет: сервер уже отдал нормализованный hex, подставляем
+        // его в слайдер оттенка, чтобы тот не «прыгал» при загрузке.
+        const accentPicker = document.getElementById('accent_color');
+        const hueSlider = document.getElementById('accent_hue');
+        if (hueSlider && accentPicker) {
+            window.addEventListener('load', function () {
+                if (typeof window.setAccentColor === 'function') {
+                    window.setAccentColor(accentPicker.value);
                 }
             });
         }

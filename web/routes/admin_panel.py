@@ -19,7 +19,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from core.admin_presence import get_online_ids
+from core.admin_presence import ADMIN_PRESENCE_TTL_SECONDS, get_online_ids
 from core.database import async_session_maker
 from core.models import Admin, Department, Log, User, UserRole, WebRole, WebUser
 from core.time_utils import format_app_datetime, humanize_last_seen, now_app_tz
@@ -148,6 +148,9 @@ async def admins_page(request: Request, user=Depends(require_auth)):
             "presence_of": lambda wu: _presence_status(wu, online_ids),
             "viewer_is_temporary": is_temporary(user),
             "online_count": len(online_ids),
+            # TTL присутствия — чтобы подпись «онлайн за N сек.» не расходилась
+            # с реальным окном активности из конфигурации.
+            "presence_window": ADMIN_PRESENCE_TTL_SECONDS,
         },
     )
 
@@ -165,7 +168,7 @@ def _presence_status(web_user: WebUser | None, online_ids: set[int]) -> dict:
         return {
             "state": "offline",
             "label": "Офлайн",
-            "icon": "⚪",
+            "icon": "chevron-right",
             "css": "status-dot-offline",
             "badge": "badge-secondary",
             "last_seen": "Веб-доступ не выдан",
@@ -188,7 +191,7 @@ def _presence_status(web_user: WebUser | None, online_ids: set[int]) -> dict:
             **base,
             "state": "expired",
             "label": "Истёк",
-            "icon": "🔴",
+            "icon": "x",
             "css": "status-dot-expired",
             "badge": "badge-danger",
         }
@@ -198,7 +201,7 @@ def _presence_status(web_user: WebUser | None, online_ids: set[int]) -> dict:
             **base,
             "state": "online",
             "label": "Онлайн",
-            "icon": "🟢",
+            "icon": "check-circle",
             "css": "status-dot-online",
             "badge": "badge-completed",
         }
@@ -207,7 +210,7 @@ def _presence_status(web_user: WebUser | None, online_ids: set[int]) -> dict:
         **base,
         "state": "offline",
         "label": "Офлайн",
-        "icon": "⚪",
+        "icon": "clock",
         "css": "status-dot-offline",
         "badge": "badge-secondary",
     }

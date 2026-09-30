@@ -288,7 +288,7 @@ async def _notify_superadmin(details: str) -> None:
         try:
             await send_vk_message(
                 settings.VK_REPORT_ADMIN_ID,
-                f"⚠️ Веб-админка: подозрительная активность\n{details}",
+                f"Веб-админка: подозрительная активность\n{details}",
             )
             notified = True
         except Exception:
@@ -302,7 +302,7 @@ async def _notify_superadmin(details: str) -> None:
                     f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
                     json={
                         "chat_id": settings.TELEGRAM_ADMIN_ID,
-                        "text": f"⚠️ Веб-админка: подозрительная активность\n{details}",
+                        "text": f"Веб-админка: подозрительная активность\n{details}",
                     },
                 )
         except Exception:
@@ -346,7 +346,7 @@ async def _send_otp_to_vk(
         session,
         vk_id=vk_admin_id,
         text=(
-            f"🔐 {reason}:\n{otp_code}\n"
+            f"{reason}:\n{otp_code}\n"
             f"Код действителен {settings.TWO_FACTOR_CODE_TTL // 60} мин. "
             "Если это были не вы, немедленно смените пароль."
         ),
@@ -443,6 +443,19 @@ async def _authenticate_bootstrap(
     }
 
 
+def _is_temporary_web_user(web_user: WebUser) -> bool:
+    """Временная / QA-учётная запись, для которой 2FA неприменима.
+
+    Такие записи создаются из панели без привязки к VK-администратору
+    (см. ``web/routes/admin_panel.py``): код подтверждения доставлять некуда.
+    Отличаем их по ограниченному сроку жизни либо по служебному префиксу
+    логина (``qa_`` / ``test_`` / ``temp_``).
+    """
+    if web_user.expires_at is not None:
+        return True
+    return web_user.username.lower().startswith(("qa_", "test_", "temp_"))
+
+
 async def _authenticate(
     session: AsyncSession,
     username: str,
@@ -480,26 +493,32 @@ async def _authenticate(
             vk_admin_id = (
                 web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
             )
-            two_factor_on = await is_two_factor_enabled()
-            is_qa_user = (
-                web_user.expires_at is not None
-                or web_user.username.startswith("qa_")
-                or web_user.username.startswith("test_")
-            )
-            if two_factor_on and not vk_admin_id:
-                if is_qa_user:
-                    # Временный / QA-администратор без VK ID: допускается прямой вход без 2FA
-                    needs_2fa = False
-                else:
-                    # Нет доверенного канала — вход блокируется до привязки VK
+            two_factor_global = await is_two_factor_enabled()
+
+            # Правила применения 2FA:
+            #  - глобальный выключатель — мастер-режим для всей панели;
+            #  - ЛИЧНЫЙ переключатель web_user.two_factor_enabled — решение
+            #    каждого администратора о своём аккаунте;
+            #  - код можно доставить только по привязке к VK, поэтому без неё:
+            #      * временная / QA-учётная запись входит по паролю — она
+            #        ограничена сроком и не является постоянным админом;
+            #      * постоянная учётная запись вход получает ЗАКРЫТЫМ (fail
+            #        closed): подтвердить вход нечем, значит войти нельзя.
+            needs_2fa = bool(two_factor_global) and bool(web_user.two_factor_enabled)
+            if not vk_admin_id and needs_2fa:
+                if not _is_temporary_web_user(web_user):
                     logger.warning(
                         "SECURITY AUDIT: 2FA LOGIN BLOCKED | user=%s | "
                         "reason=привязанный VK-аккаунт не настроен",
                         web_user.username,
                     )
                     return None
-            else:
-                needs_2fa = bool(two_factor_on)
+                logger.warning(
+                    "SECURITY AUDIT: 2FA SKIPPED (no VK channel) | user=%s | "
+                    "reason=временная учётная запись без привязки VK",
+                    web_user.username,
+                )
+                needs_2fa = False
 
             return {
                 "username": web_user.username,

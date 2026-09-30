@@ -7,11 +7,11 @@
 <div class="page-header">
     <div>
         <div class="crumb">Аудит</div>
-        <h1>Логи действий</h1>
-        <div class="page-desc">Что происходило в боте и с чьей стороны</div>
+        <h1>Журнал действий</h1>
+        <div class="page-desc">Полная история действий в веб-панели: кто, что, откуда и когда</div>
     </div>
     <div class="actions">
-        <a href="/logs/export" class="btn btn-secondary btn-small">Экспорт</a>
+        <a href="/logs/export" class="btn btn-secondary btn-small">{{ icon('download', 16) }} Экспорт CSV</a>
     </div>
 </div>
 
@@ -20,32 +20,72 @@
 {% endif %}
 
 <div class="card">
-    
+    {% if filter_action %}
+    <div class="logs-filter-active">
+        Фильтр: <strong>{{ filter_action }}</strong>
+        <a href="/logs/" class="btn btn-secondary btn-small">Сбросить</a>
+    </div>
+    {% endif %}
+
     <div class="table-container">
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Пользователь</th>
+                    <th>Время</th>
+                    <th>Кто</th>
                     <th>Действие</th>
-                    <th>Детали</th>
-                    <th>Дата</th>
+                    <th>HTTP</th>
+                    <th>IP</th>
+                    <th>Ответ</th>
                 </tr>
             </thead>
             <tbody>
                 {% for log in logs %}
                 <tr>
-                    <td>{{ log.id }}</td>
-                    <td>{{ log.user.full_name if log.user else '—' }}</td>
-                    <td><code>{{ log.action }}</code></td>
-                    <td>{{ log.details[:100] }}{% if log.details and log.details|length > 100 %}...{% endif %}</td>
                     <td>{{ log.created_at|format_dt }}</td>
+                    <td>
+                        {% if log.actor_name %}
+                            <strong>{{ log.actor_name }}</strong>
+                        {% elif log.user %}
+                            {{ log.user.full_name }}
+                        {% else %}
+                            <span class="muted">Система / аноним</span>
+                        {% endif %}
+                        {% if log.actor_type == 'system' %}
+                        <span class="badge badge-secondary">система</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ log.action }}</div>
+                        {% if log.details %}
+                        <div class="logs-details" title="{{ log.details }}">
+                            {{ log.details[:120] }}{% if log.details|length > 120 %}...{% endif %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if log.http_method %}
+                        <code class="log-method log-method-{{ log.http_method|lower }}">{{ log.http_method }}</code>
+                        {% if log.path %}<code class="logs-path">{{ log.path }}</code>{% endif %}
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td><code>{{ log.ip_address or '—' }}</code></td>
+                    <td>
+                        {% if log.status_code %}
+                        <span class="badge {% if log.status_code < 300 %}badge-completed{% elif log.status_code < 400 %}badge-warning{% else %}badge-danger{% endif %}">{{ log.status_code }}</span>
+                        {% if log.duration_ms is not none %}
+                        <span class="logs-duration">{{ log.duration_ms }} мс</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="empty-state">
-                        Логов пока нет
-                    </td>
+                    <td colspan="6" class="empty-state">Записей пока нет</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -55,17 +95,17 @@
     {% if total_pages and total_pages > 1 %}
     <div class="pagination">
         {% if current_page > 1 %}
-        <a href="?page={{ current_page - 1 }}" class="pagination-btn">‹ Назад</a>
+        <a href="?page={{ current_page - 1 }}" class="pagination-btn">{{ icon('chevron-left', 14) }} Назад</a>
         {% else %}
-        <span class="pagination-btn disabled">‹ Назад</span>
+        <span class="pagination-btn disabled">{{ icon('chevron-left', 14) }} Назад</span>
         {% endif %}
 
         <span class="pagination-info">Страница {{ current_page }} из {{ total_pages }} (всего записей: {{ total_logs }})</span>
 
         {% if current_page < total_pages %}
-        <a href="?page={{ current_page + 1 }}" class="pagination-btn">Вперёд ›</a>
+        <a href="?page={{ current_page + 1 }}" class="pagination-btn">Вперёд {{ icon('chevron-right', 14) }}</a>
         {% else %}
-        <span class="pagination-btn disabled">Вперёд ›</span>
+        <span class="pagination-btn disabled">Вперёд {{ icon('chevron-right', 14) }}</span>
         {% endif %}
     </div>
     {% endif %}

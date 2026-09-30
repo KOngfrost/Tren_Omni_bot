@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -164,6 +165,22 @@ def ticket_plural(count: int, forms: str) -> str:
 
 
 templates.env.filters["ticket_plural"] = ticket_plural
+
+
+def _register_icon_helpers() -> None:
+    """Подключить макросы `icon()` и `icon_button()` во все шаблоны.
+
+    Макросы хранятся в отдельном файле icons.html, чтобы держать SVG-пути
+    в одном месте. Их достаточно добавить в globals: объект Macro вызывается
+    в шаблоне как обычная функция — `{{ icon('user', 16) }}`.
+    """
+    icons_env = Environment(loader=FileSystemLoader("web/templates"))
+    module = icons_env.get_template("icons.html").make_module()
+    templates.env.globals["icon"] = module.__dict__["icon"]
+    templates.env.globals["icon_button"] = module.__dict__["icon_button"]
+
+
+_register_icon_helpers()
 
 
 def render_admin_template(

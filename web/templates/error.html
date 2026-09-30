@@ -28,10 +28,10 @@
             </div>
             <div class="error-actions">
                 {% if show_refresh %}
-                <button class="btn btn-primary" type="button" data-error-action="reload">↻ Обновить страницу</button>
+                <button class="btn btn-primary" type="button" data-error-action="reload">{{ icon('refresh', 16) }} Обновить страницу</button>
                 {% endif %}
                 {% if show_back %}
-                <button class="btn btn-secondary" type="button" data-error-action="back">← Вернуться назад</button>
+                <button class="btn btn-secondary" type="button" data-error-action="back">{{ icon('chevron-left', 16) }} Вернуться назад</button>
                 {% endif %}
                 {% if show_home %}
                 <a class="btn btn-secondary" href="/">На главную</a>

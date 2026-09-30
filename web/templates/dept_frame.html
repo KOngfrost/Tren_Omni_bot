@@ -66,7 +66,7 @@
                     <h2>Последние заявки отдела</h2>
                     <div class="page-desc">Обращения студентов, направленные в данный отдел</div>
                 </div>
-                <a href="/tickets/?department_id={{ department.id }}" class="btn btn-secondary btn-small">Все заявки отдела →</a>
+                <a href="/tickets/?department_id={{ department.id }}" class="btn btn-secondary btn-small">Все заявки отдела {{ icon('chevron-right', 14) }}</a>
             </div>
             <div class="table-container">
                 <table>
@@ -98,7 +98,7 @@
                     <h2>База знаний отдела</h2>
                     <div class="page-desc">Шаблоны быстрых ответов бота по ключевым словам</div>
                 </div>
-                <a href="/knowledge/" class="btn btn-secondary btn-small">Управлять базой знаний →</a>
+                <a href="/knowledge/" class="btn btn-secondary btn-small">Управлять базой знаний {{ icon('chevron-right', 14) }}</a>
             </div>
             <div class="table-container">
                 <table>
@@ -127,7 +127,7 @@
                     <h2>FAQ отдела</h2>
                     <div class="page-desc">Древовидная структура частых вопросов и ответов</div>
                 </div>
-                <a href="/faq/" class="btn btn-secondary btn-small">Управлять FAQ →</a>
+                <a href="/faq/" class="btn btn-secondary btn-small">Управлять FAQ {{ icon('chevron-right', 14) }}</a>
             </div>
             <div class="faq-list">
                 {% for node in faq_items %}
@@ -161,7 +161,7 @@
                     <h2>Мероприятия отдела</h2>
                     <div class="page-desc">Мероприятия и записи на них в рамках отдела</div>
                 </div>
-                <a href="/events/" class="btn btn-secondary btn-small">Управлять мероприятиями →</a>
+                <a href="/events/" class="btn btn-secondary btn-small">Управлять мероприятиями {{ icon('chevron-right', 14) }}</a>
             </div>
             <div class="table-container">
                 <table>

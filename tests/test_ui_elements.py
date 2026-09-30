@@ -233,15 +233,36 @@ class TestDashboardButtons:
     """A.1 — Проверка кнопок на странице дашборда."""
 
     def test_dashboard_contains_stat_cards(self, client):
-        """Дашборд содержит карточки статистики."""
+        """Дашборд содержит карточки статистики.
+
+        После редизайна метрики размечены классом dash-metric (вместо
+        stat-card): карточки стали кликабельными и получили тональность.
+        """
         _login(client)
         resp = client.get("/")
         assert resp.status_code == 200
-        assert "stat-card" in resp.text
+        assert "dash-metric" in resp.text
         assert "Всего заявок" in resp.text
         assert "В обработке" in resp.text
-        assert "Выполнено" in resp.text
         assert "Новые" in resp.text
+
+    def test_dashboard_metrics_have_tone_and_links(self, client):
+        """Метрики дашборда оформлены и ведут в отфильтрованные списки."""
+        _login(client)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # Тональность выделения проблемных метрик.
+        assert 'data-tone="danger"' in resp.text
+        assert 'data-tone="warn"' in resp.text
+        # Каждая метрика-ссылка ведёт в список заявок.
+        assert 'class="dash-metric" href="/tickets/' in resp.text
+
+    def test_dashboard_shows_completed_today(self, client):
+        """Дашборд показывает метрику «Решено сегодня»."""
+        _login(client)
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Решено сегодня" in resp.text
 
     def test_dashboard_contains_action_buttons(self, client):
         """Дашборд содержит кнопки действий."""

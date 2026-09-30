@@ -8,11 +8,10 @@
     <div>
         <div class="crumb">Обзор</div>
         <h1>Дашборд</h1>
-        <div class="page-desc">Сводка по обращениям студентов за всё время</div>
     </div>
     <div class="actions">
-        <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки</a>
-        <a href="/admin/admins/" class="btn btn-primary btn-small">Управление админами</a>
+        <a href="/tickets/" class="btn btn-secondary btn-small">{{ icon('ticket', 16) }} Все заявки</a>
+        <a href="/admin/admins/" class="btn btn-primary btn-small">{{ icon('users', 16) }} Администраторы</a>
     </div>
 </div>
 
@@ -20,99 +19,135 @@
 <div class="alert alert-error">База данных недоступна — статистика и заявки не загружены. Проверьте, что PostgreSQL запущен (docker-compose up -d).</div>
 {% endif %}
 
-<div class="stats-grid">
-    <div class="stat-card">
-        <h3>Всего заявок</h3>
-        <div class="value" data-counter>{{ stats.total_tickets }}</div>
+<!-- Шапка: приветствие и оперативный статус системы -->
+<div class="dash-hero">
+    <div>
+        <h2 class="dash-hero-title">Здравствуйте, {{ user.username }}</h2>
+        <p class="dash-hero-sub">
+            Сводка по обращениям студентов. Все данные в часовом поясе проекта (МСК).
+        </p>
     </div>
-    <div class="stat-card yellow">
-        <h3>В обработке</h3>
-        <div class="value" data-counter>{{ stats.in_progress }}</div>
-    </div>
-    <div class="stat-card green">
-        <h3>Выполнено</h3>
-        <div class="value" data-counter>{{ stats.completed }}</div>
-    </div>
-    <div class="stat-card red">
-        <h3>Новые</h3>
-        <div class="value" data-counter>{{ stats.new_tickets }}</div>
+    <div class="dash-hero-pills">
+        <span class="badge badge-completed">
+            <span class="status-dot status-dot-online" style="width:7px;height:7px;border:0;"></span>
+            {{ online_admins }} онлайн
+        </span>
+        <span class="badge badge-secondary">{{ departments_count }} отд.</span>
+        <span class="badge badge-secondary">v{{ app_version }}</span>
     </div>
 </div>
 
-<!-- Обращения без отдела выделены отдельным блоком: в общей сводке они
-     растворяются среди заявок конкретных отделов и теряются. -->
-<div class="card unassigned-card">
-    <div class="card-header">
-        <h2>📌 Общие (без отдела)</h2>
-        <a href="/tickets/?department_id=none" class="btn btn-secondary btn-small">Открыть список →</a>
-    </div>
-    <div class="unassigned-stats">
-        <div class="unassigned-stat">
-            <span class="unassigned-label">Всего общих обращений</span>
-            <span class="unassigned-value" data-counter>{{ unassigned_total }}</span>
-        </div>
-        <div class="unassigned-stat {% if unassigned_new > 0 %}unassigned-stat-alert{% endif %}">
-            <span class="unassigned-label">Новых, требуют внимания</span>
-            <span class="unassigned-value" data-counter>{{ unassigned_new }}</span>
-        </div>
-    </div>
-    {% if unassigned_new > 0 %}
-    <p class="unassigned-hint">
-        ⚠️ Эти обращения не закреплены за отделом — распределите их,
-        чтобы они не потерялись. <a href="/tickets/?department_id=none&amp;status={{ 'Новое' }}">Показать новые общие →</a>
-    </p>
-    {% else %}
-    <p class="unassigned-hint muted">Новых нераспределённых обращений нет.</p>
-    {% endif %}
+<!-- Ключевые метрики: кликабельны и ведут в отфильтрованные списки -->
+<div class="dash-metrics">
+    <a class="dash-metric" href="/tickets/">
+        <div class="dash-metric-head">{{ icon('ticket', 14) }} Всего заявок</div>
+        <div class="dash-metric-value" data-counter>{{ stats.total_tickets }}</div>
+        <span class="dash-metric-accent"></span>
+    </a>
+    <a class="dash-metric" href="/tickets/?status=%D0%9D%D0%BE%D0%B2%D0%BE%D0%B5" data-tone="danger">
+        <div class="dash-metric-head">{{ icon('alert', 14) }} Новые</div>
+        <div class="dash-metric-value" data-counter>{{ stats.new_tickets }}</div>
+        <span class="dash-metric-accent"></span>
+    </a>
+    <a class="dash-metric" href="/tickets/?status=%D0%92+%D0%BE%D0%B1%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B5" data-tone="warn">
+        <div class="dash-metric-head">{{ icon('clock', 14) }} В обработке</div>
+        <div class="dash-metric-value" data-counter>{{ stats.in_progress }}</div>
+        <span class="dash-metric-accent"></span>
+    </a>
+    <a class="dash-metric" href="/tickets/?status=%D0%92%D1%8B%D0%BF%D0%BE%D0%BB%D0%BD%D0%B5%D0%BD%D0%BE" data-tone="ok">
+        <div class="dash-metric-head">{{ icon('check-circle', 14) }} Решено сегодня</div>
+        <div class="dash-metric-value" data-counter>{{ stats.completed_today }}</div>
+        <span class="dash-metric-accent"></span>
+    </a>
 </div>
-
-<div class="card">
-    <div class="card-header">
-        <h2>Последние заявки</h2>
-                    <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки →</a>
-    </div>
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Тема</th>
-                    <th>Отдел</th>
-                    <th>Статус</th>
-                    <th>Дата</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ticket in recent_tickets %}
-                <tr>
-                    <td>{{ ticket.id }}</td>
-                    <td>{{ ticket.topic or '—' }}</td>
-                    <td>{{ ticket.department.name if ticket.department else '—' }}</td>
-                    <td>
-                        <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
-                    </td>
-                    <td>{{ ticket.created_at|format_dt }}</td>
-                </tr>
+<div class="dash-columns">
+    <!-- Левый столбец: общие обращения -->
+    <div>
+        <div class="card unassigned-card">
+            <div class="card-header">
+                <h2>{{ icon('pin', 16) }} Общие (без отдела)</h2>
+                <a href="/tickets/?department_id=none" class="btn btn-secondary btn-small">
+                    Открыть {{ icon('chevron-right', 14) }}
+                </a>
+            </div>
+            <p class="unassigned-hint {% if unassigned_new == 0 %}muted{% endif %}">
+                {% if unassigned_new > 0 %}
+                    {{ unassigned_new }} обращений ждут распределения — за ними не закреплён отдел.
                 {% else %}
-                <tr>
-                    <td colspan="5" class="empty-state">
-                        Заявок пока нет
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    Новых нераспределённых обращений нет.
+                {% endif %}
+            </p>
+            <div class="dash-list">
+                <div class="dash-list-item">
+                    {{ icon('folder', 16) }}
+                    <span class="dash-list-item-text">Всего общих обращений</span>
+                    <span class="dash-list-item-value">{{ unassigned_total }}</span>
+                </div>
+                <div class="dash-list-item {% if unassigned_new > 0 %}is-alert{% endif %}">
+                    {{ icon('alert', 16) }}
+                    <span class="dash-list-item-text">Требуют внимания</span>
+                    <span class="dash-list-item-value">{{ unassigned_new }}</span>
+                </div>
+                <div class="dash-list-item">
+                    {{ icon('check-circle', 16) }}
+                    <span class="dash-list-item-text">Выполнено за всё время</span>
+                    <span class="dash-list-item-value">{{ stats.completed }}</span>
+                </div>
+            </div>
+            <div class="dash-progress-wrap" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);">
+                <div style="display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 6px;">
+                    <span>Общий процент решения</span>
+                    <strong style="color: var(--text-primary);">{{ ((stats.completed / stats.total_tickets) * 100)|round|int if stats.total_tickets else 100 }}%</strong>
+                </div>
+                <div style="height: 6px; background: var(--bg-surface-3); border-radius: 999px; overflow: hidden;">
+                    <div style="height: 100%; width: {{ ((stats.completed / stats.total_tickets) * 100)|round|int if stats.total_tickets else 100 }}%; background: var(--status-done); border-radius: 999px; transition: width 0.4s ease;"></div>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-header">
-        <h2>О системе</h2>
+    <!-- Правый столбец: последние заявки -->
+    <div class="card">
+        <div class="card-header">
+            <h2>{{ icon('clock', 16) }} Последние заявки</h2>
+            <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Тема</th>
+                        <th>Отдел</th>
+                        <th>Статус</th>
+                        <th>Дата</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in recent_tickets %}
+                    <tr>
+                        <td>{{ ticket.id }}</td>
+                        <td>{{ ticket.topic or '—' }}</td>
+                        <td>
+                            {% if ticket.department %}
+                                {{ ticket.department.name }}
+                            {% else %}
+                            <span class="badge badge-general">Общее обращение</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
+                        </td>
+                        <td>{{ ticket.created_at|format_dt }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="empty-state">Заявок пока нет</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-    <p class="dashboard-note">
-        <strong>OSS Bot</strong> — система управления обращениями студентов.<br>
-        Веб-панель: <strong>oss-web-panel</strong><br>
-        Версия: <strong>{{ app_version }}</strong>
-    </p>
 </div>
 {% endblock %}

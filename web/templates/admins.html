@@ -33,7 +33,7 @@
 <div class="presence-summary">
     <span class="status-dot status-dot-online" aria-hidden="true"></span>
     <strong>{{ online_count }}</strong>
-    <span class="muted">администраторов онлайн за последние 15 минут</span>
+    <span class="muted">администраторов онлайн (активны в последние {{ presence_window }} сек.)</span>
 </div>
 
 <div class="card">
@@ -85,9 +85,9 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-completed">Суперадмин</span>
-                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
+                <span class="badge {{ presence.badge }}">{{ icon(presence.icon, 13) }} {{ presence.label }}</span>
                 {% if presence.has_expiry and presence.state != 'expired' %}
-                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">⏳ До {{ presence.expires_label }}</span>
+                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">{{ icon('clock', 13) }} До {{ presence.expires_label }}</span>
                 {% endif %}
                 <span class="admin-dept">Все отделы</span>
             </div>
@@ -154,9 +154,9 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-new">Админ отдела</span>
-                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
+                <span class="badge {{ presence.badge }}">{{ icon(presence.icon, 13) }} {{ presence.label }}</span>
                 {% if presence.has_expiry and presence.state != 'expired' %}
-                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">⏳ До {{ presence.expires_label }}</span>
+                <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">{{ icon('clock', 13) }} До {{ presence.expires_label }}</span>
                 {% endif %}
                 <span class="admin-dept">{{ admin.department.name if admin.department else 'Без отдела' }}</span>
             </div>
@@ -213,13 +213,13 @@
             </div>
             <div class="admin-card-meta">
                 <span class="badge badge-warning">Временный доступ</span>
-                <span class="badge {{ presence.badge }}">{{ presence.icon }} {{ presence.label }}</span>
+                <span class="badge {{ presence.badge }}">{{ icon(presence.icon, 13) }} {{ presence.label }}</span>
                 {% if qa_user.expires_at %}
                     {% if qa_user.is_expired %}
                     <span class="badge badge-danger">Срок истёк</span>
                     {% else %}
                     <span class="badge badge-info" title="Действует до {{ presence.expires_label }} МСК">
-                        ⏳ До {{ presence.expires_label }}
+                        {{ icon('clock', 13) }} До {{ presence.expires_label }}
                     </span>
                     {% endif %}
                 {% else %}

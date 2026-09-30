@@ -720,11 +720,11 @@ async def create_ticket(
                         session,
                         admin.user.vk_id,
                         (
-                            f"📩 Новая заявка #{ticket.id} [{department.name}]\n"
+                            f"Новая заявка #{ticket.id} [{department.name}]\n"
                             f"От: {student_info}{dorm_info}\n"
                             f"Тема: {topic}\n\n"
                             f"Текст: {description}\n\n"
-                            f"👉 Для работы напишите: «Заявка #{ticket.id}»"
+                            f"Для работы напишите: «Заявка #{ticket.id}»"
                         ),
                     )
                     scheduled = True
@@ -743,13 +743,13 @@ async def create_ticket(
                         session,
                         admin.user.vk_id,
                         (
-                            f"📩 Новое общее обращение #{ticket.id} [Общий вопрос]\n"
+                            f"Новое общее обращение #{ticket.id} [Общий вопрос]\n"
                             f"От: {student_info}{dorm_info}\n"
                             f"Тема: {topic}\n\n"
                             f"Текст: {description}\n\n"
                             "Обращение не закреплено за отделом — ответьте первым "
                             "или передайте его в профильный отдел.\n"
-                            f"👉 Для работы напишите: «Заявка #{ticket.id}»"
+                            f"Для работы напишите: «Заявка #{ticket.id}»"
                         ),
                     )
                     scheduled = True
@@ -835,7 +835,7 @@ async def add_student_reply(ticket_id: int, vk_id: int, message: str) -> Ticket 
                 add_outbox_message(
                     session,
                     admin.user.vk_id,
-                    (f"⚠️ {subject}\n\nСтудент ответил на заявку #{ticket.id}:\n\n{message}"),
+                    (f"{subject}\n\nСтудент ответил на заявку #{ticket.id}:\n\n{message}"),
                 )
                 scheduled = True
             # WebUser уведомления через VK не отправляются (нет vk_id)

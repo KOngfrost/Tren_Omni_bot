@@ -1,5 +1,4 @@
 import contextlib
-import os
 import secrets
 import tempfile
 from pathlib import Path
@@ -174,6 +173,13 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     CACHE_DEFAULT_TTL: int = 300
     SESSION_TTL: int = 86400
+
+    # TTL heartbeat'а присутствия администратора в веб-панели.
+    # Короткое окно нужно, чтобы индикатор «Онлайн» отражал реальную
+    # активность: после TTL секунд без запросов админ считается офлайн.
+    ADMIN_PRESENCE_TTL_SECONDS: int = 120
+    # Как часто удалять истёкшие временные учётные записи.
+    TEMP_ADMIN_CLEANUP_INTERVAL_SECONDS: int = 300
     # TTL FSM-состояний VK-бота в Redis (core/state_dispenser.py): время
     # жизни незавершённого диалога студента. При каждом шаге диалога TTL
     # продлевается. Должен заметно превышать паузы между сообщениями
