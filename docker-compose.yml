@@ -299,12 +299,15 @@ services:
     memswap_limit: 64m
     environment:
       - CONTAINERS=1
+      - EXEC=1
+      - POST=1
+      - ALLOW_RESTARTS=1
+      - ALLOW_START=1
+      - ALLOW_STOP=1
       - IMAGES=0
       - NETWORKS=0
       - VOLUMES=0
-      - POST=0
       - DELETE=0
-      - PUT=0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -317,8 +320,8 @@ services:
     container_name: oss_bot_tg_monitor
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 256m
-    memswap_limit: 256m
+    mem_limit: 384m
+    memswap_limit: 384m
     env_file:
       - .env
     environment:
