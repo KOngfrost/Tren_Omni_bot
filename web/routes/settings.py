@@ -150,10 +150,10 @@ async def toggle_2fa(
     при его выключении 2FA не применяется ни к одному аккаунту, независимо от
     личных настроек.
     """
-    if str(user.get("role", "")).upper() != "SUPERADMIN":
+    if str(user.get("role", "")).upper() != "SUPERADMIN" or user.get("is_temporary"):
         raise HTTPException(
             status_code=403,
-            detail="Доступ запрещён: требуется роль суперадминистратора для изменения 2FA.",
+            detail="Доступ запрещён: требуется постоянная роль суперадминистратора для изменения 2FA.",
         )
 
     is_enabled = enabled in ("true", "1", "on")

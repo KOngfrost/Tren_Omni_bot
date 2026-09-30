@@ -426,6 +426,44 @@ class TestPersonal2FA:
             dash = await client.get("/")
             assert dash.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_ordinary_admin_cannot_see_master_switch_but_sees_personal_2fa(self, db_session_maker, monkeypatch):
+        """Обычные администраторы отделов не видят общий мастер-переключатель 2FA, но видят личную 2FA."""
+        monkeypatch.setattr(settings, "SESSION_SECRET_KEY", "test_settings_secret_key_123456789")
+        monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with db_session_maker() as session:
+                user = User(vk_id=888111222, full_name="Обычный Админ Отдела")
+                session.add(user)
+                await session.flush()
+                admin = Admin(user_id=user.id, role=UserRole.ADMIN)
+                session.add(admin)
+                await session.flush()
+                session.add(
+                    WebUser(
+                        username="dept_admin_vk",
+                        password_hash=hash_password("DeptAdmin123"),
+                        role=WebRole.DEPARTMENT_ADMIN,
+                        admin_id=admin.id,
+                        is_active=True,
+                        two_factor_enabled=True,
+                    )
+                )
+                await session.commit()
+
+            await _post_login(client, "dept_admin_vk", "DeptAdmin123")
+            resp = await client.get("/settings/")
+            assert resp.status_code == 200
+            # Не видит мастер-переключатель всей панели
+            assert "Общий режим 2FA для всей панели" not in resp.text
+            assert "formToggle2FA" not in resp.text
+            # Но видит свою личную настройку 2FA
+            assert "Моя двухфакторная аутентификация" in resp.text
+            assert "formPersonal2FA" in resp.text
+            assert "Отключить для себя" in resp.text
+
 
 # ==========================================
 # Акцентный цвет

@@ -109,9 +109,8 @@
         </div>
     </form>
 
-    <!-- Раздел 2FA: глобальный мастер-переключатель (только суперадмин)
-         и ЛИЧНЫЙ переключатель текущего администратора. -->
-    {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+    <!-- Раздел 2FA: общий мастер-переключатель панели (только постоянный суперадмин, обычные админы её не видят) -->
+    {% if user.role in ['SUPERADMIN', 'superadmin'] and not user.is_temporary %}
     <div class="card settings-section-card">
         <div class="card-header">
             <h2>Двухфакторная аутентификация (2FA)</h2>
@@ -127,28 +126,26 @@
                     Общий режим 2FA для всей панели
                 </div>
                 <div style="color: var(--text-secondary); font-size: 13.5px; line-height: 1.5;">
-                    Это мастер-переключатель. Если он выключен, 2FA не применяется
-                    ни к одному аккаунту — даже тем, кто включил её лично.
-                    Каждый администратор с привязкой к VK дополнительно решает
-                    сам, нужна ли ему эта защита (переключатель ниже).
+                    Это мастер-переключатель. Если он выключен, 2FA не применяется ни к одному аккаунту в панели.
+                    Обычные администраторы не видят данный мастер-переключатель и могут настраивать только свою личную 2FA.
                 </div>
             </div>
-                <form method="POST" action="/settings/2fa" id="formToggle2FA" style="margin: 0; flex-shrink: 0;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <input type="hidden" name="enabled" value="{{ 'false' if two_factor_enabled else 'true' }}">
-                    <button type="submit" id="btnToggle2FA" class="btn {% if two_factor_enabled %}btn-secondary{% else %}btn-primary{% endif %}" data-confirm="Вы уверены, что хотите {{ 'ОТКЛЮЧИТЬ' if two_factor_enabled else 'ВКЛЮЧИТЬ' }} двухфакторную аутентификацию (2FA)?">
-                        {% if two_factor_enabled %}
-                        Отключить 2FA
-                        {% else %}
-                        Включить 2FA
-                        {% endif %}
-                    </button>
-                </form>
+            <form method="POST" action="/settings/2fa" id="formToggle2FA" style="margin: 0; flex-shrink: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="enabled" value="{{ 'false' if two_factor_enabled else 'true' }}">
+                <button type="submit" id="btnToggle2FA" class="btn {% if two_factor_enabled %}btn-secondary{% else %}btn-primary{% endif %}" data-confirm="Вы уверены, что хотите {{ 'ОТКЛЮЧИТЬ' if two_factor_enabled else 'ВКЛЮЧИТЬ' }} двухфакторную аутентификацию (2FA)?">
+                    {% if two_factor_enabled %}
+                    Отключить 2FA
+                    {% else %}
+                    Включить 2FA
+                    {% endif %}
+                </button>
+            </form>
         </div>
     </div>
     {% endif %}
 
-    <!-- Личный переключатель 2FA текущего администратора -->
+    <!-- Личный переключатель 2FA текущего администратора (доступен всем администраторам) -->
     <div class="card settings-section-card">
         <div class="card-header">
             <h2>Моя двухфакторная аутентификация</h2>
