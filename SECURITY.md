@@ -1,7 +1,7 @@
 # 🛡️ Политика безопасности и модель угроз (Security Policy)
 
 > **Версия документа:** 0.8.8.7  
-> **Статус аудита:** Внутренний аудит ИБ (SEC-01 — SEC-12 пройден, автоматический CI/CD аудит активен).
+> **Статус аудита:** Внутренний аудит ИБ (SEC-01 — SEC-16 пройден, автоматический CI/CD аудит активен).
 
 Настоящий документ описывает архитектуру информационной безопасности платформы **OSS Bot**, реализованные защитные механизмы, модель угроз и процедуру ответственного сообщения об уязвимостях.
 
@@ -12,12 +12,13 @@
 | Механизм защиты | Реализация в кодовой базе | Статус проверки |
 |---|---|---|
 | **Двухфакторная аутентификация (2FA)** | `core/services/two_factor.py`, хеширование временных OTP-кодов алгоритмом **Argon2id** (time_cost=3, memory_cost=65536). | ✅ Подтверждено тестами `test_two_factor_and_bootstrap.py`, `test_security.py` |
-| **Шифрование сессий** | `core/config.py`, шифрование cookies симметричным шифром **Fernet (AES-128-CBC + HMAC)** с ротацией ключей. | ✅ Подтверждено тестами `test_redis_cache_and_sessions.py` |
+| **Шифрование сессий (HKDF)** | `web/security/session_store.py`: деривация ключа через **HKDF-SHA256 (RFC 5869)** с солью, шифрование cookies симметричным шифром **Fernet (AES-128-CBC + HMAC)** с флагом `SameSite=Strict`. | ✅ Подтверждено тестами `test_redis_cache_and_sessions.py` |
+| **Сетевая изоляция и сегментация** | `docker-compose.yml`: разделение на 4 независимых Docker-сети (`frontend_net`, `backend_net`, `data_net`, `socket_net`). Прямой доступ к PostgreSQL и сокету Docker изолирован. | ✅ Проверено `docker compose config` |
 | **Защита от Replay-атак TMA** | `backend_go/internal/handlers/handlers.go`: проверка свежести `auth_date` (допуск 24 ч, защита от дат из будущего), HMAC-SHA256 подпись через бот-токен. | ✅ Подтверждено тестами `handlers_test.go` |
-| **Распределённый Rate Limiting** | Скользящее окно в Redis (`core/services/rate_limiter.py`): лимитирование создания тикетов, авторизации и API-запросов. | ✅ Подтверждено тестами `test_ticket_rate_limit.py` |
-| **WAF и сетевой периметр** | `Caddyfile`: блокировка Path Traversal (`../`), PHP/CGI-сканеров, SQLi сигнатур, принудительный HSTS, TLS 1.3, CSP без небезопасных инлайнов. | ✅ Подтверждено Playwright E2E-тестами `test_ui_buttons_browser.py` |
-| **PgBouncer и разделение БД** | SCRAM-SHA-256 аутентификация через функцию `pgbouncer_get_auth`, исключение передачи паролей в открытом виде в Git или docker exec. | ✅ Проверено в CI (`pgbouncer-config` job) |
-| **Контроль утечек и CVE** | GitHub Actions CI: сканирование зависимостей через `pip-audit`, сканирование репозитория на секреты через `scan_secrets.py`. | ✅ Автоматически при каждом коммите/PR |
+| **Распределённый Rate Limiting** | Скользящее окно в Redis и таблицах PostgreSQL (`login_attempts`, `crud_attempts`) с составным индексом по `(ip, success, attempted_at)`. | ✅ Подтверждено тестами `test_ticket_rate_limit.py` |
+| **WAF и сетевой периметр** | `Caddyfile`: блокировка Path Traversal (`../`), сканеров, закрытие внешнего доступа к `/metrics*` (403), принудительный HSTS, TLS 1.3, CSP со `script_nonce`. | ✅ Подтверждено Playwright E2E-тестами `test_ui_buttons_browser.py` |
+| **PgBouncer и разделение БД** | Зафиксированный образ `edoburu/pgbouncer:v1.23.1-p0`, SCRAM-SHA-256 аутентификация через `pgbouncer_get_auth`, база данных вынесена в приватный контур `data_net`. | ✅ Проверено в CI (`pgbouncer-config` job) |
+| **Контроль утечек и CVE** | GitHub Actions CI: сканирование зависимостей через `pip-audit -r requirements-dev.txt`, блокирующий сканер секретов `gitleaks-action@v2`. | ✅ Автоматически при каждом коммите/PR |
 
 ---
 
@@ -25,7 +26,7 @@
 
 1. **Компрометация учётных записей операторов**:
    - *Угроза*: Брутфорс паролей или перехват сессий в публичных сетях.
-   - *Защита*: Принудительная 2FA через Telegram/VK, хеширование паролей Argon2id, Fernet-шифрование сессионных cookie с флагами `HttpOnly`, `SameSite=Lax`, `Secure`.
+   - *Защита*: Принудительная 2FA через Telegram/VK, хеширование паролей Argon2id, HKDF-Fernet шифрование сессионных cookie с флагами `HttpOnly`, `SameSite=Strict`, `Secure`. Деактивация незащищённых параллельных эндпоинтов авторизации.
 
 2. **Отказ в обслуживании (DoS/DDoS) и спам обращениями**:
    - *Угроза*: Автоматизированная генерация тысяч фиктивных обращений через бота или API.
