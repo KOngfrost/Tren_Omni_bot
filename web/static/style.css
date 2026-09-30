@@ -4475,41 +4475,80 @@ html[data-theme="light"] .btn-cookie-accept:hover {
 /* Нижняя фиксированная плашка для страниц правовых документов */
 .legal-doc-sticky-bar {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 9999;
-    background: rgba(14, 14, 18, 0.94);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-top: 1px solid rgba(253, 96, 201, 0.35);
-    padding: 14px 28px;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(680px, calc(100% - 32px));
+    z-index: 99999;
+    background: rgba(12, 12, 16, 0.94);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(253, 96, 201, 0.4);
+    border-radius: 16px;
+    padding: 12px 18px;
     display: flex;
+    flex-direction: row;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6), 0 0 20px rgba(253, 96, 201, 0.12);
-    animation: cookieSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(253, 96, 201, 0.2);
+    animation: cookieSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.legal-doc-sticky-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.legal-doc-sticky-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: rgba(253, 96, 201, 0.15);
+    color: #fd60c9;
+    flex-shrink: 0;
 }
 
 .legal-doc-sticky-text {
     font-size: 13.5px;
     font-weight: 500;
     color: #ffffff;
+    line-height: 1.35;
 }
 
 .legal-doc-sticky-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    flex-shrink: 0;
 }
 
-@media (max-width: 600px) {
+.legal-doc-sticky-actions button {
+    white-space: nowrap;
+    padding: 9px 18px;
+    font-size: 13.5px;
+}
+
+@media (max-width: 640px) {
     .legal-doc-sticky-bar {
+        bottom: 14px;
+        width: calc(100% - 24px);
         flex-direction: column;
         align-items: stretch;
-        gap: 10px;
-        padding: 12px 16px;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 14px;
+    }
+    .legal-doc-sticky-content {
+        align-items: center;
+    }
+    .legal-doc-sticky-text {
+        font-size: 13px;
+        text-align: left;
     }
     .legal-doc-sticky-actions button {
         width: 100%;
@@ -4612,8 +4651,13 @@ html[data-theme="light"] .btn-modal-decline {
 
 html[data-theme="light"] .legal-doc-sticky-bar {
     background: rgba(255, 255, 255, 0.95);
-    border-top: 1px solid rgba(216, 43, 153, 0.3);
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(216, 43, 153, 0.4);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12), 0 0 20px rgba(216, 43, 153, 0.16);
+}
+
+html[data-theme="light"] .legal-doc-sticky-icon {
+    background: rgba(216, 43, 153, 0.12);
+    color: #d82b99;
 }
 
 html[data-theme="light"] .legal-doc-sticky-text {
@@ -4661,8 +4705,8 @@ html[data-theme="light"] .legal-blocked-p {
    ========================================================================== */
 .legal-page-container {
     max-width: 900px;
-    margin: 40px auto 60px;
-    padding: 0 20px;
+    margin: 40px auto 90px;
+    padding: 0 20px 40px;
 }
 
 .legal-card {
