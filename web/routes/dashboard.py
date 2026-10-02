@@ -8,7 +8,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.admin_presence import ADMIN_PRESENCE_TTL_SECONDS, count_online
@@ -88,7 +88,10 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
                 .limit(10)
             )
             if not is_super:
-                recent_stmt = recent_stmt.where(Ticket.department_id == dept_id)
+                if dept_id is not None:
+                    recent_stmt = recent_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                else:
+                    recent_stmt = recent_stmt.where(Ticket.department_id.is_(None))
             recent_tickets = list((await session.execute(recent_stmt)).scalars().all())
     except Exception as e:
         logger.error("Не удалось загрузить статистику: %s", e)

@@ -407,8 +407,11 @@ async def add_department_name(request: Request, call_next):
                     async with async_session_maker() as count_session:
                         is_super_count, user_dept_id = await get_admin_scope(count_session, user)
                         t_base_scope = [Ticket.status == TicketStatus.NEW]
-                        if not is_super_count and user_dept_id:
-                            t_base_scope.append(Ticket.department_id == user_dept_id)
+                        if not is_super_count:
+                            if user_dept_id:
+                                t_base_scope.append(or_(Ticket.department_id == user_dept_id, Ticket.department_id.is_(None)))
+                            else:
+                                t_base_scope.append(Ticket.department_id.is_(None))
 
                         new_t_scope = t_base_scope + [or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
                         request.state.new_tickets_count = (

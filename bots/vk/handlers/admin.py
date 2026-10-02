@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
@@ -123,17 +123,24 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
             .order_by(Ticket.created_at.desc())
             .limit(FETCH_LIMIT)
         )
-        if not is_super and dept_id is not None:
-            stmt = stmt.where(Ticket.department_id == dept_id)
+        if not is_super:
+            if dept_id is not None:
+                stmt = stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+            else:
+                stmt = stmt.where(Ticket.department_id.is_(None))
 
         count_stmt = select(func.count(Ticket.id)).where(
             Ticket.created_at >= today_start,
             Ticket.status.not_in((TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO)),
         )
         total_count_stmt = select(func.count(Ticket.id)).where(Ticket.created_at >= today_start)
-        if not is_super and dept_id is not None:
-            count_stmt = count_stmt.where(Ticket.department_id == dept_id)
-            total_count_stmt = total_count_stmt.where(Ticket.department_id == dept_id)
+        if not is_super:
+            if dept_id is not None:
+                count_stmt = count_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                total_count_stmt = total_count_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+            else:
+                count_stmt = count_stmt.where(Ticket.department_id.is_(None))
+                total_count_stmt = total_count_stmt.where(Ticket.department_id.is_(None))
 
         pending_count = await session.scalar(count_stmt)
         total_count = await session.scalar(total_count_stmt)

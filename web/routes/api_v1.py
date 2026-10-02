@@ -18,7 +18,7 @@ from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.cache import cache_delete, cache_get, cache_set
@@ -514,9 +514,9 @@ async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
         ticket_filter = []
         if not is_super:
             if dept_id is None:
-                ticket_filter = [Ticket.id == -1]
+                ticket_filter = [Ticket.department_id.is_(None)]
             else:
-                ticket_filter = [Ticket.department_id == dept_id]
+                ticket_filter = [or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))]
 
         total = await session.scalar(select(func.count(Ticket.id)).where(*ticket_filter)) or 0
         active = (
@@ -565,9 +565,9 @@ async def v1_get_tickets(
         )
         if not is_super:
             if dept_id is None:
-                stmt = stmt.where(Ticket.id == -1)
+                stmt = stmt.where(Ticket.department_id.is_(None))
             else:
-                stmt = stmt.where(Ticket.department_id == dept_id)
+                stmt = stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
 
         tickets = list((await session.execute(stmt)).scalars().all())
         return [

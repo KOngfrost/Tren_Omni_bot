@@ -85,6 +85,9 @@ async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
             return False
         if is_super:
             return True
+        # Общие обращения (department_id is None) доступны для ответа всем
+        if ticket.department_id is None:
+            return True
         if dept_id is None:
             return False
         return ticket.department_id == dept_id

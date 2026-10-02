@@ -1376,8 +1376,8 @@ html[data-theme="light"] .btn-secondary {
 
 html[data-theme="light"] .btn-secondary:hover {
     background: #f1f5f9;
-    border-color: #b85b82;
-    color: #b85b82;
+    border-color: #d82b99;
+    color: #d82b99;
 }
 
 .btn-danger {
@@ -1628,9 +1628,27 @@ tbody tr:hover {
     border: 1px solid var(--line);
 }
 
+html[data-theme="light"] .badge-secondary {
+    background: #f1f5f9;
+    color: #27272a;
+    border: 1px solid #cbd5e1;
+}
+
 .badge-info {
     background: var(--primary-soft);
     color: var(--primary);
+}
+
+html[data-theme="light"] .badge-info {
+    background: rgba(216, 43, 153, 0.10);
+    color: #d82b99;
+    border: 1px solid rgba(216, 43, 153, 0.20);
+}
+
+html[data-theme="light"] .badge-anonymous {
+    background: #f1f5f9;
+    color: #52525b;
+    border: 1px solid #cbd5e1;
 }
 
 /* Обращение без отдела («Общие вопросы»): приглушённый акцент темы,

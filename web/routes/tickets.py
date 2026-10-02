@@ -112,10 +112,15 @@ def _build_ticket_filters(
     filters: list[Any] = []
 
     if not is_super:
-        if dept_id is None:
-            # Админ без отдела не должен видеть даже общие обращения.
-            filters.append(Ticket.id == -1)
+        if only_unassigned:
+            filters.append(Ticket.department_id.is_(None))
+        elif dept_id is None:
+            # Администратор без закреплённого отдела видит общие обращения
+            filters.append(Ticket.department_id.is_(None))
+        elif dept_filter_id is not None and dept_filter_id == dept_id:
+            filters.append(Ticket.department_id == dept_id)
         else:
+            # Администратор отдела видит заявки своего отдела И общие обращения
             filters.append(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
     elif only_unassigned:
         filters.append(Ticket.department_id.is_(None))
@@ -252,8 +257,13 @@ async def _load_ticket_for_user(ticket_id: int, user: dict) -> Ticket:
     ticket = await _get_ticket(ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    if not is_super and (dept_id is None or ticket.department_id != dept_id):
-        raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
+
+    # Общие обращения (department_id IS NULL) доступны для просмотра, ответа и смены статуса ВСЕМ администраторам.
+    # Если заявка привязана к отделу (department_id is not None), к ней имеют доступ только суперадмины
+    # и администраторы соответствующего отдела.
+    if not is_super:
+        if ticket.department_id is not None and (dept_id is None or ticket.department_id != dept_id):
+            raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
     return ticket
 
 

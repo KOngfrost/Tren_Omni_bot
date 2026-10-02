@@ -645,3 +645,69 @@ class TestIcons:
                         offenders.append(f"{path}:{number}")
         assert not offenders, "Эмодзи остались: " + ", ".join(offenders)
 
+
+class TestGeneralTicketsAndBadges:
+    """Проверка доступности общих обращений для всех и стилей бейджей в светлой теме."""
+
+    def test_style_css_light_theme_badges(self):
+        """В style.css явно определены светлые стили для .badge-secondary без тёмных дефолтов."""
+        from pathlib import Path
+        css_text = Path("web/static/style.css").read_text(encoding="utf-8")
+        assert 'html[data-theme="light"] .badge-secondary' in css_text
+        assert 'html[data-theme="light"] .badge-info' in css_text
+        assert 'html[data-theme="light"] .badge-anonymous' in css_text
+
+    @pytest.mark.asyncio
+    async def test_general_ticket_accessible_by_all_admins(self):
+        """Общее обращение (department_id is None) доступно любому администратору."""
+        from unittest.mock import MagicMock, patch
+        from web.routes.tickets import _load_ticket_for_user
+
+        mock_general_ticket = MagicMock()
+        mock_general_ticket.id = 777
+        mock_general_ticket.department_id = None
+
+        dept_admin_user = {"username": "admin_dept1", "role": "DEPARTMENT_ADMIN", "department_id": 1}
+        unassigned_admin_user = {"username": "admin_no_dept", "role": "DEPARTMENT_ADMIN", "department_id": None}
+
+        # 1. Админ конкретного отдела (dept_id = 1) может открыть общее обращение
+        with patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket), \
+             patch("web.routes.tickets.get_admin_scope", return_value=(False, 1)):
+            loaded = await _load_ticket_for_user(777, dept_admin_user)
+            assert loaded.id == 777
+
+        # 2. Админ без отдела (dept_id = None) также может открыть общее обращение
+        with patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket), \
+             patch("web.routes.tickets.get_admin_scope", return_value=(False, None)):
+            loaded = await _load_ticket_for_user(777, unassigned_admin_user)
+            assert loaded.id == 777
+
+    def test_build_ticket_filters_includes_general_tickets(self):
+        """Фильтры заявок для админа отдела включают общее обращение."""
+        from web.routes.tickets import _build_ticket_filters
+
+        # Для админа отдела (dept_id=2): возвращается условие or_(Ticket.department_id == 2, Ticket.department_id.is_(None))
+        filters = _build_ticket_filters(
+            is_super=False,
+            dept_id=2,
+            dept_filter_id=None,
+            only_unassigned=False,
+            resolved_status=None,
+            query="",
+        )
+        assert len(filters) == 1
+        condition_str = str(filters[0])
+        assert "department_id = :department_id" in condition_str or "department_id IS NULL" in condition_str
+
+        # Для админа без отдела: возвращается только общее обращение
+        filters_no_dept = _build_ticket_filters(
+            is_super=False,
+            dept_id=None,
+            dept_filter_id=None,
+            only_unassigned=False,
+            resolved_status=None,
+            query="",
+        )
+        assert len(filters_no_dept) == 1
+        assert "department_id IS NULL" in str(filters_no_dept[0])
+
