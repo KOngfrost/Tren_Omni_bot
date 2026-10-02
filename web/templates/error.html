@@ -11,6 +11,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css?v={{ css_version|default(app_version) }}">
+    <script nonce="{{ csp_nonce('script') if csp_nonce is defined else '' }}">
+        (function() {
+            try {
+                var theme = localStorage.getItem('app_theme');
+                if (!theme) {
+                    var m = document.cookie.match(/(^|;)\s*app_theme=([^;]+)/);
+                    if (m) theme = decodeURIComponent(m[2]);
+                }
+                if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                    theme = 'light';
+                }
+                if (theme === 'light' || theme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="/static/app.js?v={{ app_version }}" defer></script>
 </head>
 <body>

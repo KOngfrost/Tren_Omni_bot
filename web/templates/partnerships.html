@@ -48,7 +48,7 @@
                         </div>
                         {% endif %}
                         {% if item.contact_info %}
-                        <div style="font-size: 12px; color: var(--color-muted);">{{ item.contact_info }}</div>
+                        <div style="font-size: 12px; color: var(--text-tertiary);">{{ item.contact_info }}</div>
                         {% endif %}
                     </td>
                     <td>
@@ -65,18 +65,18 @@
                             <button type="submit" class="btn btn-secondary btn-small" style="padding: 4px 8px; font-size: 11px;">OK</button>
                         </form>
                     </td>
-                    <td style="font-size: 12px; color: var(--color-muted);">
+                    <td style="font-size: 12px; color: var(--text-tertiary);">
                         {{ item.created_at|format_dt }}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
                     <td colspan="5" class="empty-state" style="text-align: center; padding: 40px 20px;">
-                        <div style="margin-bottom: 8px; color: var(--color-muted);">
+                        <div style="margin-bottom: 8px; color: var(--text-tertiary);">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         </div>
                         <div style="font-weight: 500;">Пока нет предложений о партнёрстве</div>
-                        <div style="font-size: 12px; color: var(--color-muted); margin-top: 4px;">
+                        <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 4px;">
                             Когда пользователи отправят предложение через бота, оно появится здесь.
                         </div>
                     </td>
