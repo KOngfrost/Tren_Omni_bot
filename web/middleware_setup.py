@@ -125,7 +125,7 @@ async def _populate_notification_counts(
                     "new_partnerships_count": request.state.new_partnerships_count,
                     "total_notifications_count": request.state.total_notifications_count,
                 },
-                ttl=20,
+                ttl=5,
             )
     except Exception:
         logger.debug("Не удалось загрузить счетчики для middleware", exc_info=True)

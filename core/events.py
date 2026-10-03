@@ -24,7 +24,10 @@ def unregister_ticket_change_listener(callback: Callable[[], None]) -> None:
 async def _publish_ticket_change_to_redis() -> None:
     """Опубликовать событие изменения в Redis Pub/Sub для мгновенной доставки во все воркеры."""
     try:
+        from core.cache import cache_delete_pattern
         from core.redis_client import get_redis_client
+
+        await cache_delete_pattern("notif_counts:*")
 
         redis = await get_redis_client()
         if redis is not None:

@@ -65,7 +65,7 @@
                         {% if ticket.is_anonymous or not ticket.user %}
                         <span class="muted">Аноним</span>
                         {% else %}
-                            <a href="https://vk.com/id{{ ticket.user.vk_id }}" target="_blank" rel="noopener noreferrer" class="user-vk-link" title="Профиль ВКонтакте: ID {{ ticket.user.vk_id }}" style="color: var(--color-primary, #6366f1); text-decoration: underline;">
+                            <a href="https://vk.com/id{{ ticket.user.vk_id }}" target="_blank" rel="noopener noreferrer" class="user-vk-link" title="Профиль ВКонтакте: ID {{ ticket.user.vk_id }}">
                                 {{ ticket.user.full_name or ('VK ID ' ~ ticket.user.vk_id) }}
                             </a>
                         {% endif %}
@@ -191,9 +191,9 @@ function openTicket(id) {
             } else if (ticket.user) {
                 var nameText = ticket.user.full_name || (ticket.user.vk_id ? ('VK ID ' + ticket.user.vk_id) : 'Студент');
                 if (ticket.user.vk_id) {
-                    studentName = '<a href="https://vk.com/id' + encodeURIComponent(ticket.user.vk_id) + '" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary, #6366f1); text-decoration:underline;">' + escapeHtml(nameText) + '</a>';
+                    studentName = '<a href="https://vk.com/id' + encodeURIComponent(ticket.user.vk_id) + '" target="_blank" rel="noopener noreferrer" class="user-vk-link">' + escapeHtml(nameText) + '</a>';
                 } else {
-                    studentName = escapeHtml(nameText);
+                    studentName = '<span class="user-vk-name">' + escapeHtml(nameText) + '</span>';
                 }
             }
             var dormInfo = (ticket.user && ticket.user.dormitory && !ticket.is_anonymous) ? (' · Общежитие: ' + escapeHtml(ticket.user.dormitory)) : '';

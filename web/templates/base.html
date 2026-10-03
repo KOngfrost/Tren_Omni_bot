@@ -135,7 +135,7 @@
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                         </svg>
-                        <span class="sidebar-notif-badge {% if not request.state.total_notifications_count %}hidden{% endif %}" id="sidebar-notif-badge">
+                        <span class="sidebar-notif-badge {% if not request.state.total_notifications_count %}hidden{% endif %}" id="sidebar-notif-badge" {% if not request.state.total_notifications_count %}style="display: none;"{% endif %}>
                             {{ request.state.total_notifications_count|default(0) }}
                         </span>
                     </button>
@@ -203,7 +203,7 @@
                                     <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                                 </svg>
                             </span>
-                            <span class="notifications-badge {% if not request.state.total_notifications_count %}hidden{% endif %}" id="notifications-badge-total">
+                            <span class="notifications-badge {% if not request.state.total_notifications_count %}hidden{% endif %}" id="notifications-badge-total" {% if not request.state.total_notifications_count %}style="display: none;"{% endif %}>
                                 {{ request.state.total_notifications_count|default(0) }}
                             </span>
                         </button>
@@ -211,7 +211,7 @@
                             <div class="notifications-dropdown-header">
                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                                     <div class="notifications-dropdown-title">Активные уведомления</div>
-                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--color-primary, #6366f1); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран ↗</button>
+                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--primary); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран ↗</button>
                                 </div>
                                 <div class="notifications-tags" id="notifications-tags">
                                     <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="tag-new-tickets">{{ icon('alert', 12) }} {{ request.state.new_tickets_count|default(0) }} новых заявок</span>
@@ -220,7 +220,11 @@
                                 </div>
                             </div>
                             <div class="notifications-items-list" id="notifications-items-list">
+                                {% if request.state.total_notifications_count|default(0) == 0 %}
+                                <div class="notifications-empty">Нет новых уведомлений</div>
+                                {% else %}
                                 <div class="notifications-loading">Загрузка уведомлений...</div>
+                                {% endif %}
                             </div>
                             <div class="notifications-dropdown-footer">
                                 <a href="/tickets/?status=new" class="notifications-footer-link">Все новые заявки {{ icon('chevron-right', 14) }}</a>
@@ -506,7 +510,11 @@
             </div>
 
             <div class="notifications-items-list notifications-modal-list" id="modal-notifications-items-list">
+                {% if request.state.total_notifications_count|default(0) == 0 %}
+                <div class="notifications-empty">Нет новых уведомлений</div>
+                {% else %}
                 <div class="notifications-loading">Загрузка уведомлений...</div>
+                {% endif %}
             </div>
 
             <div class="notifications-dropdown-footer" style="margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px;">

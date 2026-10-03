@@ -275,6 +275,29 @@ a:hover {
     text-decoration: underline;
 }
 
+.user-vk-link,
+.ticket-user-link {
+    color: var(--primary, #fd60c9) !important;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.user-vk-link:hover,
+.ticket-user-link:hover {
+    color: var(--primary-hover, #fe82d5) !important;
+    text-shadow: 0 0 10px rgba(253, 96, 201, 0.6);
+    text-decoration: underline;
+}
+
+.user-vk-name {
+    color: var(--primary, #fd60c9) !important;
+    font-weight: 600;
+}
+
 button:disabled,
 button[disabled] {
     cursor: not-allowed;
@@ -406,8 +429,10 @@ code {
 }
 
 @media (min-width: 901px) {
+    .container:not(.sidebar-collapsed) .mobile-nav-toggle,
+    .container:not(.sidebar-collapsed) .nav-toggle-btn,
     .container:not(.sidebar-collapsed) .top-nav-bar .mobile-brand {
-        display: none;
+        display: none !important;
     }
 }
 
@@ -740,6 +765,13 @@ body.no-scroll {
     border-radius: var(--r-full);
     text-align: center;
     box-shadow: 0 0 6px var(--primary-glow);
+}
+
+.sidebar-notif-badge.hidden,
+.notifications-badge.hidden,
+.hidden,
+[hidden] {
+    display: none !important;
 }
 
 /* ---------- Модальное окно Центра уведомлений (отдельное окно) ---------- */

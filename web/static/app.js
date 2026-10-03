@@ -1093,12 +1093,17 @@
             });
         }
 
-        // Обновление счетчиков при клике на колокольчик в боковой панели
+        // Обновление счетчиков при клике на колокольчик в боковой панели или открытие модалки
         if (sidebarNotifBtn) {
             sidebarNotifBtn.addEventListener('click', function () {
                 updateCounters();
             });
         }
+        document.querySelectorAll('[data-open-modal="notifications-modal"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                updateCounters();
+            });
+        });
 
         // Выпадающее меню уведомлений в шапке
         if (notifBtn && dropdown) {
@@ -1299,8 +1304,10 @@
                 if (totalCount > 0) {
                     totalBadge.textContent = totalDisplay;
                     totalBadge.classList.remove('hidden');
+                    totalBadge.style.display = '';
                 } else {
                     totalBadge.classList.add('hidden');
+                    totalBadge.style.display = 'none';
                 }
             }
 
@@ -1309,8 +1316,10 @@
                 if (totalCount > 0) {
                     sidebarNotifBadge.textContent = totalDisplay;
                     sidebarNotifBadge.classList.remove('hidden');
+                    sidebarNotifBadge.style.display = '';
                 } else {
                     sidebarNotifBadge.classList.add('hidden');
+                    sidebarNotifBadge.style.display = 'none';
                 }
             }
 
@@ -1550,7 +1559,8 @@
             });
         }
 
-        // Первичная загрузка через SSE (с фоллбэком)
+        // Первичная немедленная загрузка данных счетчиков и SSE-подписка
+        updateCounters();
         startSSE();
 
         document.addEventListener('visibilitychange', function () {
