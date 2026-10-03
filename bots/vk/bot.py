@@ -166,6 +166,24 @@ async def fallback_handler(message: Message):
     touch_heartbeat()
 
 
+@vk_bot.on.raw_event("message_reply", dataclass=dict)
+async def message_reply_raw_handler(event: dict):
+    """Перехват ответов операторов из диалогов сообщества (LongPoll/Callback)."""
+    touch_heartbeat()
+    from core.services.community_reply_service import handle_community_message_reply
+
+    obj = event.get("object") or {}
+    peer_id = obj.get("peer_id")
+    text = obj.get("text", "")
+    admin_author_id = obj.get("admin_author_id")
+    if peer_id and text:
+        await handle_community_message_reply(
+            peer_id=int(peer_id),
+            text=str(text),
+            admin_author_id=int(admin_author_id) if admin_author_id else None,
+        )
+
+
 __all__ = [
     "AdminTicketStates",
     "ReportStates",

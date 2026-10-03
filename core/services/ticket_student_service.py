@@ -12,6 +12,7 @@ from core.services.ticket_primitives import (
     ticket_transaction,
 )
 from core.services.ticket_routing_service import _resolve_department
+from core.vk_client import fetch_vk_user_name
 
 
 async def create_ticket(
@@ -30,9 +31,15 @@ async def create_ticket(
         if keep_identity and vk_id is not None:
             user = await repository.user_by_vk_id(vk_id)
             if user is None:
-                user = User(vk_id=vk_id)
+                full_name = await fetch_vk_user_name(vk_id)
+                user = User(vk_id=vk_id, full_name=full_name)
                 repository.add(user)
                 await repository.flush()
+            elif not user.full_name:
+                full_name = await fetch_vk_user_name(vk_id)
+                if full_name:
+                    user.full_name = full_name
+                    await repository.flush()
 
         department = await _resolve_department(session, department_name)
         ticket = Ticket(
@@ -72,7 +79,9 @@ async def create_ticket(
             superadmins = await repository.superadmins()
             recipients = {admin.id: admin for admin in (*department_admins, *superadmins)}
         else:
-            recipients = {admin.id: admin for admin in await repository.assigned_admins()}
+            # Уведомления по общим обращениям поступают только суперадминам
+            superadmins = await repository.superadmins()
+            recipients = {admin.id: admin for admin in superadmins}
 
         for admin in recipients.values():
             if not admin.user or not admin.user.vk_id:

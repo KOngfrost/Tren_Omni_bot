@@ -36,11 +36,19 @@ async def get_admin_scope_for_vk_id(session: AsyncSession, vk_id: int) -> tuple[
 class BotCore:
     @staticmethod
     async def get_or_create_user(vk_id: int) -> User:
+        from core.vk_client import fetch_vk_user_name
+
         async with async_session_maker() as session:
             db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
             if db_user is not None:
+                if not db_user.full_name:
+                    name = await fetch_vk_user_name(vk_id)
+                    if name:
+                        db_user.full_name = name
+                        await session.commit()
                 return db_user
-            db_user = User(vk_id=vk_id)
+            name = await fetch_vk_user_name(vk_id)
+            db_user = User(vk_id=vk_id, full_name=name)
             session.add(db_user)
             try:
                 await session.commit()

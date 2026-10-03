@@ -630,7 +630,14 @@ async def partnership_proposal_handler(message: Message):
     try:
         async with async_session_maker() as session:
             user = await session.scalar(select(User).where(User.vk_id == message.from_id))
-            user_name = user.full_name if user and user.full_name else f"id{message.from_id}"
+            user_name = user.full_name if user and user.full_name else None
+            if not user_name:
+                from core.vk_client import fetch_vk_user_name
+
+                user_name = await fetch_vk_user_name(message.from_id)
+                if user and user_name and not user.full_name:
+                    user.full_name = user_name
+            user_name = user_name or f"id{message.from_id}"
             req = PartnershipRequest(
                 vk_id=message.from_id,
                 user_name=user_name,

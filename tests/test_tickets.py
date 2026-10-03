@@ -3,6 +3,7 @@
 from datetime import datetime
 
 import pytest
+from sqlalchemy import select
 
 from core.models import Department, MessageAuthorType, Ticket, TicketMessage, TicketStatus, User
 from core.ticket_service import (
@@ -394,3 +395,125 @@ async def test_anonymous_ticket_has_normal_statuses(db_session_maker):
     completed = await change_ticket_status(ticket.id, TicketStatus.COMPLETED, "testadmin")
     assert completed is not None
     assert completed.status == TicketStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_community_reply_auto_sets_in_progress(db_session_maker):
+    from core.models import MessageAuthorType
+    from core.services.community_reply_service import handle_community_message_reply
+    from core.ticket_service import create_ticket
+
+    student_vk = 77112233
+    ticket = await create_ticket(
+        topic="Вопрос студента",
+        description="Нужна помощь с общежитием",
+        vk_id=student_vk,
+        keep_identity=True,
+    )
+    assert ticket.status == TicketStatus.NEW
+
+    # Оператор отвечает со стороны сообщества ВКонтакте
+    updated = await handle_community_message_reply(
+        peer_id=student_vk,
+        text="Здравствуйте! Мы взяли вашу заявку в работу.",
+        admin_author_id=998877,
+    )
+    assert updated is not None
+    assert updated.status == TicketStatus.IN_PROGRESS
+    assert updated.response_text == "Здравствуйте! Мы взяли вашу заявку в работу."
+
+    async with db_session_maker() as session:
+        msgs = (
+            await session.scalars(
+                select(TicketMessage).where(TicketMessage.ticket_id == ticket.id)
+            )
+        ).all()
+        admin_msgs = [m for m in msgs if m.author_type == MessageAuthorType.ADMIN]
+        assert len(admin_msgs) == 1
+        assert admin_msgs[0].message == "Здравствуйте! Мы взяли вашу заявку в работу."
+
+
+@pytest.mark.asyncio
+async def test_notifications_scoping_for_superadmin_and_department_admin(db_session_maker):
+    from core.models import Admin, Department, User, UserRole, VkOutbox
+    from core.ticket_service import create_ticket
+
+    async with db_session_maker() as session:
+        dept_a = Department(name="Отдел А")
+        dept_b = Department(name="Отдел Б")
+        session.add_all([dept_a, dept_b])
+        await session.flush()
+
+        u_super = User(vk_id=9001, full_name="Супер Админ")
+        u_dept_a = User(vk_id=9002, full_name="Админ А")
+        u_dept_b = User(vk_id=9003, full_name="Админ Б")
+        session.add_all([u_super, u_dept_a, u_dept_b])
+        await session.flush()
+
+        sa = Admin(user_id=u_super.id, role=UserRole.SUPERADMIN, department_id=None)
+        adm_a = Admin(user_id=u_dept_a.id, role=UserRole.ADMIN, department_id=dept_a.id)
+        adm_b = Admin(user_id=u_dept_b.id, role=UserRole.ADMIN, department_id=dept_b.id)
+        session.add_all([sa, adm_a, adm_b])
+        await session.commit()
+
+    # 1. Заявка в отдел А: уведомление получают админ отдела А (9002) и суперадмин (9001), но НЕ админ Б (9003)
+    await create_ticket(
+        topic="Заявка в Отдел А",
+        description="Текст",
+        vk_id=888001,
+        keep_identity=True,
+        department_name="Отдел А",
+    )
+    async with db_session_maker() as session:
+        outbox_dept_a = (
+            await session.scalars(select(VkOutbox).where(VkOutbox.text.like("%Заявка в Отдел А%")))
+        ).all()
+        recipient_vk_ids = {m.vk_id for m in outbox_dept_a}
+        assert 9001 in recipient_vk_ids  # Суперадмин
+        assert 9002 in recipient_vk_ids  # Админ Отдела А
+        assert 9003 not in recipient_vk_ids  # Админ Отдела Б не должен получать!
+
+    # 2. Общая заявка (без отдела): уведомление получает ТОЛЬКО суперадмин (9001)
+    await create_ticket(
+        topic="Общий вопрос без отдела",
+        description="Текст",
+        vk_id=888002,
+        keep_identity=True,
+        department_name=None,
+    )
+    async with db_session_maker() as session:
+        outbox_general = (
+            await session.scalars(
+                select(VkOutbox).where(VkOutbox.text.like("%Общий вопрос без отдела%"))
+            )
+        ).all()
+        recipient_vk_ids = {m.vk_id for m in outbox_general}
+        assert 9001 in recipient_vk_ids  # Суперадмин
+        assert 9002 not in recipient_vk_ids  # Обычные админы отделов не получают
+        assert 9003 not in recipient_vk_ids
+
+
+@pytest.mark.asyncio
+async def test_non_anonymous_ticket_user_name_fetched(db_session_maker, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from core.models import User
+    from core.ticket_service import create_ticket
+
+    # Мокаем обращение к VK API users.get
+    mock_fetch = AsyncMock(return_value="Петр Сидоров")
+    monkeypatch.setattr("core.services.ticket_student_service.fetch_vk_user_name", mock_fetch)
+
+    new_student_vk = 99881122
+    ticket = await create_ticket(
+        topic="Заявка с получением ФИО",
+        description="Вопрос студента",
+        vk_id=new_student_vk,
+        keep_identity=True,
+    )
+    assert ticket.is_anonymous is False
+
+    async with db_session_maker() as session:
+        user = await session.scalar(select(User).where(User.vk_id == new_student_vk))
+        assert user is not None
+        assert user.full_name == "Петр Сидоров"

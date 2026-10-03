@@ -65,7 +65,9 @@
                         {% if ticket.is_anonymous or not ticket.user %}
                         <span class="muted">Аноним</span>
                         {% else %}
-                            {{ ticket.user.full_name or '—' }}
+                            <a href="https://vk.com/id{{ ticket.user.vk_id }}" target="_blank" rel="noopener noreferrer" class="user-vk-link" title="Профиль ВКонтакте: ID {{ ticket.user.vk_id }}" style="color: var(--color-primary, #6366f1); text-decoration: underline;">
+                                {{ ticket.user.full_name or ('VK ID ' ~ ticket.user.vk_id) }}
+                            </a>
                         {% endif %}
                     </td>
                     <td data-label="Отдел">
@@ -183,7 +185,17 @@ function openTicket(id) {
 
             var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
             var displayStatus = window.STATUS_LABELS[rawStatus] || rawStatus || '—';
-            var studentName = ticket.is_anonymous ? 'Анонимное обращение' : (ticket.user ? (ticket.user.full_name || 'Студент') : 'Студент');
+            var studentName = 'Студент';
+            if (ticket.is_anonymous) {
+                studentName = 'Анонимное обращение';
+            } else if (ticket.user) {
+                var nameText = ticket.user.full_name || (ticket.user.vk_id ? ('VK ID ' + ticket.user.vk_id) : 'Студент');
+                if (ticket.user.vk_id) {
+                    studentName = '<a href="https://vk.com/id' + encodeURIComponent(ticket.user.vk_id) + '" target="_blank" rel="noopener noreferrer" style="color:var(--color-primary, #6366f1); text-decoration:underline;">' + escapeHtml(nameText) + '</a>';
+                } else {
+                    studentName = escapeHtml(nameText);
+                }
+            }
             var dormInfo = (ticket.user && ticket.user.dormitory && !ticket.is_anonymous) ? (' · Общежитие: ' + escapeHtml(ticket.user.dormitory)) : '';
 
             var body = '';
@@ -192,7 +204,7 @@ function openTicket(id) {
             body += '<div class="ticket-header-summary">';
             body += '  <div class="summary-item"><span class="summary-label">Тема:</span><span class="summary-value">' + escapeHtml(ticket.topic || 'Без темы') + '</span></div>';
             body += '  <div class="summary-item"><span class="summary-label">Отдел:</span><span class="summary-value">' + escapeHtml(ticket.department ? ticket.department.name : 'Без привязки') + '</span></div>';
-            body += '  <div class="summary-item"><span class="summary-label">Заявитель:</span><span class="summary-value">' + escapeHtml(studentName) + dormInfo + '</span></div>';
+            body += '  <div class="summary-item"><span class="summary-label">Заявитель:</span><span class="summary-value">' + studentName + dormInfo + '</span></div>';
             body += '  <div class="summary-item"><span class="summary-label">Статус:</span><span class="summary-value" id="modal-ticket-status-badge"><span class="badge">' + escapeHtml(displayStatus) + '</span></span></div>';
             body += '  <div class="summary-item"><span class="summary-label">Создана:</span><span class="summary-value">' + escapeHtml(formatTicketDate(ticket)) + '</span></div>';
             body += '</div>';
@@ -214,7 +226,7 @@ function openTicket(id) {
                         body += '  <div class="chat-bubble-text">' + escapeHtml(m.message) + '</div>';
                         body += '</div>';
                     } else {
-                        var userLabel = ticket.is_anonymous ? 'Студент (анонимно)' : (ticket.user && ticket.user.full_name ? ticket.user.full_name : 'Студент');
+                        var userLabel = ticket.is_anonymous ? 'Студент (анонимно)' : (ticket.user && ticket.user.full_name ? ticket.user.full_name : (ticket.user && ticket.user.vk_id ? ('VK ID ' + ticket.user.vk_id) : 'Студент'));
                         body += '<div class="chat-bubble chat-bubble-user">';
                         body += '  <div class="chat-bubble-header"><span>' + escapeHtml(userLabel) + '</span>' + (timeStr ? '<span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div>';
                         body += '  <div class="chat-bubble-text">' + escapeHtml(m.message) + '</div>';

@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
@@ -124,9 +124,7 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         )
         if not is_super:
             if dept_id is not None:
-                stmt = stmt.where(
-                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
-                )
+                stmt = stmt.where(Ticket.department_id == dept_id)
             else:
                 stmt = stmt.where(Ticket.department_id.is_(None))
 
@@ -137,12 +135,8 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         total_count_stmt = select(func.count(Ticket.id)).where(Ticket.created_at >= today_start)
         if not is_super:
             if dept_id is not None:
-                count_stmt = count_stmt.where(
-                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
-                )
-                total_count_stmt = total_count_stmt.where(
-                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
-                )
+                count_stmt = count_stmt.where(Ticket.department_id == dept_id)
+                total_count_stmt = total_count_stmt.where(Ticket.department_id == dept_id)
             else:
                 count_stmt = count_stmt.where(Ticket.department_id.is_(None))
                 total_count_stmt = total_count_stmt.where(Ticket.department_id.is_(None))
@@ -237,9 +231,13 @@ async def admin_ticket_view_handler(message: Message):
         "Аноним"
         if ticket.is_anonymous
         else (
-            ticket.user.full_name
+            f"{ticket.user.full_name} (vk.com/id{ticket.user.vk_id})"
             if ticket.user and ticket.user.full_name
-            else f"VK ID {ticket.user.vk_id if ticket.user else '—'}"
+            else (
+                f"VK ID {ticket.user.vk_id} (vk.com/id{ticket.user.vk_id})"
+                if ticket.user and ticket.user.vk_id
+                else "—"
+            )
         )
     )
     dorm = (

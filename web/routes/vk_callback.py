@@ -34,6 +34,20 @@ async def _handle_vk_event_async(event: dict[str, Any]) -> None:
     """Асинхронная обработка события через пайплайн правил vkbottle."""
     try:
         touch_heartbeat()
+        event_type = event.get("type")
+        if event_type == "message_reply":
+            from core.services.community_reply_service import handle_community_message_reply
+
+            obj = event.get("object") or {}
+            peer_id = obj.get("peer_id")
+            text = obj.get("text", "")
+            admin_author_id = obj.get("admin_author_id")
+            if peer_id and text:
+                await handle_community_message_reply(
+                    peer_id=int(peer_id),
+                    text=str(text),
+                    admin_author_id=int(admin_author_id) if admin_author_id else None,
+                )
         await vk_bot.process_event(event)
     except Exception as exc:
         logger.exception("Ошибка при асинхронной обработке события Callback API: %s", exc)

@@ -91,3 +91,37 @@ async def send_vk_message(vk_id: int, text: str) -> bool:
     except (httpx.HTTPError, ValueError) as error:
         logger.warning("Не удалось отправить VK-сообщение vk_id=%s: %s", vk_id, error)
         return False
+
+
+async def fetch_vk_user_name(vk_id: int) -> str | None:
+    """Запросить имя и фамилию пользователя через VK API (users.get).
+
+    Используется при регистрации или создании заявки неанонимным пользователем,
+    чтобы в строке «Пользователь» сразу отображались реальные ФИО студента.
+    """
+    if not vk_id or not settings.VK_BOT_TOKEN:
+        return None
+
+    try:
+        client = get_vk_client()
+        response = await client.post(
+            "https://api.vk.com/method/users.get",
+            data={
+                "access_token": settings.VK_BOT_TOKEN,
+                "v": VK_API_VERSION,
+                "user_ids": str(vk_id),
+                "fields": "first_name,last_name",
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if "response" in payload and isinstance(payload["response"], list) and payload["response"]:
+            user_data = payload["response"][0]
+            first_name = str(user_data.get("first_name", "")).strip()
+            last_name = str(user_data.get("last_name", "")).strip()
+            full_name = f"{first_name} {last_name}".strip()
+            return full_name or None
+    except Exception as error:
+        logger.warning("Не удалось получить профиль VK для vk_id=%s: %s", vk_id, error)
+
+    return None

@@ -313,8 +313,10 @@ async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
             else None
         ),
         "user": {
-            "full_name": ticket.user.full_name if ticket.user else None,
-            "dormitory": ticket.user.dormitory if ticket.user else None,
+            "id": ticket.user.id,
+            "vk_id": ticket.user.vk_id,
+            "full_name": ticket.user.full_name or f"VK ID {ticket.user.vk_id}",
+            "dormitory": ticket.user.dormitory,
         }
         if ticket.user
         else None,

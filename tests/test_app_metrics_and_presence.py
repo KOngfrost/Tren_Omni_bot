@@ -264,8 +264,8 @@ def test_is_temporary_helper_handles_bootstrap_session():
 # ============ 2. Маршрутизация уведомлений (отдел vs общее) ============
 
 
-async def test_general_ticket_notifies_all_admins(db_session_maker):
-    """Заявка без отдела: сообщения генерируются для ВСЕХ администраторов."""
+async def test_general_ticket_notifies_superadmins_only(db_session_maker):
+    """Заявка без отдела: уведомления поступают только суперадминистраторам."""
     from core.models import VkOutbox
 
     async with db_session_maker() as session:
@@ -290,7 +290,7 @@ async def test_general_ticket_notifies_all_admins(db_session_maker):
     async with db_session_maker() as session:
         rows = list((await session.scalars(select(VkOutbox))).all())
         targets = {row.vk_id for row in rows}
-        assert targets == {1001, 1002, 1003}
+        assert targets == {1003}
         # Текст явно помечен как общее обращение.
         assert any("Новое общее обращение" in row.text for row in rows)
         assert any("[Общий вопрос]" in row.text for row in rows)

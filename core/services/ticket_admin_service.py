@@ -34,7 +34,7 @@ async def reply_to_ticket(
         if complete and ticket.status not in COMPLETED_STATUSES:
             validate_transition(ticket.status, TicketStatus.COMPLETED)
             ticket.status = TicketStatus.COMPLETED
-        elif ticket.status == TicketStatus.NEW:
+        elif ticket.status not in COMPLETED_STATUSES:
             ticket.status = TicketStatus.IN_PROGRESS
 
         session.add(

@@ -163,9 +163,12 @@ class TicketRepository:
         return list((await self.session.scalars(stmt)).all())
 
     async def admins_for_ticket(self, department_id: int | None) -> list[Admin]:
+        superadmins = await self.superadmins()
         if department_id:
-            return await self.admins_for_department(department_id)
-        return await self.assigned_admins()
+            dept_admins = await self.admins_for_department(department_id)
+            combined = {a.id: a for a in (*dept_admins, *superadmins)}
+            return list(combined.values())
+        return superadmins
 
     async def knowledge_entries(self, department_id: int | None = None) -> list[KnowledgeBase]:
         stmt = (
