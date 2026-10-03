@@ -188,6 +188,7 @@ jobs:
             -e POSTGRES_PASSWORD=dummy \
             -e ADMIN_VK_IDS=123 \
             -e VK_BOT_TOKEN=dummy \
+            -e VK_CALLBACK_SECRET=ephemeral_secret_for_zap_scan_1234567890 \
             oss-bot-web
           sleep 5
       - name: OWASP ZAP Baseline Scan

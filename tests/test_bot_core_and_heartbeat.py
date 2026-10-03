@@ -120,4 +120,3 @@ async def test_graceful_shutdown_cleanup():
     await asyncio.gather(task, return_exceptions=True)
     assert task.done()
     assert task.cancelled()
-

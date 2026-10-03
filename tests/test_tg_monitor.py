@@ -47,20 +47,28 @@ def test_get_system_metrics():
 
 
 def test_container_info():
-    c_healthy = ContainerInfo("123", "oss_bot_web", "img", "running", "Up 1 hour (healthy)", "healthy", True)
+    c_healthy = ContainerInfo(
+        "123", "oss_bot_web", "img", "running", "Up 1 hour (healthy)", "healthy", True
+    )
     assert c_healthy.is_running is True
     assert c_healthy.is_healthy is True
     assert c_healthy.status_emoji == "🟢"
     assert c_healthy.is_project_container is True
 
-    c_unhealthy = ContainerInfo("456", "oss_bot_app", "img", "running", "Up 1 hour (unhealthy)", "unhealthy", True)
+    c_unhealthy = ContainerInfo(
+        "456", "oss_bot_app", "img", "running", "Up 1 hour (unhealthy)", "unhealthy", True
+    )
     assert c_unhealthy.is_healthy is False
     assert c_unhealthy.status_emoji == "🔴"
 
-    c_starting = ContainerInfo("789", "oss_bot_db", "img", "running", "Up 5s (health: starting)", "starting", True)
+    c_starting = ContainerInfo(
+        "789", "oss_bot_db", "img", "running", "Up 5s (health: starting)", "starting", True
+    )
     assert c_starting.status_emoji == "🟡"
 
-    c_exited_ok = ContainerInfo("999", "oss_bot_migrate", "img", "exited", "Exited (0) 10m ago", None, True)
+    c_exited_ok = ContainerInfo(
+        "999", "oss_bot_migrate", "img", "exited", "Exited (0) 10m ago", None, True
+    )
     assert c_exited_ok.status_emoji == "⚪"
 
 
@@ -117,18 +125,24 @@ async def test_monitor_service_alerts():
         "uptime_str": "1 day",
     }
 
-    with mock.patch("bots.telegram.monitor_service.get_system_metrics", return_value=normal_metrics):
+    with mock.patch(
+        "bots.telegram.monitor_service.get_system_metrics", return_value=normal_metrics
+    ):
         # 1 такт: контейнер работает штатно
         c_ok = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (healthy)", "healthy", True)
         docker.list_containers.return_value = [c_ok]
 
-        monitor = MonitorService(bot, admin_id=12345, docker_client=docker, check_interval=10, alerts_enabled=True)
+        monitor = MonitorService(
+            bot, admin_id=12345, docker_client=docker, check_interval=10, alerts_enabled=True
+        )
 
         await monitor.check_all()
         bot.send_message.assert_not_called()
 
         # 2 такт: контейнер сбоит
-        c_bad = ContainerInfo("1", "oss_bot_app", "img", "running", "Up (unhealthy)", "unhealthy", True)
+        c_bad = ContainerInfo(
+            "1", "oss_bot_app", "img", "running", "Up (unhealthy)", "unhealthy", True
+        )
         docker.list_containers.return_value = [c_bad]
 
         await monitor.check_all()
@@ -391,6 +405,3 @@ def test_main_reply_keyboard_webapp_button():
     assert kb.keyboard[0][0].text == "📱 Веб-панель"
     assert kb.keyboard[0][0].web_app is not None
     assert kb.keyboard[0][0].web_app.url == "https://bot.example.com"
-
-
-

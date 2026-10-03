@@ -132,7 +132,9 @@ async def set_two_factor_mode(enabled: bool, updated_by: str = "admin") -> dict[
         redis = await get_redis_client()
         if redis is not None:
             await redis.set(TWO_FACTOR_REDIS_KEY, json.dumps(data, ensure_ascii=False))
-            logger.info("2FA статус успешно обновлен в Redis: enabled=%s (by %s)", enabled, updated_by)
+            logger.info(
+                "2FA статус успешно обновлен в Redis: enabled=%s (by %s)", enabled, updated_by
+            )
     except Exception as e:
         logger.error("Не удалось сохранить статус 2FA в Redis: %s", e)
 
@@ -143,5 +145,7 @@ async def set_two_factor_mode(enabled: bool, updated_by: str = "admin") -> dict[
     _cached_state = data
     _cached_expires_at = time.time() + _CACHE_TTL_SECONDS
 
-    logger.info("SECURITY AUDIT: 2FA_MODE_CHANGED | enabled=%s | updated_by=%s", enabled, updated_by)
+    logger.info(
+        "SECURITY AUDIT: 2FA_MODE_CHANGED | enabled=%s | updated_by=%s", enabled, updated_by
+    )
     return data

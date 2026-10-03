@@ -2,7 +2,6 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
 
 from bots.vk.keyboards import (
     build_admin_report_types_keyboard,
@@ -69,12 +68,7 @@ async def test_partnership_model_and_web_route(db_session_maker):
         await session.refresh(req)
         await session.refresh(admin)
 
-        req_id = req.id
-        admin_id = admin.id
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Без авторизации -> редирект на логин
         resp = await client.get("/partnerships/", follow_redirects=False)
         assert resp.status_code == 302
@@ -85,6 +79,7 @@ async def test_partnership_model_and_web_route(db_session_maker):
 async def test_api_counters_divided_and_items(db_session_maker, monkeypatch):
     """Проверка работы раздельных счётчиков и списка конкретных уведомлений в GET /api/counters."""
     import re
+
     from core.config import settings
     from core.models import Admin, Ticket, TicketStatus, User, UserRole
     from web.security.passwords import hash_password
@@ -183,4 +178,3 @@ async def test_api_counters_divided_and_items(db_session_maker, monkeypatch):
                 assert "/tickets/?open=" in it["url"]
             elif it["type"] == "partnership":
                 assert it["url"] == "/partnerships/"
-

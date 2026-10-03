@@ -170,6 +170,7 @@ __all__ = [
     "AdminTicketStates",
     "ReportStates",
     "TicketStates",
+    "VKMaintenanceMiddleware",
     "_get_department_names",
     "_handle_bot_error",
     "_main_keyboard_for",
@@ -219,6 +220,5 @@ __all__ = [
     "ticket_details_handler",
     "ticket_identity_choice_handler",
     "ticket_reply_handler",
-    "VKMaintenanceMiddleware",
     "vk_bot",
 ]

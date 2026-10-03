@@ -184,7 +184,7 @@ def create_board() -> str:
     <g id="Frame_01_Ingestion" transform="translate(60, 150)">
         <!-- Фоновый контейнер фрейма -->
         <rect x="0" y="0" width="620" height="740" rx="20" fill="url(#cardGrad)" stroke="#262638" stroke-width="1.5" filter="url(#cardShadow)"/>
-        
+
         <!-- Заголовок фрейма -->
         <rect x="0" y="0" width="620" height="60" rx="20" fill="url(#cardHighlight)"/>
         <circle cx="32" cy="30" r="14" fill="#0077FF" fill-opacity="0.2"/>
@@ -271,7 +271,7 @@ def create_board() -> str:
     parts.append("""
     <g id="Frame_02_Student_FSM" transform="translate(710, 150)">
         <rect x="0" y="0" width="820" height="740" rx="20" fill="url(#cardGrad)" stroke="#262638" stroke-width="1.5" filter="url(#cardShadow)"/>
-        
+
         <rect x="0" y="0" width="820" height="60" rx="20" fill="url(#cardHighlight)"/>
         <circle cx="32" cy="30" r="14" fill="#FF4D9D" fill-opacity="0.2"/>
         <text x="32" y="35" font-size="14" font-weight="800" fill="#FF4D9D" text-anchor="middle">2</text>
@@ -374,7 +374,7 @@ def create_board() -> str:
     parts.append("""
     <g id="Frame_03_Admin_Triage" transform="translate(1560, 150)">
         <rect x="0" y="0" width="620" height="740" rx="20" fill="url(#cardGrad)" stroke="#262638" stroke-width="1.5" filter="url(#cardShadow)"/>
-        
+
         <rect x="0" y="0" width="620" height="60" rx="20" fill="url(#cardHighlight)"/>
         <circle cx="32" cy="30" r="14" fill="#B855F6" fill-opacity="0.2"/>
         <text x="32" y="35" font-size="14" font-weight="800" fill="#B855F6" text-anchor="middle">3</text>
@@ -410,7 +410,7 @@ def create_board() -> str:
         <g transform="translate(30, 315)">
             <rect x="0" y="0" width="560" height="235" rx="14" fill="#171724" stroke="#2B2B40" stroke-width="1.2"/>
             <text x="24" y="28" class="node-title">Жизненный цикл статусов тикета</text>
-            
+
             <!-- Статус 1: Новое -->
             <rect x="24" y="45" width="245" height="42" rx="8" fill="#241B2E" stroke="#7C3AED" stroke-width="1"/>
             <circle cx="40" cy="66" r="6" fill="#A855F7"/>
@@ -458,7 +458,7 @@ def create_board() -> str:
     parts.append("""
     <g id="Frame_04_Outbox_Engine" transform="translate(60, 930)">
         <rect x="0" y="0" width="1380" height="420" rx="20" fill="url(#cardGrad)" stroke="#262638" stroke-width="1.5" filter="url(#cardShadow)"/>
-        
+
         <rect x="0" y="0" width="1380" height="60" rx="20" fill="url(#cardHighlight)"/>
         <circle cx="32" cy="30" r="14" fill="#10B981" fill-opacity="0.2"/>
         <text x="32" y="35" font-size="14" font-weight="800" fill="#10B981" text-anchor="middle">4</text>
@@ -517,7 +517,7 @@ def create_board() -> str:
         <!-- Нижняя плашка: защита данных и инфраструктура -->
         <g transform="translate(40, 260)">
             <rect x="0" y="0" width="1300" height="125" rx="14" fill="#14141E" stroke="#252538" stroke-width="1"/>
-            
+
             <g transform="translate(25, 20)">
                 <text x="0" y="20" font-size="15" font-weight="700" fill="#FFFFFF">Защита от сбоев и санитизация PII</text>
                 <text x="0" y="44" class="node-desc">• <tspan fill="#34D399" font-weight="600">Сетевые сбои VK API:</tspan> задача Outbox повторяется с экспоненциальной задержкой (retry до 5 раз). Сообщения не теряются.</text>
@@ -534,7 +534,7 @@ def create_board() -> str:
     parts.append("""
     <g id="Frame_05_Telegram_Sentinel" transform="translate(1480, 930)">
         <rect x="0" y="0" width="1340" height="420" rx="20" fill="url(#cardGrad)" stroke="#262638" stroke-width="1.5" filter="url(#cardShadow)"/>
-        
+
         <rect x="0" y="0" width="1340" height="60" rx="20" fill="url(#cardHighlight)"/>
         <circle cx="32" cy="30" r="14" fill="#38BDF8" fill-opacity="0.2"/>
         <text x="32" y="35" font-size="14" font-weight="800" fill="#38BDF8" text-anchor="middle">5</text>
@@ -554,7 +554,7 @@ def create_board() -> str:
             <text x="24" y="175" class="node-desc">• Рестарт ботов и сервисов на лету</text>
             <text x="24" y="195" class="node-desc">• Создание бэкапа PostgreSQL в 1 клик</text>
             <text x="24" y="215" class="node-desc">• Включение/выключение техработ (Maintenance)</text>
-            
+
             <rect x="24" y="245" width="330" height="34" rx="8" fill="#122538"/>
             <text x="189" y="267" font-size="12" font-weight="700" fill="#38BDF8" text-anchor="middle">Inline кнопки + Telegram Mini App</text>
 
@@ -598,7 +598,7 @@ def create_board() -> str:
     <g id="Connectors" opacity="0.85">
         <!-- Связь: Блок 1 (Команды меню) -> Блок 2 (Студенческие сценарии) -->
         <path d="M 680 500 C 695 500, 695 350, 710 350" class="flow-line" stroke="#FF4D9D" marker-end="url(#arrowPink)"/>
-        
+
         <!-- Связь: Блок 2 (Создание тикета) -> Блок 4 (Outbox двойная запись) -->
         <path d="M 1120 745 C 1120 840, 400 840, 400 930" class="flow-line" stroke="#10B981" marker-end="url(#arrowGreen)"/>
 
@@ -616,7 +616,7 @@ def create_board() -> str:
     parts.append("""
     <g id="Canvas_Footer" transform="translate(60, 1690)">
         <rect x="0" y="0" width="2760" height="70" rx="16" fill="#111118" stroke="#252538" stroke-width="1.2"/>
-        
+
         <!-- Легенда линий и статусов -->
         <g transform="translate(30, 24)">
             <circle cx="10" cy="11" r="7" fill="#0077FF"/>

@@ -81,9 +81,7 @@ async def register_event_handler(message: Message):
         event_date = event.event_date
         if event_date is not None:
             now = datetime.now(UTC)
-            event_dt = (
-                event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
-            )
+            event_dt = event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
             if event_dt < now:
                 await message.answer(
                     "Нельзя записаться на прошедшее мероприятие.",
@@ -101,11 +99,8 @@ async def register_event_handler(message: Message):
             )
             return
 
-    date_str = (
-        f" ({event_date.strftime('%d.%m.%Y %H:%M')})" if event_date else ""
-    )
+    date_str = f" ({event_date.strftime('%d.%m.%Y %H:%M')})" if event_date else ""
     await message.answer(
         f"Вы зарегистрированы на «{event_title}»{date_str}!\n\nЖдём вас на мероприятии.",
         keyboard=await _main_keyboard_for(message.from_id),
     )
-

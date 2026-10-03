@@ -99,7 +99,10 @@ async def callback_two_factor_disable(callback: CallbackQuery) -> None:
         enabled=False,
         updated_by=f"telegram:{user_id}",
     )
-    await callback.answer("🔓 Двухфакторная аутентификация (2FA) ОТКЛЮЧЕНА! Вход доступен по логину и паролю.", show_alert=True)
+    await callback.answer(
+        "🔓 Двухфакторная аутентификация (2FA) ОТКЛЮЧЕНА! Вход доступен по логину и паролю.",
+        show_alert=True,
+    )
     text, keyboard = await render_two_factor_content()
     if callback.message:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")

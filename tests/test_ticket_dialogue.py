@@ -6,13 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.requests import Request
 
-from bots.vk.common import AdminTicketStates
 from bots.vk.handlers.admin import (
     admin_quick_complete_handler,
     admin_quick_in_progress_handler,
     admin_reply_start_handler,
     admin_reply_text_handler,
-    admin_ticket_history_handler,
     admin_ticket_view_handler,
 )
 from bots.vk.keyboards import (
@@ -27,8 +25,8 @@ from core.commands import (
     ADMIN_REPLY_START_PATTERN,
     ADMIN_TICKET_VIEW_PATTERN,
 )
-from core.models import Department, MessageAuthorType, Ticket, TicketMessage, TicketStatus, User
-from web.routes.tickets import get_ticket, reply_ticket
+from core.models import Department, Ticket, TicketStatus, User
+from web.routes.tickets import reply_ticket
 
 
 def test_admin_commands_regex():
@@ -148,7 +146,9 @@ async def test_admin_reply_start_and_text_handlers():
 
     with (
         patch("bots.vk.bot.vk_bot.state_dispenser", mock_dispenser),
-        patch("bots.vk.handlers.admin.BotCore.get_or_create_user", AsyncMock(return_value=mock_user)),
+        patch(
+            "bots.vk.handlers.admin.BotCore.get_or_create_user", AsyncMock(return_value=mock_user)
+        ),
         patch(
             "bots.vk.handlers.admin.reply_to_ticket",
             AsyncMock(return_value=(mock_ticket_after, True)),
@@ -218,9 +218,7 @@ async def test_web_ticket_api_ajax_reply():
         "accept": "application/json",
         "x-requested-with": "XMLHttpRequest",
     }
-    req.json = AsyncMock(
-        return_value={"message": "Сантехник прибудет в 14:00", "complete": False}
-    )
+    req.json = AsyncMock(return_value={"message": "Сантехник прибудет в 14:00", "complete": False})
 
     with (
         patch("web.routes.tickets.require_crud_rate_limit", AsyncMock()),

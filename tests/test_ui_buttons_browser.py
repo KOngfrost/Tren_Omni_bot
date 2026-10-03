@@ -338,9 +338,9 @@ async def test_button_open_ticket_opens_dialog(logged_in_page, live_server):
     await page.wait_for_selector("#ticket-chat-box", state="visible", timeout=ACTION_TIMEOUT_MS)
     await page.wait_for_selector("#chat-reply-input", state="visible")
 
-    assert await modal.evaluate(
-        "el => el.classList.contains('active')"
-    ), "После клика «Открыть» модалка должна получить класс active"
+    assert await modal.evaluate("el => el.classList.contains('active')"), (
+        "После клика «Открыть» модалка должна получить класс active"
+    )
 
     title = await page.locator("#modal-title").text_content()
     assert title and "Заявка #" in title, f"Неожиданный заголовок модалки: {title!r}"
@@ -375,8 +375,7 @@ async def test_button_send_reply_adds_message_to_chat(logged_in_page, live_serve
 
     # Пузырь нового сообщения появляется без перезагрузки страницы.
     await page.wait_for_function(
-        "expected => document.querySelectorAll('#ticket-chat-box .chat-bubble')"
-        ".length > expected",
+        "expected => document.querySelectorAll('#ticket-chat-box .chat-bubble').length > expected",
         arg=before,
         timeout=ACTION_TIMEOUT_MS,
     )
@@ -389,9 +388,9 @@ async def test_button_send_reply_adds_message_to_chat(logged_in_page, live_serve
     assert reply_text in (chat_text or ""), "Текст ответа не появился в чате"
 
     # Поле ввода очищается после успешной отправки.
-    assert (
-        await page.input_value("#chat-reply-input") == ""
-    ), "Поле ввода должно очищаться после отправки ответа"
+    assert await page.input_value("#chat-reply-input") == "", (
+        "Поле ввода должно очищаться после отправки ответа"
+    )
 
     watcher.assert_no_script_errors()
 
@@ -417,9 +416,9 @@ async def test_button_send_reply_validates_empty_input(logged_in_page, live_serv
 
     await page.wait_for_selector(".alert-flash-error", state="visible", timeout=ACTION_TIMEOUT_MS)
     error_text = await page.locator(".alert-flash-error").text_content()
-    assert "Введите текст ответа" in (
-        error_text or ""
-    ), f"Неожиданный текст ошибки валидации: {error_text!r}"
+    assert "Введите текст ответа" in (error_text or ""), (
+        f"Неожиданный текст ошибки валидации: {error_text!r}"
+    )
 
     after = await page.locator("#ticket-chat-box .chat-bubble").count()
     assert after == before, "Пустой ответ не должен добавлять сообщения"
@@ -458,17 +457,17 @@ async def test_button_create_department_creates_via_ajax(logged_in_page, live_se
         ".alert-flash-success", state="visible", timeout=ACTION_TIMEOUT_MS
     )
     success_text = await page.locator(".alert-flash-success").text_content()
-    assert dept_name in (
-        success_text or ""
-    ), f"Уведомление должно содержать название отдела: {success_text!r}"
+    assert dept_name in (success_text or ""), (
+        f"Уведомление должно содержать название отдела: {success_text!r}"
+    )
 
     # После успеха модалка закрывается, а поле очищается.
     await page.wait_for_selector(
         "#create-modal:not(.active)", state="hidden", timeout=ACTION_TIMEOUT_MS
     )
-    assert (
-        await page.input_value("#dept-name") == ""
-    ), "Поле названия должно очищаться после создания отдела"
+    assert await page.input_value("#dept-name") == "", (
+        "Поле названия должно очищаться после создания отдела"
+    )
 
     watcher.assert_no_script_errors()
 
@@ -494,14 +493,14 @@ async def test_button_create_department_rejects_empty_name(logged_in_page, live_
 
     await page.wait_for_selector(".alert-flash-error", state="visible", timeout=ACTION_TIMEOUT_MS)
     error_text = await page.locator(".alert-flash-error").text_content()
-    assert "Укажите название отдела" in (
-        error_text or ""
-    ), f"Неожиданный текст ошибки: {error_text!r}"
+    assert "Укажите название отдела" in (error_text or ""), (
+        f"Неожиданный текст ошибки: {error_text!r}"
+    )
 
     # Модалка остаётся открытой — пользователь должен исправить ввод.
-    assert await page.locator("#create-modal").evaluate(
-        "el => el.classList.contains('active')"
-    ), "При ошибке валидации модалка не должна закрываться"
+    assert await page.locator("#create-modal").evaluate("el => el.classList.contains('active')"), (
+        "При ошибке валидации модалка не должна закрываться"
+    )
 
     watcher.assert_no_script_errors()
 
@@ -530,9 +529,8 @@ async def test_ticket_page_loads_without_csp_violations(logged_in_page, live_ser
     )
 
     # Скрипты страницы действительно загрузились и выполнились.
-    assert await page.evaluate(
-        "() => typeof window.getCsrfToken === 'function'"
-    ), "Функции tickets.html не определены: inline-скрипт не выполнился (CSP?)"
+    assert await page.evaluate("() => typeof window.getCsrfToken === 'function'"), (
+        "Функции tickets.html не определены: inline-скрипт не выполнился (CSP?)"
+    )
 
     watcher.assert_no_script_errors()
-

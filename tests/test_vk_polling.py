@@ -1,6 +1,5 @@
 """Тесты для отказоустойчивого BotPolling (RobustBotPolling)."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,9 +24,10 @@ async def test_get_server_retries_on_vk_api_error():
     )
     polling._api = mock_api
 
-    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep, patch(
-        "bots.vk.polling.touch_heartbeat"
-    ) as mock_touch:
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("bots.vk.polling.touch_heartbeat") as mock_touch,
+    ):
         server_data = await polling.get_server()
 
         assert server_data["key"] == "abc"
@@ -94,9 +94,9 @@ async def test_listen_resets_server_after_consecutive_errors():
     # get_event: сначала 3 ошибки (имитируя мертвый ключ), затем нормальный event
     polling.get_event = AsyncMock(
         side_effect=[
-            asyncio.TimeoutError(),
-            asyncio.TimeoutError(),
-            asyncio.TimeoutError(),
+            TimeoutError(),
+            TimeoutError(),
+            TimeoutError(),
             {"ts": "3", "updates": [{"type": "message_new"}]},
         ]
     )

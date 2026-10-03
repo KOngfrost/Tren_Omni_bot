@@ -87,12 +87,16 @@ async def update_theme(
     """Сохранить предпочтения темы, эффектов и акцентного цвета."""
     glass_enabled = glass_effect in ("true", "1", "on")
     # Некорректный hex игнорируем и оставляем текущий/тему по умолчанию.
-    accent = normalize_accent_color(accent_color) or normalize_accent_color(
-        request.cookies.get("app_accent_color")
-    ) or DEFAULT_ACCENT_COLOR
+    accent = (
+        normalize_accent_color(accent_color)
+        or normalize_accent_color(request.cookies.get("app_accent_color"))
+        or DEFAULT_ACCENT_COLOR
+    )
 
     accept = request.headers.get("accept", "")
-    is_ajax = "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    is_ajax = (
+        "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    )
 
     if is_ajax:
         response = JSONResponse(
@@ -160,7 +164,9 @@ async def toggle_2fa(
     result = await set_two_factor_mode(is_enabled, updated_by=user.get("username", "admin"))
 
     accept = request.headers.get("accept", "")
-    is_ajax = "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    is_ajax = (
+        "application/json" in accept or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    )
     if is_ajax:
         return JSONResponse(
             {
@@ -224,4 +230,3 @@ async def toggle_personal_2fa(
     action = "Включена" if want_enabled else "Отключена"
     request.session["flash_success"] = f"2FA {action.lower()} для вашего аккаунта."
     return RedirectResponse(url="/settings/", status_code=303)
-

@@ -82,9 +82,7 @@ def _grant_to_auth_user(connection, auth_user: str) -> None:
 
     safe_role = f'"{auth_user}"'
     connection.execute(text(f"GRANT USAGE ON SCHEMA pgbouncer TO {safe_role}"))
-    connection.execute(
-        text(f"GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO {safe_role}")
-    )
+    connection.execute(text(f"GRANT EXECUTE ON FUNCTION pgbouncer.get_auth(TEXT) TO {safe_role}"))
 
 
 def upgrade() -> None:

@@ -121,7 +121,9 @@ def build_admin_ticket_actions_keyboard(ticket_id: int, is_completed: bool = Fal
     if is_completed:
         rows.append([(f"В обработку #{ticket_id}", "secondary")])
     else:
-        rows.append([(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "secondary")])
+        rows.append(
+            [(f"В обработку #{ticket_id}", "secondary"), (f"Выполнено #{ticket_id}", "secondary")]
+        )
     rows.append([("Заявки администратора", "secondary"), ("Админ", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
@@ -177,7 +179,9 @@ def build_tickets_keyboard(
 
 def build_faq_departments_keyboard(departments: list[str]) -> str:
     """Клавиатура выбора отдела для просмотра частых вопросов."""
-    dept_buttons: list[tuple[str, str]] = [(f"Вопросы: {dept}", "secondary") for dept in departments]
+    dept_buttons: list[tuple[str, str]] = [
+        (f"Вопросы: {dept}", "secondary") for dept in departments
+    ]
     rows = _chunk_buttons(dept_buttons, 2)
     rows.append([("Вопросы: Все отделы", "secondary")])
     rows.append([("Отмена", "negative")])

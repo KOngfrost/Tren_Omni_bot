@@ -66,7 +66,9 @@ _HARD_DEFAULT_LOCALE = "ru"
 # Текущая локаль запроса/задачи. Пустая строка — «не задана», берётся из настроек.
 _current_locale: ContextVar[str] = ContextVar("i18n_locale", default="")
 
-_ACCEPT_LANGUAGE_ITEM = re.compile(r"^\s*(?P<tag>[A-Za-z0-9-]+)\s*(?:;\s*q\s*=\s*(?P<q>[\d.]+))?\s*$")
+_ACCEPT_LANGUAGE_ITEM = re.compile(
+    r"^\s*(?P<tag>[A-Za-z0-9-]+)\s*(?:;\s*q\s*=\s*(?P<q>[\d.]+))?\s*$"
+)
 
 
 def _settings() -> Any:

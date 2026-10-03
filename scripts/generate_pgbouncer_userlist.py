@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import getpass
 import hashlib
 import hmac
@@ -141,10 +142,8 @@ def write_userlist(lines: list[str], out_path: Path) -> None:
     # Права 0644 позволяют процессу PgBouncer (UID 70 в alpine-образе)
     # читать файл, даже если он был сгенерирован под root.
     os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-    try:
+    with contextlib.suppress(PermissionError, AttributeError):
         os.chown(out_path, 70, 70)
-    except (PermissionError, AttributeError):
-        pass
 
 
 def render_pgbouncer_ini(template_path: Path, out_path: Path, env_vars: dict[str, str]) -> None:
@@ -157,10 +156,8 @@ def render_pgbouncer_ini(template_path: Path, out_path: Path, env_vars: dict[str
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
     os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-    try:
+    with contextlib.suppress(PermissionError, AttributeError):
         os.chown(out_path, 70, 70)
-    except (PermissionError, AttributeError):
-        pass
 
 
 def _build_line(user: str, verifier: str) -> str:
@@ -223,7 +220,7 @@ def main() -> int:
         "--mode",
         choices=("postgres", "derive"),
         default="postgres",
-        help="postgres — прочитать готовый верификатор из БД; " "derive — вычислить его из пароля",
+        help="postgres — прочитать готовый верификатор из БД; derive — вычислить его из пароля",
     )
     parser.add_argument(
         "--out",

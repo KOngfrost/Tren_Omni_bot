@@ -50,9 +50,7 @@ def demultiplex_stream(raw: bytes) -> tuple[list[bytes], list[bytes]]:
     while offset + _FRAME_HEADER_SIZE <= total:
         try:
             stream_type = raw[offset]
-            size = int.from_bytes(
-                raw[offset + 4 : offset + _FRAME_HEADER_SIZE], byteorder="big"
-            )
+            size = int.from_bytes(raw[offset + 4 : offset + _FRAME_HEADER_SIZE], byteorder="big")
         except Exception:  # pragma: no cover - защитный блок
             logger.warning("Повреждён заголовок фрейма Docker на смещении %d", offset)
             break
@@ -269,9 +267,9 @@ class DockerClient:
                     return "Логи пусты."
 
                 # Демоплексирование отброшено управляющие байты заголовков
-                lines: list[str] = []
-                for part in stdout_parts:
-                    lines.append(part.decode("utf-8", errors="replace"))
+                lines: list[str] = [
+                    part.decode("utf-8", errors="replace") for part in stdout_parts
+                ]
 
                 # Если поток не был мультиплексирован — вычищаем управляющие символы
                 joined = "".join(lines)
@@ -381,4 +379,3 @@ class DockerClient:
         except Exception as e:
             logger.error("Ошибка загрузки файла в контейнер %s: %s", name_or_id, e)
             return False
-

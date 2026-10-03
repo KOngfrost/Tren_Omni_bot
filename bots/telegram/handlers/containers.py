@@ -38,7 +38,11 @@ async def cmd_restart_menu(
     ]
 
     keyboard_buttons.append(
-        [InlineKeyboardButton(text="♻️ Перезапустить все сервисы", callback_data="restart:all_project")]
+        [
+            InlineKeyboardButton(
+                text="♻️ Перезапустить все сервисы", callback_data="restart:all_project"
+            )
+        ]
     )
     keyboard_buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="status:refresh")])
 
@@ -61,7 +65,9 @@ async def callback_restart_all(
     """Перезапуск всех проектных контейнеров."""
     await callback.answer("Перезапуск проектных сервисов...")
     if callback.message:
-        await callback.message.edit_text("⏳ <b>Перезапуск проектных сервисов...</b>", parse_mode="HTML")
+        await callback.message.edit_text(
+            "⏳ <b>Перезапуск проектных сервисов...</b>", parse_mode="HTML"
+        )
 
     containers = await docker_client.list_containers(all=True)
     restarted = []
@@ -71,9 +77,15 @@ async def callback_restart_all(
             if ok:
                 restarted.append(c.name)
 
-    result_text = f"✅ Перезапущены: {', '.join(restarted)}" if restarted else "⚠️ Нет сервисов для перезапуска."
+    result_text = (
+        f"✅ Перезапущены: {', '.join(restarted)}"
+        if restarted
+        else "⚠️ Нет сервисов для перезапуска."
+    )
     kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="📊 К статусу", callback_data="status:refresh")]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📊 К статусу", callback_data="status:refresh")]
+        ]
     )
     if callback.message:
         await callback.message.edit_text(result_text, reply_markup=kb, parse_mode="HTML")
@@ -91,7 +103,9 @@ async def callback_restart_single(
 
     await callback.answer(f"Перезапуск {target}...")
     if callback.message:
-        await callback.message.edit_text(f"⏳ <b>Перезапуск контейнера <code>{target}</code>...</b>", parse_mode="HTML")
+        await callback.message.edit_text(
+            f"⏳ <b>Перезапуск контейнера <code>{target}</code>...</b>", parse_mode="HTML"
+        )
 
     ok, msg = await docker_client.restart_container(target)
     emoji = "✅" if ok else "❌"
@@ -153,7 +167,9 @@ async def callback_view_logs(
     raw_logs = await docker_client.get_container_logs(target, tail=35)
     safe_logs = html.escape(raw_logs[-3500:])
 
-    text = f"📋 <b>Последние логи: <code>{target}</code></b>\n\n<pre><code>{safe_logs}</code></pre>"
+    text = (
+        f"📋 <b>Последние логи: <code>{target}</code></b>\n\n<pre><code>{safe_logs}</code></pre>"
+    )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -197,7 +213,9 @@ async def callback_reboot_confirm(
 ) -> None:
     """Подтверждение перезапуска: перезапуск контейнеров проекта."""
     if callback.message:
-        await callback.message.edit_text("⏳ <b>Инициируется перезапуск сервисов OSS Bot...</b>", parse_mode="HTML")
+        await callback.message.edit_text(
+            "⏳ <b>Инициируется перезапуск сервисов OSS Bot...</b>", parse_mode="HTML"
+        )
     await callback.answer("Перезапуск запущен!")
 
     try:
@@ -212,9 +230,13 @@ async def callback_reboot_confirm(
                 else:
                     failed.append(c.name)
 
-        res = "✅ <b>Сервисы успешно перезапущены:</b>\n" + "\n".join(f"• <code>{n}</code>" for n in restarted)
+        res = "✅ <b>Сервисы успешно перезапущены:</b>\n" + "\n".join(
+            f"• <code>{n}</code>" for n in restarted
+        )
         if failed:
-            res += "\n\n❌ <b>Не удалось перезапустить:</b>\n" + "\n".join(f"• <code>{n}</code>" for n in failed)
+            res += "\n\n❌ <b>Не удалось перезапустить:</b>\n" + "\n".join(
+                f"• <code>{n}</code>" for n in failed
+            )
         res += "\n\n💡 <i>Примечание: перезагрузка физического сервера выполняется через SSH-терминал (`sudo reboot`).</i>"
         if callback.message:
             await callback.message.edit_text(res, parse_mode="HTML")

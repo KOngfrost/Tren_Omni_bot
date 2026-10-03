@@ -25,12 +25,14 @@ def get_main_reply_keyboard(webapp_url: str | None = None) -> ReplyKeyboardMarku
     if url and url.startswith("https://"):
         rows.append([KeyboardButton(text="📱 Веб-панель", web_app=WebAppInfo(url=url))])
 
-    rows.extend([
-        [KeyboardButton(text="📊 Статус"), KeyboardButton(text="📈 Статистика")],
-        [KeyboardButton(text="🔄 Перезапуск"), KeyboardButton(text="📋 Логи")],
-        [KeyboardButton(text="💾 Бэкап"), KeyboardButton(text="🚧 Техработы")],
-        [KeyboardButton(text="🔐 2FA"), KeyboardButton(text="ℹ️ Помощь")],
-    ])
+    rows.extend(
+        [
+            [KeyboardButton(text="📊 Статус"), KeyboardButton(text="📈 Статистика")],
+            [KeyboardButton(text="🔄 Перезапуск"), KeyboardButton(text="📋 Логи")],
+            [KeyboardButton(text="💾 Бэкап"), KeyboardButton(text="🚧 Техработы")],
+            [KeyboardButton(text="🔐 2FA"), KeyboardButton(text="ℹ️ Помощь")],
+        ]
+    )
 
     return ReplyKeyboardMarkup(
         keyboard=rows,
@@ -52,16 +54,20 @@ def get_status_inline_keyboard(
     buttons: list[list[InlineKeyboardButton]] = []
 
     if url and url.startswith("https://"):
-        buttons.append([
-            InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
+            ]
+        )
 
     # Переключатель вида карточки: активный срез помечен галочкой.
     if view == STATUS_VIEW_APP:
         infra_btn = InlineKeyboardButton(
             text="🖥 Железо и контейнеры", callback_data="status:view:infra"
         )
-        app_btn = InlineKeyboardButton(text="✅ Показатели сайта и бота", callback_data="status:noop")
+        app_btn = InlineKeyboardButton(
+            text="✅ Показатели сайта и бота", callback_data="status:noop"
+        )
     else:
         infra_btn = InlineKeyboardButton(
             text="✅ Железо и контейнеры", callback_data="status:noop"
@@ -71,20 +77,22 @@ def get_status_inline_keyboard(
         )
     buttons.append([infra_btn, app_btn])
 
-    buttons.extend([
+    buttons.extend(
         [
-            InlineKeyboardButton(text="🔄 Обновить", callback_data="status:refresh"),
-            InlineKeyboardButton(text="🔄 Перезапуск", callback_data="menu:restart"),
-        ],
-        [
-            InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
-            InlineKeyboardButton(text="💾 Бэкап БД", callback_data="backup:create"),
-        ],
-        [
-            InlineKeyboardButton(text="🚧 Техработы", callback_data="maint:menu"),
-            InlineKeyboardButton(text="🔐 2FA", callback_data="2fa:menu"),
-        ],
-    ])
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="status:refresh"),
+                InlineKeyboardButton(text="🔄 Перезапуск", callback_data="menu:restart"),
+            ],
+            [
+                InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
+                InlineKeyboardButton(text="💾 Бэкап БД", callback_data="backup:create"),
+            ],
+            [
+                InlineKeyboardButton(text="🚧 Техработы", callback_data="maint:menu"),
+                InlineKeyboardButton(text="🔐 2FA", callback_data="2fa:menu"),
+            ],
+        ]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -95,16 +103,22 @@ def get_panel_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardMa
     buttons: list[list[InlineKeyboardButton]] = []
 
     if url and url.startswith("https://"):
-        buttons.append([
-            InlineKeyboardButton(text="🚀 Запустить веб-панель", web_app=WebAppInfo(url=url)),
-        ])
-        buttons.append([
-            InlineKeyboardButton(text="🌐 Открыть в браузере", url=url),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(text="🚀 Запустить веб-панель", web_app=WebAppInfo(url=url)),
+            ]
+        )
+        buttons.append(
+            [
+                InlineKeyboardButton(text="🌐 Открыть в браузере", url=url),
+            ]
+        )
 
-    buttons.append([
-        InlineKeyboardButton(text="📊 Статус сервера", callback_data="status:refresh"),
-    ])
+    buttons.append(
+        [
+            InlineKeyboardButton(text="📊 Статус сервера", callback_data="status:refresh"),
+        ]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -112,9 +126,13 @@ def get_panel_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardMa
 def get_maintenance_inline_keyboard(enabled: bool) -> InlineKeyboardMarkup:
     """Инлайн-клавиатура управления режимом техработ."""
     if enabled:
-        action_btn = InlineKeyboardButton(text="🟢 Отключить техработы", callback_data="maint:disable")
+        action_btn = InlineKeyboardButton(
+            text="🟢 Отключить техработы", callback_data="maint:disable"
+        )
     else:
-        action_btn = InlineKeyboardButton(text="🔴 Включить техработы", callback_data="maint:enable")
+        action_btn = InlineKeyboardButton(
+            text="🔴 Включить техработы", callback_data="maint:enable"
+        )
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -151,20 +169,26 @@ def get_metrics_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboard
     buttons: list[list[InlineKeyboardButton]] = []
 
     if url and url.startswith("https://"):
-        buttons.append([
-            InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
+            ]
+        )
 
-    buttons.extend([
+    buttons.extend(
         [
-            InlineKeyboardButton(text="🔄 Обновить", callback_data="metrics:refresh"),
-            InlineKeyboardButton(text="🖥 Железо и контейнеры", callback_data="status:view:infra"),
-        ],
-        [
-            InlineKeyboardButton(text="📊 Статус сервера", callback_data="status:view:infra"),
-            InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
-        ],
-    ])
+            [
+                InlineKeyboardButton(text="🔄 Обновить", callback_data="metrics:refresh"),
+                InlineKeyboardButton(
+                    text="🖥 Железо и контейнеры", callback_data="status:view:infra"
+                ),
+            ],
+            [
+                InlineKeyboardButton(text="📊 Статус сервера", callback_data="status:view:infra"),
+                InlineKeyboardButton(text="📋 Логи", callback_data="menu:logs"),
+            ],
+        ]
+    )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -174,7 +198,9 @@ def get_reboot_confirmation_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔄 Да, перезапустить сервисы", callback_data="reboot:confirm"),
+                InlineKeyboardButton(
+                    text="🔄 Да, перезапустить сервисы", callback_data="reboot:confirm"
+                ),
                 InlineKeyboardButton(text="❌ Отмена", callback_data="reboot:cancel"),
             ]
         ]

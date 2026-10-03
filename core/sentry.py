@@ -23,7 +23,9 @@ def _scrub_sentry_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str
         data = request.get("data")
         if isinstance(data, dict):
             for k in list(data.keys()):
-                if any(s in k.lower() for s in ("password", "code", "token", "secret", "csrf_token")):
+                if any(
+                    s in k.lower() for s in ("password", "code", "token", "secret", "csrf_token")
+                ):
                     data[k] = "[FILTERED]"
 
     # Очистка данных пользователя

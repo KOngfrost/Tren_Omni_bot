@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 router = Router(name="status")
 
 
-async def render_metrics_content(webapp_url: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
+async def render_metrics_content(
+    webapp_url: str | None = None,
+) -> tuple[str, InlineKeyboardMarkup]:
     """Сформировать текст и клавиатуру карточки бизнес-метрик сайта и бота."""
     metrics = await collect_app_metrics()
     return format_app_metrics_message(metrics), get_metrics_inline_keyboard(webapp_url)
@@ -53,18 +55,10 @@ async def render_status_content(
     containers = await docker_client.list_containers(all=True)
 
     maint_info = await get_maintenance_info()
-    maint_status = (
-        "🔴 <b>ВКЛЮЧЕН</b>"
-        if maint_info.get("enabled")
-        else "🟢 <b>Выключен</b>"
-    )
+    maint_status = "🔴 <b>ВКЛЮЧЕН</b>" if maint_info.get("enabled") else "🟢 <b>Выключен</b>"
 
     two_factor_on = await is_two_factor_enabled()
-    two_factor_status = (
-        "🟢 <b>ВКЛЮЧЕНА</b>"
-        if two_factor_on
-        else "⚪ <b>Отключена</b>"
-    )
+    two_factor_status = "🟢 <b>ВКЛЮЧЕНА</b>" if two_factor_on else "⚪ <b>Отключена</b>"
 
     lines = [
         metrics_text,
@@ -87,7 +81,9 @@ async def render_status_content(
             if "migrate" in c.name and "Exited (0)" in status_clean:
                 lines.append(f"⚪ <code>{c.name}</code> — Миграция БД (выполнена)")
             else:
-                lines.append(f"{c.status_emoji} <code>{c.name}</code> — {status_clean}{health_part}")
+                lines.append(
+                    f"{c.status_emoji} <code>{c.name}</code> — {status_clean}{health_part}"
+                )
 
     keyboard = get_status_inline_keyboard(webapp_url)
     return "\n".join(lines), keyboard

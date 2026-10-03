@@ -1,18 +1,17 @@
 """Тесты для режима технических работ (Maintenance Mode)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, MagicMock
-from starlette.requests import Request
-from starlette.responses import Response
 
+from bots.vk.bot import VKMaintenanceMiddleware
 from core.maintenance import (
     get_maintenance_info,
     is_maintenance_mode,
     set_maintenance_mode,
 )
 from web.main import app
-from bots.vk.bot import VKMaintenanceMiddleware
 
 
 @pytest.mark.asyncio

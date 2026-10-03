@@ -206,7 +206,7 @@ async def knowledge_export_xlsx(request: Request, user=Depends(require_auth)):
 
 
 @router.post("/import")
-async def import_knowledge_base(request: Request, user=Depends(require_writer)):
+async def import_knowledge_base(request: Request, user=Depends(require_writer)):  # noqa: C901
     """Массовая загрузка базы знаний из файла Excel/CSV или текстовой вставки."""
     form = await request.form()
     # SEC-10: чтение файла с лимитом размера (5 МБ).

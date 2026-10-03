@@ -383,7 +383,10 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                     or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
                 )
 
-            new_scope = [*base_scope, or_(Ticket.response_text.is_(None), Ticket.response_text == "")]
+            new_scope = [
+                *base_scope,
+                or_(Ticket.response_text.is_(None), Ticket.response_text == ""),
+            ]
             reply_scope = [
                 *base_scope,
                 and_(Ticket.response_text.is_not(None), Ticket.response_text != ""),
@@ -430,36 +433,40 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                 )
 
                 if is_reply:
-                    items.append({
-                        "id": t.id,
-                        "type": "student_reply",
-                        "type_label": "Ответ студента",
-                        "title": f"Ответ по заявке #{t.id}",
-                        "icon": "message-square",
-                        "badge_class": "badge-reply",
-                        "department": dept_name,
-                        # Помечаем общие обращения: у них нет отдела-владельца.
-                        "is_general": is_general,
-                        "general_label": "Общее обращение" if is_general else "",
-                        "text": preview or "Студент направил дополнение к заявке",
-                        "time": created_str,
-                        "url": f"/tickets/?open={t.id}",
-                    })
+                    items.append(
+                        {
+                            "id": t.id,
+                            "type": "student_reply",
+                            "type_label": "Ответ студента",
+                            "title": f"Ответ по заявке #{t.id}",
+                            "icon": "message-square",
+                            "badge_class": "badge-reply",
+                            "department": dept_name,
+                            # Помечаем общие обращения: у них нет отдела-владельца.
+                            "is_general": is_general,
+                            "general_label": "Общее обращение" if is_general else "",
+                            "text": preview or "Студент направил дополнение к заявке",
+                            "time": created_str,
+                            "url": f"/tickets/?open={t.id}",
+                        }
+                    )
                 else:
-                    items.append({
-                        "id": t.id,
-                        "type": "new_ticket",
-                        "type_label": "Новая заявка",
-                        "title": f"Заявка #{t.id}",
-                        "icon": "ticket",
-                        "badge_class": "badge-ticket",
-                        "department": dept_name,
-                        "is_general": is_general,
-                        "general_label": "Общее обращение" if is_general else "",
-                        "text": preview or (t.topic or "Новое обращение"),
-                        "time": created_str,
-                        "url": f"/tickets/?open={t.id}",
-                    })
+                    items.append(
+                        {
+                            "id": t.id,
+                            "type": "new_ticket",
+                            "type_label": "Новая заявка",
+                            "title": f"Заявка #{t.id}",
+                            "icon": "ticket",
+                            "badge_class": "badge-ticket",
+                            "department": dept_name,
+                            "is_general": is_general,
+                            "general_label": "Общее обращение" if is_general else "",
+                            "text": preview or (t.topic or "Новое обращение"),
+                            "time": created_str,
+                            "url": f"/tickets/?open={t.id}",
+                        }
+                    )
 
             if is_super:
                 pstmt = (
@@ -475,18 +482,20 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                         p_text = p_text[:90] + "..."
                     p_time = f"{p.created_at.strftime('%d.%m %H:%M')} МСК" if p.created_at else ""
                     partner_title = p.user_name or p.contact_info or f"Заявка #{p.id}"
-                    items.append({
-                        "id": p.id,
-                        "type": "partnership",
-                        "type_label": "Партнёрство",
-                        "title": partner_title,
-                        "icon": "handshake",
-                        "badge_class": "badge-partner",
-                        "department": "Заявка на сотрудничество",
-                        "text": p_text or "Новое партнёрское предложение",
-                        "time": p_time,
-                        "url": "/partnerships/",
-                    })
+                    items.append(
+                        {
+                            "id": p.id,
+                            "type": "partnership",
+                            "type_label": "Партнёрство",
+                            "title": partner_title,
+                            "icon": "handshake",
+                            "badge_class": "badge-partner",
+                            "department": "Заявка на сотрудничество",
+                            "text": p_text or "Новое партнёрское предложение",
+                            "time": p_time,
+                            "url": "/partnerships/",
+                        }
+                    )
 
     except Exception:
         logger.exception("API: не удалось получить счетчики")
@@ -497,17 +506,23 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
     first_new_ticket = next((i for i in items if i["type"] == "new_ticket"), None)
     first_reply = next((i for i in items if i["type"] == "student_reply"), None)
 
-    return api_success({
-        "total": total,
-        "total_notifications": total,
-        "new_tickets": new_tickets_count,
-        "new_tickets_count": new_tickets_count,
-        "student_replies": student_replies_count,
-        "student_replies_count": student_replies_count,
-        "new_partnerships": new_partnerships_count,
-        "new_partnerships_count": new_partnerships_count,
-        "new_ticket_direct_url": first_new_ticket["url"] if (new_tickets_count == 1 and first_new_ticket) else "/tickets/?status=new",
-        "student_reply_direct_url": first_reply["url"] if (student_replies_count == 1 and first_reply) else "/tickets/?status=new",
-        "partnership_direct_url": "/partnerships/",
-        "items": items,
-    })
+    return api_success(
+        {
+            "total": total,
+            "total_notifications": total,
+            "new_tickets": new_tickets_count,
+            "new_tickets_count": new_tickets_count,
+            "student_replies": student_replies_count,
+            "student_replies_count": student_replies_count,
+            "new_partnerships": new_partnerships_count,
+            "new_partnerships_count": new_partnerships_count,
+            "new_ticket_direct_url": first_new_ticket["url"]
+            if (new_tickets_count == 1 and first_new_ticket)
+            else "/tickets/?status=new",
+            "student_reply_direct_url": first_reply["url"]
+            if (student_replies_count == 1 and first_reply)
+            else "/tickets/?status=new",
+            "partnership_direct_url": "/partnerships/",
+            "items": items,
+        }
+    )

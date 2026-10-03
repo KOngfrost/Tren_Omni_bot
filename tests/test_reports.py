@@ -198,6 +198,7 @@ async def test_report_run_deduplication(db_session_maker):
 
 async def test_send_report_to_vk_uploads_bytes_and_sends_document(monkeypatch):
     import os
+
     from core import reporting
 
     class FakeUploader:

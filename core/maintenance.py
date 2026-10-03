@@ -11,8 +11,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 import tempfile
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,7 +47,7 @@ def _read_local_fallback() -> dict[str, Any] | None:
     """Прочитать состояние из резервного файла на диске."""
     try:
         if os.path.exists(MAINTENANCE_FALLBACK_FILE):
-            with open(MAINTENANCE_FALLBACK_FILE, "r", encoding="utf-8") as f:
+            with open(MAINTENANCE_FALLBACK_FILE, encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
         logger.debug("Не удалось прочитать локальный файл техработ: %s", e)

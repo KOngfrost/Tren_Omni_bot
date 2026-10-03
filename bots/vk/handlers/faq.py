@@ -46,9 +46,7 @@ async def faq_handler(message: Message):
     for idx, dname in enumerate(dept_names, start=1):
         lines.append(f"{idx}. {dname}")
     lines.append(f"{len(dept_names) + 1}. Все отделы")
-    lines.append(
-        "\nЧтобы выбрать тему, напишите её название или номер (или нажмите кнопку ниже):"
-    )
+    lines.append("\nЧтобы выбрать тему, напишите её название или номер (или нажмите кнопку ниже):")
     keyboard = build_faq_departments_keyboard(dept_names)
     await message.answer("\n".join(lines), keyboard=keyboard)
 
@@ -110,9 +108,7 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
         "\n💡 Чтобы прочитать ответ, напишите номер вопроса (например: 1) или нажмите кнопку с его номером:"
     )
 
-    keyboard = build_faq_items_keyboard(
-        item_ids, page=page, has_more=page + 1 < total_pages
-    )
+    keyboard = build_faq_items_keyboard(item_ids, page=page, has_more=page + 1 < total_pages)
     await message.answer("\n".join(lines), keyboard=keyboard)
 
 
@@ -136,6 +132,7 @@ async def faq_node_handler(message: Message):
 
     # Сначала проверяем, находится ли пользователь на странице вопросов
     from bots.vk.handlers.pagination import get_page_state
+
     state = await get_page_state(message.from_id)
     node_id = parsed_num
     if state and state.get("kind") in (KIND_FAQ_DEPARTMENTS, KIND_FAQ_SEARCH):
@@ -229,9 +226,7 @@ async def _render_faq_search_page(message: Message, page: int, meta: dict[str, A
         lines.append(f"\n📄 Страница {page + 1} из {total_pages}")
 
     lines.append("\n💡 Выберите номер вопроса на клавиатуре или отправьте номер:")
-    keyboard = build_faq_items_keyboard(
-        item_ids, page=page, has_more=page + 1 < total_pages
-    )
+    keyboard = build_faq_items_keyboard(item_ids, page=page, has_more=page + 1 < total_pages)
     await message.answer("\n".join(lines), keyboard=keyboard)
 
 

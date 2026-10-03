@@ -100,4 +100,3 @@ _DUMMY_PASSWORD_HASH = hash_password("timing_attack_mitigation_token")
 def verify_dummy_password(password: str) -> None:
     """Выполнить фиктивную проверку пароля для выравнивания времени ответа (anti-timing attack)."""
     verify_password(password, _DUMMY_PASSWORD_HASH)
-

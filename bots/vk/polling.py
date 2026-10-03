@@ -77,9 +77,7 @@ class RobustBotPolling(BotPolling):
                 )
                 server_data = res["response"]
                 touch_heartbeat()
-                logger.debug(
-                    "LongPoll сервер успешно получен (ts=%s)", server_data.get("ts")
-                )
+                logger.debug("LongPoll сервер успешно получен (ts=%s)", server_data.get("ts"))
                 return server_data
             except Exception as err:
                 if attempt >= self.GET_SERVER_MAX_RETRIES:
@@ -152,9 +150,7 @@ class RobustBotPolling(BotPolling):
         # Инициализация первого сервера
         server = self.restore_server_ts(await self.get_server())
         touch_heartbeat()
-        logger.info(
-            "Запущен отказоустойчивый цикл LongPoll для сообщества %s", self.group_id
-        )
+        logger.info("Запущен отказоустойчивый цикл LongPoll для сообщества %s", self.group_id)
 
         while not self._stop_event.is_set():
             try:
@@ -195,7 +191,7 @@ class RobustBotPolling(BotPolling):
 
                 await asyncio.to_thread(self.save_server_ts, server)
 
-            except (ClientConnectionError, asyncio.TimeoutError, VKAPIError, Exception) as exc:
+            except (TimeoutError, ClientConnectionError, VKAPIError, Exception) as exc:
                 consecutive_errors += 1
                 logger.error(
                     "Сбой соединения LongPoll (%s: %s). Ошибок подряд: %d",

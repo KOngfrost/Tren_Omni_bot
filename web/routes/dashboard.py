@@ -69,16 +69,18 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
                     await session.scalar(
                         select(func.count(Ticket.id))
                         .where(*scope)
-                        .where(Ticket.status.in_([TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO]))
+                        .where(
+                            Ticket.status.in_(
+                                [TicketStatus.COMPLETED, TicketStatus.COMPLETED_AUTO]
+                            )
+                        )
                         .where(Ticket.updated_at >= day_start_app_tz())
                     )
                 )
                 or 0
             )
 
-            departments_count = int(
-                await session.scalar(select(func.count(Department.id))) or 0
-            )
+            departments_count = int(await session.scalar(select(func.count(Department.id))) or 0)
 
             # Последние заявки
             recent_stmt = (
@@ -89,7 +91,9 @@ async def dashboard(request: Request, user: dict = Depends(require_auth)):
             )
             if not is_super:
                 if dept_id is not None:
-                    recent_stmt = recent_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                    recent_stmt = recent_stmt.where(
+                        or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                    )
                 else:
                     recent_stmt = recent_stmt.where(Ticket.department_id.is_(None))
             recent_tickets = list((await session.execute(recent_stmt)).scalars().all())

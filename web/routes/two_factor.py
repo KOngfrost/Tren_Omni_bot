@@ -66,15 +66,15 @@ async def _verified_user_data(
 
     if not bootstrap_session_still_valid(user_data):
         await otp_store.cancel(request)
-        request.session["flash_error"] = "Резервный вход отключён или перенастроен. Войдите заново."
+        request.session["flash_error"] = (
+            "Резервный вход отключён или перенастроен. Войдите заново."
+        )
         return RedirectResponse(url="/auth/login", status_code=302)
 
     two_factor_on = await is_two_factor_enabled()
     if two_factor_on and not _bootstrap_2fa_channel():
         await otp_store.cancel(request)
-        request.session["flash_error"] = (
-            "Доверенный канал 2FA больше не настроен — вход отменён."
-        )
+        request.session["flash_error"] = "Доверенный канал 2FA больше не настроен — вход отменён."
         return RedirectResponse(url="/auth/login", status_code=302)
 
     return {

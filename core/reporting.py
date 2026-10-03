@@ -9,12 +9,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import aiosmtplib
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from vkbottle.tools.uploader import DocMessagesUploader
 
 from core.config import settings
 from core.database import async_session_maker
-from core.models import Admin, Department, ReportRun, Ticket, TicketStatus, User, UserRole
+from core.models import Admin, TicketStatus, User, UserRole
 from core.reports.daily import (
     DEFAULT_DEPTS,
     _DeptRef,
@@ -23,7 +23,6 @@ from core.reports.daily import (
     build_daily_report,
     get_app_tz,
 )
-from core.ticket_service import COMPLETED_STATUSES, status_label
 from core.reports.period import (
     REPORT_CHUNK_SIZE,
     _fetch_report_data,
@@ -32,40 +31,14 @@ from core.reports.period import (
     is_report_already_sent,
     mark_report_sent,
 )
+from core.ticket_service import COMPLETED_STATUSES, status_label
 
 logger = logging.getLogger(__name__)
-
-# Размер пакета (chunk) выборки заявок для отчёта. Данные загружаются целиком
-# через result.all(), а не стримятся. Результаты конвертируются в лёгкие DTO
-# для снижения потребления памяти на больших отчётах. Переопределяется через env.
-REPORT_CHUNK_SIZE = int(os.environ.get("REPORT_CHUNK_SIZE", "1000"))
-
-
-
 
 # Dev-фоллбэк: список отделов по умолчанию. Используется ТОЛЬКО если в базе
 # ещё нет ни одного отдела, чтобы отчёт формировался в пустой системе.
 # В production отделы создаёт администратор через панель управления, и
 # книга Excel получает по вкладке на каждый отдел из БД (Ошибка #16).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 async def send_report_email(report_bytes: bytes, filename: str) -> None:
@@ -108,7 +81,6 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
     if not report_bytes:
         raise ValueError("Сформированный файл отчёта пуст (0 байт)")
 
-    import os
     import tempfile
 
     uploader = DocMessagesUploader(api)
@@ -188,18 +160,6 @@ def parse_report_date(text: str) -> date | None:
         except ValueError:
             continue
     return None
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bool:
@@ -345,6 +305,7 @@ def start_report_scheduler(api) -> asyncio.Task:
 
 
 __all__ = [
+    "COMPLETED_STATUSES",
     "DEFAULT_DEPTS",
     "REPORT_CHUNK_SIZE",
     "TicketStatus",
@@ -366,6 +327,5 @@ __all__ = [
     "send_report_email",
     "send_report_to_vk",
     "start_report_scheduler",
-    "COMPLETED_STATUSES",
     "status_label",
 ]

@@ -1,9 +1,11 @@
 """Хендлеры для студентов: меню, обратная связь, тикеты, FSM создания обращений."""
 
 import logging
+import os
 import re
 from typing import Any
 
+from sqlalchemy import select
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
 
@@ -37,9 +39,7 @@ from bots.vk.keyboards import (
 )
 from core.bot_core import BotCore
 from core.commands import (
-    COMMAND_CREATE_TICKET,
     COMMAND_REVEAL_IDENTITY,
-    COMMAND_TICKET_DETAILS_PATTERN,
     COMMANDS_ANONYMOUS,
     COMMANDS_ANONYMOUS_STAY,
     COMMANDS_CANCEL,
@@ -55,8 +55,6 @@ from core.commands import (
     COMMANDS_WITHOUT_DEPT,
     STUDENT_REPLY_PATTERN,
 )
-from sqlalchemy import select
-
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import PartnershipRequest, User
@@ -68,7 +66,6 @@ from core.ticket_service import (
     format_ticket_details,
     format_ticket_list,
     get_ticket_messages,
-    get_user_ticket_by_id,
     get_user_ticket_local_number,
     get_user_tickets,
     get_user_tickets_mapping,
@@ -82,8 +79,6 @@ student_labeler = BotLabeler()
 
 # === Ограничение частоты подачи обращений (SEC-08) ===
 # Значения настраиваются через переменные окружения (.env)
-import os
-
 TICKET_RATE_LIMIT = int(os.getenv("VK_TICKET_RATE_LIMIT", "3"))
 TICKET_RATE_WINDOW_SECONDS = int(os.getenv("VK_TICKET_RATE_WINDOW_SECONDS", "300"))
 
@@ -174,9 +169,7 @@ async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, A
         text += f"\n\n📄 Страница {page + 1} из {total_pages}"
     await message.answer(
         text,
-        keyboard=build_tickets_keyboard(
-            ticket_ids, page=page, has_more=page + 1 < total_pages
-        ),
+        keyboard=build_tickets_keyboard(ticket_ids, page=page, has_more=page + 1 < total_pages),
     )
 
 
@@ -375,7 +368,9 @@ async def ticket_department_choice_handler(message: Message):
         dept_label = "Без отдела (Общий)"
     else:
         departments = await _get_department_names()
-        matched = [d for d in departments if d.lower() == text.lower() or d.lower() in text.lower()]
+        matched = [
+            d for d in departments if d.lower() == text.lower() or d.lower() in text.lower()
+        ]
         if not matched:
             await message.answer(
                 "Пожалуйста, выберите отдел из предложенных кнопок или нажмите «Без отдела».\n"

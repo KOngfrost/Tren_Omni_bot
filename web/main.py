@@ -163,6 +163,7 @@ setup_middleware(app)
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+
 from web.dependencies import require_auth
 
 if settings.ENABLE_API_DOCS or not settings.IS_PRODUCTION:
@@ -173,12 +174,13 @@ if settings.ENABLE_API_DOCS or not settings.IS_PRODUCTION:
 
     @app.get("/api/docs", include_in_schema=False)
     async def get_documentation(user: dict = Depends(require_auth)):
-        return get_swagger_ui_html(openapi_url="/api/openapi.json", title=f"{app.title} - Swagger UI")
+        return get_swagger_ui_html(
+            openapi_url="/api/openapi.json", title=f"{app.title} - Swagger UI"
+        )
 
     @app.get("/api/redoc", include_in_schema=False)
     async def get_redoc_documentation(user: dict = Depends(require_auth)):
         return get_redoc_html(openapi_url="/api/openapi.json", title=f"{app.title} - ReDoc")
-
 
 
 # Static

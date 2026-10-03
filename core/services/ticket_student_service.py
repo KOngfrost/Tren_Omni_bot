@@ -40,7 +40,7 @@ async def create_ticket(
             department=department,
             topic=topic,
             description=description,
-            status=TicketStatus.NEW if keep_identity else TicketStatus.ANONYMOUS,
+            status=TicketStatus.NEW,
             is_anonymous=not keep_identity,
             auto_closed=False,
         )

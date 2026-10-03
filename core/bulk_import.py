@@ -18,14 +18,14 @@
 import asyncio
 import csv
 import io
-from typing import Any
-
-import openpyxl
-from openpyxl.styles import Alignment, Font, PatternFill
 
 # === Ограничения безопасности (SEC-10): защита от Zip/XML-бомб ===
 # Значения читаются из настроек окружения (.env)
 import os
+from typing import Any
+
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
 
 MAX_IMPORT_FILE_SIZE = int(os.getenv("MAX_IMPORT_FILE_SIZE", str(5 * 1024 * 1024)))
 MAX_IMPORT_ROWS = int(os.getenv("MAX_IMPORT_ROWS", "1000"))
@@ -62,9 +62,13 @@ async def read_import_upload_async(form: Any) -> tuple[bytes | None, str | None,
         return None, None, None
     file_bytes = await file_upload.read(MAX_IMPORT_FILE_SIZE + 1)
     if file_bytes and len(file_bytes) > MAX_IMPORT_FILE_SIZE:
-        return None, None, (
-            f"Файл слишком большой: максимум {MAX_IMPORT_FILE_SIZE // (1024 * 1024)} МБ. "
-            "Разделите файл на части."
+        return (
+            None,
+            None,
+            (
+                f"Файл слишком большой: максимум {MAX_IMPORT_FILE_SIZE // (1024 * 1024)} МБ. "
+                "Разделите файл на части."
+            ),
         )
     return file_bytes, file_upload.filename, None
 
@@ -384,12 +388,14 @@ def export_faq_xlsx(nodes: list[Any]) -> bytes:
 
     for node in nodes:
         dept_name = node.department.name if getattr(node, "department", None) else "—"
-        ws.append([
-            node.id,
-            _sanitize_excel_cell(dept_name),
-            _sanitize_excel_cell(node.question),
-            _sanitize_excel_cell(node.final_answer or "")
-        ])
+        ws.append(
+            [
+                node.id,
+                _sanitize_excel_cell(dept_name),
+                _sanitize_excel_cell(node.question),
+                _sanitize_excel_cell(node.final_answer or ""),
+            ]
+        )
 
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 25
@@ -421,12 +427,14 @@ def export_knowledge_xlsx(items: list[Any]) -> bytes:
 
     for item in items:
         dept_name = item.department.name if getattr(item, "department", None) else "—"
-        ws.append([
-            item.id,
-            _sanitize_excel_cell(dept_name),
-            _sanitize_excel_cell(item.keywords),
-            _sanitize_excel_cell(item.answer)
-        ])
+        ws.append(
+            [
+                item.id,
+                _sanitize_excel_cell(dept_name),
+                _sanitize_excel_cell(item.keywords),
+                _sanitize_excel_cell(item.answer),
+            ]
+        )
 
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 25

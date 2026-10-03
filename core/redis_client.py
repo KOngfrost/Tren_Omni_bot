@@ -1,6 +1,5 @@
 """Асинхронный клиент Redis с поддержкой пула соединений и graceful fallback."""
 
-import contextlib
 import logging
 import re
 import time

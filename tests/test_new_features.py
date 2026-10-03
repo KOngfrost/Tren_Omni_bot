@@ -148,9 +148,7 @@ class TestAuditBuffer:
 
             async with db_session_maker() as session:
                 row = (
-                    await session.execute(
-                        select(Log).where(Log.action == "Тестовое действие")
-                    )
+                    await session.execute(select(Log).where(Log.action == "Тестовое действие"))
                 ).scalar_one_or_none()
             assert row is not None
             assert row.actor_name == "tester"
@@ -427,7 +425,9 @@ class TestPersonal2FA:
             assert dash.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_ordinary_admin_cannot_see_master_switch_but_sees_personal_2fa(self, db_session_maker, monkeypatch):
+    async def test_ordinary_admin_cannot_see_master_switch_but_sees_personal_2fa(
+        self, db_session_maker, monkeypatch
+    ):
         """Обычные администраторы отделов не видят общий мастер-переключатель 2FA, но видят личную 2FA."""
         monkeypatch.setattr(settings, "SESSION_SECRET_KEY", "test_settings_secret_key_123456789")
         monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
@@ -602,9 +602,7 @@ class TestPresenceWindow:
         """TTL берётся из конфигурации, а не зашит в код."""
         from core.admin_presence import ADMIN_PRESENCE_TTL_SECONDS
 
-        assert max(
-            30, int(settings.ADMIN_PRESENCE_TTL_SECONDS)
-        ) == ADMIN_PRESENCE_TTL_SECONDS
+        assert max(30, int(settings.ADMIN_PRESENCE_TTL_SECONDS)) == ADMIN_PRESENCE_TTL_SECONDS
 
 
 # ==========================================
@@ -635,7 +633,7 @@ class TestIcons:
         import re
 
         pattern = re.compile(
-            "[\U0001F300-\U0001FAFF\u2190-\u21FF\u2600-\u27BF\u2B00-\u2BFF\u25CB\u25CF]"
+            "[\U0001f300-\U0001faff\u2190-\u21ff\u2600-\u27bf\u2b00-\u2bff\u25cb\u25cf]"
         )
         offenders = []
         for path in glob.glob("web/templates/*.html"):
@@ -652,6 +650,7 @@ class TestGeneralTicketsAndBadges:
     def test_style_css_light_theme_badges(self):
         """В style.css явно определены светлые стили для .badge-secondary без тёмных дефолтов."""
         from pathlib import Path
+
         css_text = Path("web/static/style.css").read_text(encoding="utf-8")
         assert 'html[data-theme="light"] .badge-secondary' in css_text
         assert 'html[data-theme="light"] .badge-info' in css_text
@@ -661,24 +660,37 @@ class TestGeneralTicketsAndBadges:
     async def test_general_ticket_accessible_by_all_admins(self):
         """Общее обращение (department_id is None) доступно любому администратору."""
         from unittest.mock import MagicMock, patch
+
         from web.routes.tickets import _load_ticket_for_user
 
         mock_general_ticket = MagicMock()
         mock_general_ticket.id = 777
         mock_general_ticket.department_id = None
 
-        dept_admin_user = {"username": "admin_dept1", "role": "DEPARTMENT_ADMIN", "department_id": 1}
-        unassigned_admin_user = {"username": "admin_no_dept", "role": "DEPARTMENT_ADMIN", "department_id": None}
+        dept_admin_user = {
+            "username": "admin_dept1",
+            "role": "DEPARTMENT_ADMIN",
+            "department_id": 1,
+        }
+        unassigned_admin_user = {
+            "username": "admin_no_dept",
+            "role": "DEPARTMENT_ADMIN",
+            "department_id": None,
+        }
 
         # 1. Админ конкретного отдела (dept_id = 1) может открыть общее обращение
-        with patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket), \
-             patch("web.routes.tickets.get_admin_scope", return_value=(False, 1)):
+        with (
+            patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket),
+            patch("web.routes.tickets.get_admin_scope", return_value=(False, 1)),
+        ):
             loaded = await _load_ticket_for_user(777, dept_admin_user)
             assert loaded.id == 777
 
         # 2. Админ без отдела (dept_id = None) также может открыть общее обращение
-        with patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket), \
-             patch("web.routes.tickets.get_admin_scope", return_value=(False, None)):
+        with (
+            patch("web.routes.tickets._get_ticket", return_value=mock_general_ticket),
+            patch("web.routes.tickets.get_admin_scope", return_value=(False, None)),
+        ):
             loaded = await _load_ticket_for_user(777, unassigned_admin_user)
             assert loaded.id == 777
 
@@ -697,7 +709,10 @@ class TestGeneralTicketsAndBadges:
         )
         assert len(filters) == 1
         condition_str = str(filters[0])
-        assert "department_id = :department_id" in condition_str or "department_id IS NULL" in condition_str
+        assert (
+            "department_id = :department_id" in condition_str
+            or "department_id IS NULL" in condition_str
+        )
 
         # Для админа без отдела: возвращается только общее обращение
         filters_no_dept = _build_ticket_filters(
@@ -710,4 +725,3 @@ class TestGeneralTicketsAndBadges:
         )
         assert len(filters_no_dept) == 1
         assert "department_id IS NULL" in str(filters_no_dept[0])
-

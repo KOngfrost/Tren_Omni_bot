@@ -155,4 +155,3 @@ async def test_outbox_temporary_vk_failure_and_recovery(db_session_maker, monkey
         assert msg.attempts == 2
         assert msg.sent_at is not None
         assert msg.error is None
-

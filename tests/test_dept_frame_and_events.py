@@ -215,8 +215,10 @@ async def test_delete_web_user_button_and_endpoint(web_client):
 
 @pytest.mark.asyncio
 async def test_general_ticket_accessible_to_all_and_dept_ticket_protected():
-    from fastapi import HTTPException
     from unittest.mock import MagicMock, patch
+
+    from fastapi import HTTPException
+
     from web.routes.tickets import _load_ticket_for_user
 
     unassigned_user = {
@@ -235,15 +237,18 @@ async def test_general_ticket_accessible_to_all_and_dept_ticket_protected():
     dept_ticket.department_id = 5
 
     # Общее обращение доступно всем администраторам
-    with patch("web.routes.tickets._get_ticket", return_value=general_ticket), \
-         patch("web.routes.tickets.get_admin_scope", return_value=(False, None)):
+    with (
+        patch("web.routes.tickets._get_ticket", return_value=general_ticket),
+        patch("web.routes.tickets.get_admin_scope", return_value=(False, None)),
+    ):
         ticket = await _load_ticket_for_user(100, unassigned_user)
         assert ticket.id == 100
 
     # Обращение конкретного отдела защищено от администраторов другого отдела
-    with patch("web.routes.tickets._get_ticket", return_value=dept_ticket), \
-         patch("web.routes.tickets.get_admin_scope", return_value=(False, 2)):
+    with (
+        patch("web.routes.tickets._get_ticket", return_value=dept_ticket),
+        patch("web.routes.tickets.get_admin_scope", return_value=(False, 2)),
+    ):
         with pytest.raises(HTTPException) as exc_info:
             await _load_ticket_for_user(101, unassigned_user)
         assert exc_info.value.status_code == 403
-

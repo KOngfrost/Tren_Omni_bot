@@ -370,3 +370,27 @@ def test_match_department_in_memory_kb():
     matched = _match_department_in_memory("вопрос где стипендия", [dept1, dept2], [kb1])
     assert matched is not None
     assert matched.id == 2
+
+
+@pytest.mark.asyncio
+async def test_anonymous_ticket_has_normal_statuses(db_session_maker):
+    """Анонимные заявки имеют стандартный жизненный цикл статусов (NEW -> IN_PROGRESS -> COMPLETED)."""
+    from core.ticket_service import change_ticket_status, create_ticket
+
+    ticket = await create_ticket(
+        topic="Анонимный вопрос",
+        description="Текст анонимной заявки",
+        vk_id=12345,
+        keep_identity=False,
+    )
+    assert ticket.is_anonymous is True
+    assert ticket.status == TicketStatus.NEW
+    assert ticket.user_id is None
+
+    updated = await change_ticket_status(ticket.id, TicketStatus.IN_PROGRESS, "testadmin")
+    assert updated is not None
+    assert updated.status == TicketStatus.IN_PROGRESS
+
+    completed = await change_ticket_status(ticket.id, TicketStatus.COMPLETED, "testadmin")
+    assert completed is not None
+    assert completed.status == TicketStatus.COMPLETED

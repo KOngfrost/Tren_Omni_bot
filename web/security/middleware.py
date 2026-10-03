@@ -198,14 +198,12 @@ class DBRateLimiter:
 
             # Записать новую попытку
             insert_stmt = text(
-                "INSERT INTO crud_attempts (ip, action, attempted_at) "
-                "VALUES (:ip, :action, :now)"
+                "INSERT INTO crud_attempts (ip, action, attempted_at) VALUES (:ip, :action, :now)"
             )
             await session.execute(insert_stmt, {"ip": ip, "action": action, "now": now})
         else:
             count_stmt = text(
-                "SELECT COUNT(*) FROM login_attempts "
-                "WHERE ip = :ip AND attempted_at >= :cutoff"
+                "SELECT COUNT(*) FROM login_attempts WHERE ip = :ip AND attempted_at >= :cutoff"
             )
             count_result = await session.execute(count_stmt, {"ip": ip, "cutoff": cutoff})
             count = int(count_result.scalar() or 0)
@@ -215,8 +213,7 @@ class DBRateLimiter:
 
             # Записать новую попытку
             insert_stmt = text(
-                "INSERT INTO login_attempts (ip, attempted_at, success) "
-                "VALUES (:ip, :now, false)"
+                "INSERT INTO login_attempts (ip, attempted_at, success) VALUES (:ip, :now, false)"
             )
             await session.execute(insert_stmt, {"ip": ip, "now": now})
 
@@ -487,9 +484,11 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if (
-            path.startswith("/static/")
-            or path in ("/health", "/metrics", "/favicon.ico", "/maintenance")
+        if path.startswith("/static/") or path in (
+            "/health",
+            "/metrics",
+            "/favicon.ico",
+            "/maintenance",
         ):
             return await call_next(request)
 
@@ -505,15 +504,17 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             # Safely access session only if SessionMiddleware is present
             session_data = request.scope.get("session", {})
             user = session_data.get("user")
-            is_superadmin = (
-                isinstance(user, dict)
-                and user.get("role") in ("SUPERADMIN", "superadmin")
+            is_superadmin = isinstance(user, dict) and user.get("role") in (
+                "SUPERADMIN",
+                "superadmin",
             )
             if is_superadmin:
                 return await call_next(request)
 
             accept = request.headers.get("accept", "")
-            if path.startswith("/api/") or ("application/json" in accept and "text/html" not in accept):
+            if path.startswith("/api/") or (
+                "application/json" in accept and "text/html" not in accept
+            ):
                 info = await get_maintenance_info()
                 from starlette.responses import JSONResponse
 

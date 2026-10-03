@@ -6,7 +6,6 @@
 А также единый мега-артборд figma_all_screens_board.svg со всеми экранами.
 """
 
-import os
 from pathlib import Path
 
 FIGMA_DIR = Path(__file__).resolve().parent.parent / "figma"
@@ -45,6 +44,7 @@ CSS_DEFS = """
 </defs>
 """
 
+
 # Вспомогательные функции для Desktop
 def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
     menu_items = [
@@ -62,18 +62,26 @@ def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
     sidebar_links = []
     y = 150
     for key, label, icon_path in menu_items:
-        is_active = (key == active_item)
-        bg = ' fill="url(#accentGlow)" stroke="#FF4D9D" stroke-width="1"' if is_active else ' fill="transparent"'
+        is_active = key == active_item
+        bg = (
+            ' fill="url(#accentGlow)" stroke="#FF4D9D" stroke-width="1"'
+            if is_active
+            else ' fill="transparent"'
+        )
         text_color = "#FFFFFF" if is_active else "#9E9EA8"
         font_weight = "700" if is_active else "500"
-        indicator = f'<rect x="0" y="{y}" width="4" height="40" rx="2" fill="#FF4D9D"/>' if is_active else ''
+        indicator = (
+            f'<rect x="0" y="{y}" width="4" height="40" rx="2" fill="#FF4D9D"/>'
+            if is_active
+            else ""
+        )
 
         sidebar_links.append(f"""
         <g id="Nav-{key}" cursor="pointer">
             <rect x="12" y="{y}" width="226" height="40" rx="8"{bg}/>
             {indicator}
-            <path d="{icon_path}" stroke="{text_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" transform="translate(28, {y+10}) scale(0.8)"/>
-            <text x="56" y="{y+25}" fill="{text_color}" font-size="14" font-weight="{font_weight}">{label}</text>
+            <path d="{icon_path}" stroke="{text_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" transform="translate(28, {y + 10}) scale(0.8)"/>
+            <text x="56" y="{y + 25}" fill="{text_color}" font-size="14" font-weight="{font_weight}">{label}</text>
         </g>
         """)
         y += 48
@@ -93,7 +101,7 @@ def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
     <text x="32" y="50" fill="#FFFFFF" font-size="18" font-weight="800">OB</text>
     <text x="70" y="42" fill="#FFFFFF" font-size="16" font-weight="700">OSS Bot</text>
     <text x="70" y="58" fill="#7D7D8F" font-size="11">Панель управления v0.8.4.1</text>
-    
+
     <!-- Профиль пользователя -->
     <rect x="16" y="80" width="218" height="54" rx="10" fill="#181822" stroke="#252533" stroke-width="1"/>
     <circle cx="42" cy="107" r="16" fill="#FF4D9D" fill-opacity="0.2"/>
@@ -103,7 +111,7 @@ def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
     <text x="74" y="121" fill="#FF4D9D" font-size="10" font-weight="700">Суперадмин</text>
 
     <!-- Ссылки меню -->
-    {''.join(sidebar_links)}
+    {"".join(sidebar_links)}
 
     <!-- Нижняя кнопка выхода -->
     <g id="Logout-Button" transform="translate(16, 836)" cursor="pointer">
@@ -116,15 +124,15 @@ def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
 <g id="Header">
     <rect x="250" y="0" width="1190" height="70" fill="#121217" stroke="#1F1F2A" stroke-width="1"/>
     <text x="282" y="42" fill="#FFFFFF" font-size="20" font-weight="700">{title}</text>
-    
+
     <!-- Поиск в шапке -->
     <rect x="680" y="16" width="320" height="38" rx="8" fill="#181822" stroke="#252533" stroke-width="1"/>
     <text x="715" y="40" fill="#7D7D8F" font-size="13">Быстрый поиск по системе...</text>
-    
+
     <!-- Иконка темы и профиль -->
     <circle cx="1030" cy="35" r="18" fill="#1A1A24" stroke="#252533" stroke-width="1"/>
     <text x="1023" y="41" fill="#FF4D9D" font-size="16">☼</text>
-    
+
     <rect x="1065" y="18" width="150" height="34" rx="8" fill="#1A1A24" stroke="#252533" stroke-width="1"/>
     <circle cx="1082" cy="35" r="5" fill="#10B981"/>
     <text x="1095" y="40" fill="#E2E8F0" font-size="12" font-weight="600">NetBird: Online</text>
@@ -137,6 +145,7 @@ def desktop_shell(title: str, active_item: str, inner_content: str) -> str:
 </svg>
 """
 
+
 # Вспомогательные функции для Mobile (390x844)
 def mobile_shell(title: str, active_tab: str, inner_content: str) -> str:
     tabs = [
@@ -145,19 +154,19 @@ def mobile_shell(title: str, active_tab: str, inner_content: str) -> str:
         ("faq", "FAQ", "M12 2a10 10 0 1 0 10 10"),
         ("settings", "Ещё", "M12 2a10 10 0 1 0 10 10"),
     ]
-    
+
     tab_items = []
     x = 0
     step = 390 / len(tabs)
-    for key, label, icon in tabs:
-        is_act = (key == active_tab)
+    for key, label, _icon in tabs:
+        is_act = key == active_tab
         color = "#FF4D9D" if is_act else "#7D7D8F"
         fw = "700" if is_act else "500"
         tab_items.append(f"""
         <g id="Tab-{key}" transform="translate({x}, 0)">
-            <text x="{step/2}" y="42" fill="{color}" font-size="10" font-weight="{fw}" text-anchor="middle">{label}</text>
-            <circle cx="{step/2}" cy="22" r="12" fill="{color}" fill-opacity="0.12"/>
-            <circle cx="{step/2}" cy="22" r="4" fill="{color}"/>
+            <text x="{step / 2}" y="42" fill="{color}" font-size="10" font-weight="{fw}" text-anchor="middle">{label}</text>
+            <circle cx="{step / 2}" cy="22" r="12" fill="{color}" fill-opacity="0.12"/>
+            <circle cx="{step / 2}" cy="22" r="4" fill="{color}"/>
         </g>
         """)
         x += step
@@ -178,12 +187,12 @@ def mobile_shell(title: str, active_tab: str, inner_content: str) -> str:
     <!-- Кнопка бургер меню -->
     <rect x="16" y="62" width="34" height="34" rx="8" fill="#1A1A24"/>
     <text x="25" y="84" fill="#FFFFFF" font-size="16">☰</text>
-    
+
     <!-- Бренд -->
     <rect x="60" y="64" width="28" height="28" rx="6" fill="url(#primaryGrad)"/>
     <text x="68" y="83" fill="#FFFFFF" font-size="12" font-weight="800">OB</text>
     <text x="96" y="83" fill="#FFFFFF" font-size="15" font-weight="700">{title}</text>
-    
+
     <!-- Аватарка -->
     <circle cx="355" cy="78" r="14" fill="#FF4D9D" fill-opacity="0.2"/>
     <text x="350" y="83" fill="#FF4D9D" font-size="12" font-weight="700">A</text>
@@ -197,7 +206,7 @@ def mobile_shell(title: str, active_tab: str, inner_content: str) -> str:
 <!-- Нижняя панель навигации (Tabbar) -->
 <g id="MobileTabBar" transform="translate(0, 774)">
     <rect width="390" height="70" fill="#121217" stroke="#1F1F2A" stroke-width="1"/>
-    {''.join(tab_items)}
+    {"".join(tab_items)}
 </g>
 
 <!-- Индикатор жеста Home -->
@@ -205,9 +214,11 @@ def mobile_shell(title: str, active_tab: str, inner_content: str) -> str:
 </svg>
 """
 
+
 # =========================================================================
 # Генерация конкретных страниц
 # =========================================================================
+
 
 def generate_login():
     # 1. Login Desktop
@@ -219,30 +230,30 @@ def generate_login():
 <!-- Карточка авторизации -->
 <g id="LoginCard" transform="translate(480, 180)" filter="url(#cardShadow)">
     <rect width="480" height="540" rx="20" fill="#121217" stroke="#252533" stroke-width="1"/>
-    
+
     <!-- Логотип -->
     <rect x="200" y="44" width="80" height="80" rx="20" fill="url(#primaryGrad)" filter="url(#pinkGlow)"/>
     <text x="222" y="94" fill="#FFFFFF" font-size="34" font-weight="800">OB</text>
-    
+
     <text x="240" y="160" fill="#FFFFFF" font-size="24" font-weight="700" text-anchor="middle">Панель управления</text>
     <text x="240" y="185" fill="#7D7D8F" font-size="14" text-anchor="middle">Единая система приёма обращений студентов</text>
-    
+
     <!-- Поле логин -->
     <text x="50" y="235" fill="#B8B8C8" font-size="13" font-weight="600">Имя пользователя</text>
     <rect x="50" y="245" width="380" height="48" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
     <text x="68" y="275" fill="#FFFFFF" font-size="14">admin</text>
-    
+
     <!-- Поле пароль -->
     <text x="50" y="325" fill="#B8B8C8" font-size="13" font-weight="600">Пароль доступа</text>
     <rect x="50" y="335" width="380" height="48" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
     <text x="68" y="367" fill="#7D7D8F" font-size="18">••••••••••••••••</text>
-    
+
     <!-- Кнопка Войти -->
     <g id="SubmitButton" cursor="pointer">
         <rect x="50" y="415" width="380" height="50" rx="10" fill="url(#primaryGrad)" filter="url(#pinkGlow)"/>
         <text x="240" y="446" fill="#FFFFFF" font-size="15" font-weight="700" text-anchor="middle">Войти в панель</text>
     </g>
-    
+
     <!-- Безопасность и версия -->
     <text x="240" y="495" fill="#7D7D8F" font-size="12" text-anchor="middle">Защищено 2FA • Argon2id • Версия 0.8.4.1</text>
 </g>
@@ -260,29 +271,30 @@ def generate_login():
 <g id="MobileLogin" transform="translate(24, 120)">
     <rect x="131" y="20" width="80" height="80" rx="20" fill="url(#primaryGrad)"/>
     <text x="153" y="70" fill="#FFFFFF" font-size="34" font-weight="800">OB</text>
-    
+
     <text x="171" y="135" fill="#FFFFFF" font-size="22" font-weight="700" text-anchor="middle">OSS Bot</text>
     <text x="171" y="160" fill="#7D7D8F" font-size="13" text-anchor="middle">Вход в панель управления</text>
-    
+
     <!-- Поля -->
     <text x="0" y="210" fill="#B8B8C8" font-size="13" font-weight="600">Логин</text>
     <rect x="0" y="220" width="342" height="50" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
     <text x="16" y="252" fill="#FFFFFF" font-size="14">admin</text>
-    
+
     <text x="0" y="300" fill="#B8B8C8" font-size="13" font-weight="600">Пароль</text>
     <rect x="0" y="310" width="342" height="50" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
     <text x="16" y="342" fill="#7D7D8F" font-size="18">••••••••••••••••</text>
-    
+
     <!-- Кнопка -->
     <rect x="0" y="390" width="342" height="52" rx="12" fill="url(#primaryGrad)"/>
     <text x="171" y="422" fill="#FFFFFF" font-size="15" font-weight="700" text-anchor="middle">Продолжить</text>
-    
+
     <text x="171" y="475" fill="#7D7D8F" font-size="12" text-anchor="middle">Защищённый контур v0.8.4.1</text>
 </g>
 </svg>"""
 
     (DESKTOP_DIR / "01_login_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "01_login_mobile.svg").write_text(mob, encoding="utf-8")
+
 
 def generate_2fa():
     # 2. 2FA Desktop
@@ -293,40 +305,40 @@ def generate_2fa():
 
 <g id="2FACard" transform="translate(480, 200)" filter="url(#cardShadow)">
     <rect width="480" height="500" rx="20" fill="#121217" stroke="#252533" stroke-width="1"/>
-    
+
     <circle cx="240" cy="70" r="32" fill="#FF4D9D" fill-opacity="0.15"/>
     <text x="228" y="78" fill="#FF4D9D" font-size="24">🔒</text>
-    
+
     <text x="240" y="135" fill="#FFFFFF" font-size="22" font-weight="700" text-anchor="middle">Двухфакторная проверка</text>
     <text x="240" y="160" fill="#7D7D8F" font-size="13" text-anchor="middle">Мы отправили 6-значный код в личные сообщения VK</text>
-    
+
     <!-- 6 ячеек кода -->
     <g transform="translate(60, 200)">
         <rect x="0" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#FF4D9D" stroke-width="2"/>
         <text x="18" y="40" fill="#FFFFFF" font-size="24" font-weight="700">4</text>
-        
+
         <rect x="62" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#FF4D9D" stroke-width="2"/>
         <text x="80" y="40" fill="#FFFFFF" font-size="24" font-weight="700">8</text>
-        
+
         <rect x="124" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#FF4D9D" stroke-width="2"/>
         <text x="142" y="40" fill="#FFFFFF" font-size="24" font-weight="700">1</text>
-        
+
         <rect x="186" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#FF4D9D" stroke-width="2"/>
         <text x="204" y="40" fill="#FFFFFF" font-size="24" font-weight="700">9</text>
-        
+
         <rect x="248" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
         <text x="266" y="40" fill="#FFFFFF" font-size="24" font-weight="700">2</text>
-        
+
         <rect x="310" y="0" width="50" height="60" rx="10" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
         <text x="328" y="40" fill="#FFFFFF" font-size="24" font-weight="700">0</text>
     </g>
-    
+
     <text x="240" y="300" fill="#D65DB1" font-size="13" font-weight="600" text-anchor="middle">⏱ Срок действия кода: 04:45</text>
-    
+
     <!-- Кнопка подтвердить -->
     <rect x="50" y="340" width="380" height="50" rx="10" fill="url(#primaryGrad)"/>
     <text x="240" y="371" fill="#FFFFFF" font-size="15" font-weight="700" text-anchor="middle">Подтвердить вход</text>
-    
+
     <text x="240" y="425" fill="#7D7D8F" font-size="13" text-anchor="middle">Не пришёл код? Отправить повторно через 30 сек.</text>
 </g>
 </svg>"""
@@ -340,10 +352,10 @@ def generate_2fa():
 <g id="Mobile2FA" transform="translate(24, 150)">
     <circle cx="171" cy="40" r="30" fill="#FF4D9D" fill-opacity="0.15"/>
     <text x="160" y="48" fill="#FF4D9D" font-size="22">🔒</text>
-    
+
     <text x="171" y="105" fill="#FFFFFF" font-size="20" font-weight="700" text-anchor="middle">Код безопасности</text>
     <text x="171" y="130" fill="#7D7D8F" font-size="12" text-anchor="middle">Введите 6 цифр из сообщения ВКонтакте</text>
-    
+
     <!-- 6 ячеек -->
     <g transform="translate(15, 170)">
         <rect x="0" y="0" width="46" height="54" rx="8" fill="#181822" stroke="#FF4D9D" stroke-width="2"/>
@@ -359,9 +371,9 @@ def generate_2fa():
         <rect x="270" y="0" width="46" height="54" rx="8" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
         <text x="286" y="36" fill="#FFFFFF" font-size="20" font-weight="700">0</text>
     </g>
-    
+
     <text x="171" y="260" fill="#D65DB1" font-size="12" font-weight="600" text-anchor="middle">⏱ Истекает через 04:45</text>
-    
+
     <rect x="0" y="300" width="342" height="52" rx="12" fill="url(#primaryGrad)"/>
     <text x="171" y="332" fill="#FFFFFF" font-size="15" font-weight="700" text-anchor="middle">Подтвердить</text>
 </g>
@@ -369,6 +381,7 @@ def generate_2fa():
 
     (DESKTOP_DIR / "02_2fa_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "02_2fa_mobile.svg").write_text(mob, encoding="utf-8")
+
 
 def generate_dashboard():
     # 3. Dashboard Desktop
@@ -406,7 +419,7 @@ def generate_dashboard():
         <!-- График активности -->
         <rect x="0" y="0" width="700" height="280" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
         <text x="24" y="35" fill="#FFFFFF" font-size="16" font-weight="700">Динамика обращений за неделю</text>
-        
+
         <!-- Столбцы графика -->
         <g transform="translate(40, 230)">
             <rect x="20" y="-120" width="40" height="120" rx="6" fill="#FF4D9D" fill-opacity="0.8"/>
@@ -428,7 +441,7 @@ def generate_dashboard():
         <!-- Нагрузка по отделам -->
         <rect x="726" y="0" width="392" height="280" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
         <text x="746" y="35" fill="#FFFFFF" font-size="16" font-weight="700">Топ отделов по нагрузке</text>
-        
+
         <text x="746" y="75" fill="#B8B8C8" font-size="13">Учебный отдел (42%)</text>
         <rect x="746" y="85" width="350" height="10" rx="5" fill="#20202C"/>
         <rect x="746" y="85" width="147" height="10" rx="5" fill="#FF4D9D"/>
@@ -446,7 +459,7 @@ def generate_dashboard():
     <g id="RecentTickets" transform="translate(32, 460)">
         <rect x="0" y="0" width="1118" height="340" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
         <text x="24" y="35" fill="#FFFFFF" font-size="16" font-weight="700">Последние обращения студентов</text>
-        
+
         <!-- Шапка таблицы -->
         <rect x="20" y="55" width="1078" height="36" rx="6" fill="#181822"/>
         <text x="36" y="78" fill="#7D7D8F" font-size="12" font-weight="700">ID</text>
@@ -506,7 +519,7 @@ def generate_dashboard():
 
     <!-- Заголовок списка -->
     <text x="16" y="125" fill="#FFFFFF" font-size="15" font-weight="700">Новые обращения</text>
-    
+
     <!-- Карточка 1 -->
     <g transform="translate(16, 140)">
         <rect width="358" height="110" rx="12" fill="#121217" stroke="#20202C" stroke-width="1"/>
@@ -545,13 +558,14 @@ def generate_dashboard():
     (DESKTOP_DIR / "03_dashboard_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "03_dashboard_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_tickets():
     # 4. Tickets Desktop
     content = """
     <!-- Панель фильтров -->
     <g id="TicketFilters" transform="translate(32, 24)">
         <rect width="1118" height="64" rx="12" fill="#121217" stroke="#20202C" stroke-width="1"/>
-        
+
         <!-- Вкладки статусов -->
         <rect x="16" y="14" width="70" height="36" rx="8" fill="url(#primaryGrad)"/>
         <text x="32" y="37" fill="#FFFFFF" font-size="13" font-weight="700">Все 48</text>
@@ -577,7 +591,7 @@ def generate_tickets():
     <!-- Таблица заявок -->
     <g id="TicketsTable" transform="translate(32, 108)">
         <rect width="1118" height="680" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
-        
+
         <!-- Заголовок -->
         <rect x="16" y="16" width="1086" height="40" rx="8" fill="#181822"/>
         <text x="36" y="41" fill="#7D7D8F" font-size="12" font-weight="700">ID</text>
@@ -678,6 +692,7 @@ def generate_tickets():
     (DESKTOP_DIR / "04_tickets_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "04_tickets_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_ticket_detail():
     # 5. Ticket Detail Desktop
     content = """
@@ -687,7 +702,7 @@ def generate_ticket_detail():
         <text x="24" y="36" fill="#FF4D9D" font-size="16" font-weight="800">#1042</text>
         <text x="80" y="36" fill="#FFFFFF" font-size="16" font-weight="700">Заявление на материальную помощь к сессии</text>
         <text x="24" y="55" fill="#7D7D8F" font-size="12">Создан 25 сен, 10:14 • Студент: Анна Смирнова (VK ID 4829104) • Отдел: Профком</text>
-        
+
         <!-- Кнопки смены статуса -->
         <rect x="880" y="18" width="100" height="34" rx="8" fill="#10B981" fill-opacity="0.15" stroke="#10B981" stroke-width="1"/>
         <text x="898" y="40" fill="#10B981" font-size="12" font-weight="700">✓ Решить</text>
@@ -700,7 +715,7 @@ def generate_ticket_detail():
     <g id="ChatArea" transform="translate(32, 104)">
         <!-- Левая колонка: Чат -->
         <rect width="780" height="680" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
-        
+
         <!-- Сообщение студента -->
         <g transform="translate(24, 24)">
             <rect width="520" height="90" rx="12" fill="#181822" stroke="#252533" stroke-width="1"/>
@@ -730,7 +745,7 @@ def generate_ticket_detail():
         <g transform="translate(800, 0)">
             <rect width="318" height="680" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
             <text x="20" y="35" fill="#FFFFFF" font-size="15" font-weight="700">Данные студента</text>
-            
+
             <text x="20" y="70" fill="#7D7D8F" font-size="12">ФИО:</text>
             <text x="20" y="90" fill="#FFFFFF" font-size="14" font-weight="600">Смирнова Анна Игоревна</text>
 
@@ -743,7 +758,7 @@ def generate_ticket_detail():
             <line x1="20" y1="230" x2="298" y2="230" stroke="#20202C"/>
 
             <text x="20" y="260" fill="#FFFFFF" font-size="15" font-weight="700">Быстрые шаблоны</text>
-            
+
             <rect x="20" y="280" width="278" height="38" rx="8" fill="#1A1A24"/>
             <text x="32" y="304" fill="#B8B8C8" font-size="12">Заявление принято в работу</text>
 
@@ -796,6 +811,7 @@ def generate_ticket_detail():
 
     (DESKTOP_DIR / "05_ticket_detail_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "05_ticket_detail_mobile.svg").write_text(mob, encoding="utf-8")
+
 
 def generate_departments():
     # 6. Departments Desktop
@@ -883,6 +899,7 @@ def generate_departments():
     (DESKTOP_DIR / "06_departments_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "06_departments_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_faq():
     # 7. FAQ Desktop
     content = """
@@ -941,6 +958,7 @@ def generate_faq():
     (DESKTOP_DIR / "07_faq_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "07_faq_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_events():
     # 8. Events Desktop
     content = """
@@ -956,11 +974,11 @@ def generate_events():
         <rect x="20" y="20" width="70" height="70" rx="12" fill="url(#primaryGrad)"/>
         <text x="38" y="52" fill="#FFFFFF" font-size="20" font-weight="800">28</text>
         <text x="36" y="72" fill="#FFFFFF" font-size="12">СЕН</text>
-        
+
         <text x="105" y="40" fill="#FFFFFF" font-size="16" font-weight="700">День карьеры и стажировок IT 2026</text>
         <text x="105" y="65" fill="#B8B8C8" font-size="13">Главный корпус, Актовый зал • 14:00 - 18:00</text>
         <text x="105" y="85" fill="#7D7D8F" font-size="12">Зарегистрировалось студентов: 412</text>
-        
+
         <rect x="20" y="120" width="140" height="34" rx="8" fill="#1A1A24"/>
         <text x="45" y="142" fill="#B8B8C8" font-size="12">Редактировать</text>
         <rect x="175" y="120" width="180" height="34" rx="8" fill="url(#primaryGrad)"/>
@@ -971,11 +989,11 @@ def generate_events():
         <rect x="594" y="20" width="70" height="70" rx="12" fill="#20202C"/>
         <text x="612" y="52" fill="#FF4D9D" font-size="20" font-weight="800">05</text>
         <text x="612" y="72" fill="#FF4D9D" font-size="12">ОКТ</text>
-        
+
         <text x="679" y="40" fill="#FFFFFF" font-size="16" font-weight="700">Хакатон по разработке чат-ботов</text>
         <text x="679" y="65" fill="#B8B8C8" font-size="13">Технопарк, Коворкинг • 10:00</text>
         <text x="679" y="85" fill="#7D7D8F" font-size="12">Зарегистрировалось студентов: 128</text>
-        
+
         <rect x="594" y="120" width="140" height="34" rx="8" fill="#1A1A24"/>
         <text x="619" y="142" fill="#B8B8C8" font-size="12">Редактировать</text>
     </g>
@@ -989,10 +1007,10 @@ def generate_events():
         <rect x="14" y="16" width="50" height="50" rx="10" fill="url(#primaryGrad)"/>
         <text x="26" y="40" fill="#FFFFFF" font-size="16" font-weight="800">28</text>
         <text x="24" y="56" fill="#FFFFFF" font-size="10">СЕН</text>
-        
+
         <text x="74" y="32" fill="#FFFFFF" font-size="13" font-weight="700">День карьеры IT 2026</text>
         <text x="74" y="50" fill="#7D7D8F" font-size="11">Актовый зал • 14:00</text>
-        
+
         <rect x="14" y="86" width="330" height="38" rx="8" fill="url(#primaryGrad)"/>
         <text x="179" y="110" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">📢 Рассылка анонса студентам</text>
     </g>
@@ -1001,6 +1019,7 @@ def generate_events():
 
     (DESKTOP_DIR / "08_events_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "08_events_mobile.svg").write_text(mob, encoding="utf-8")
+
 
 def generate_knowledge_base():
     # 9. Knowledge Base Desktop
@@ -1049,6 +1068,7 @@ def generate_knowledge_base():
 
     (DESKTOP_DIR / "09_knowledge_base_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "09_knowledge_base_mobile.svg").write_text(mob, encoding="utf-8")
+
 
 def generate_admins():
     # 10. Admins Desktop
@@ -1110,6 +1130,7 @@ def generate_admins():
     (DESKTOP_DIR / "10_admins_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "10_admins_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_logs():
     # 11. Logs Desktop
     content = """
@@ -1165,15 +1186,16 @@ def generate_logs():
     (DESKTOP_DIR / "11_logs_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "11_logs_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_settings():
     # 12. Settings Desktop
     content = """
     <g id="SettingsForm" transform="translate(32, 24)">
         <text x="0" y="25" fill="#FFFFFF" font-size="18" font-weight="700">Системные параметры OSS Bot</text>
-        
+
         <g transform="translate(0, 50)">
             <rect width="800" height="580" rx="14" fill="#121217" stroke="#20202C" stroke-width="1"/>
-            
+
             <text x="32" y="45" fill="#FFFFFF" font-size="15" font-weight="700">1. Режим работы бота</text>
             <rect x="32" y="60" width="340" height="44" rx="8" fill="#181822" stroke="#2E2E3E" stroke-width="1"/>
             <text x="48" y="87" fill="#FFFFFF" font-size="13">Longpoll (по умолчанию)</text>
@@ -1202,7 +1224,7 @@ def generate_settings():
     <g transform="translate(16, 10)">
         <rect width="358" height="240" rx="12" fill="#121217" stroke="#20202C" stroke-width="1"/>
         <text x="16" y="32" fill="#FFFFFF" font-size="14" font-weight="700">Параметры бота</text>
-        
+
         <text x="16" y="65" fill="#7D7D8F" font-size="11">Режим работы:</text>
         <text x="16" y="85" fill="#FFFFFF" font-size="13">Longpoll</text>
 
@@ -1218,6 +1240,7 @@ def generate_settings():
     (DESKTOP_DIR / "12_settings_desktop.svg").write_text(desk, encoding="utf-8")
     (MOBILE_DIR / "12_settings_mobile.svg").write_text(mob, encoding="utf-8")
 
+
 def generate_all_screens_artboard():
     """Создаёт единый огромный файл-холст для Figma, в котором все экраны размещены по сетке."""
     # Ширина холста: 6 экранов в строке * (1440 + 80) = ~9200
@@ -1227,18 +1250,26 @@ def generate_all_screens_artboard():
         ("02_2fa_desktop.svg", "02_2fa_mobile.svg", "02. Двухфакторная проверка (2FA)"),
         ("03_dashboard_desktop.svg", "03_dashboard_mobile.svg", "03. Главный Дашборд (Dashboard)"),
         ("04_tickets_desktop.svg", "04_tickets_mobile.svg", "04. Список обращений (Tickets)"),
-        ("05_ticket_detail_desktop.svg", "05_ticket_detail_mobile.svg", "05. Диалог по тикету (Chat)"),
+        (
+            "05_ticket_detail_desktop.svg",
+            "05_ticket_detail_mobile.svg",
+            "05. Диалог по тикету (Chat)",
+        ),
         ("06_departments_desktop.svg", "06_departments_mobile.svg", "06. Отделы (Departments)"),
         ("07_faq_desktop.svg", "07_faq_mobile.svg", "07. База вопросов (FAQ)"),
         ("08_events_desktop.svg", "08_events_mobile.svg", "08. Мероприятия (Events)"),
-        ("09_knowledge_base_desktop.svg", "09_knowledge_base_mobile.svg", "09. База знаний (Knowledge)"),
+        (
+            "09_knowledge_base_desktop.svg",
+            "09_knowledge_base_mobile.svg",
+            "09. База знаний (Knowledge)",
+        ),
         ("10_admins_desktop.svg", "10_admins_mobile.svg", "10. Администраторы (Admins)"),
         ("11_logs_desktop.svg", "11_logs_mobile.svg", "11. Журнал аудита (Logs)"),
         ("12_settings_desktop.svg", "12_settings_mobile.svg", "12. Настройки системы (Settings)"),
     ]
 
     elements = []
-    
+
     # 1. Desktop Row (4 колонки по 3 экрана)
     col = 0
     row = 0
@@ -1253,7 +1284,7 @@ def generate_all_screens_artboard():
             end = content.rfind("</svg>")
             inner = content[start:end]
             elements.append(f"""
-            <g id="Frame-Desktop-{col+1}-{row+1}" transform="translate({x}, {y})">
+            <g id="Frame-Desktop-{col + 1}-{row + 1}" transform="translate({x}, {y})">
                 <text x="0" y="-30" fill="#FFFFFF" font-size="28" font-weight="800">{title} — Desktop (1440x900)</text>
                 {inner}
             </g>
@@ -1277,7 +1308,7 @@ def generate_all_screens_artboard():
             end = content.rfind("</svg>")
             inner = content[start:end]
             elements.append(f"""
-            <g id="Frame-Mobile-{m_col+1}-{m_row+1}" transform="translate({x}, {y})">
+            <g id="Frame-Mobile-{m_col + 1}-{m_row + 1}" transform="translate({x}, {y})">
                 <text x="0" y="-20" fill="#FF4D9D" font-size="18" font-weight="700">{title} — Mobile (390x844)</text>
                 {inner}
             </g>
@@ -1300,10 +1331,11 @@ def generate_all_screens_artboard():
     <text x="0" y="32" fill="#7D7D8F" font-size="18">Все 12 страниц веб-панели в разрешениях Desktop (1440×900) и Mobile (390×844) • Версия v0.8.4.1</text>
 </g>
 
-{''.join(elements)}
+{"".join(elements)}
 </svg>"""
 
     (FIGMA_DIR / "figma_all_screens_board.svg").write_text(board_svg, encoding="utf-8")
+
 
 def main():
     print("Генерация страниц...")
@@ -1322,6 +1354,7 @@ def main():
     print("Генерация сводного холста Figma...")
     generate_all_screens_artboard()
     print("Генерация успешно завершена!")
+
 
 if __name__ == "__main__":
     main()

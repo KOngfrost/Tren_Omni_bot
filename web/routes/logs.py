@@ -115,7 +115,9 @@ async def export_logs(user=Depends(require_superadmin)):
     except Exception:
         logs = []
 
-    csv_content: str = "\ufeffID,Время,Субъект,Администратор,Действие,HTTP,Путь,IP,Ответ,Время_мс,Детали\n"
+    csv_content: str = (
+        "\ufeffID,Время,Субъект,Администратор,Действие,HTTP,Путь,IP,Ответ,Время_мс,Детали\n"
+    )
     # Заголовки расширены под полный аудит: без HTTP-контекста и IP
     # журнал не отвечает на вопрос «кто и откуда это сделал».
     for log in logs:

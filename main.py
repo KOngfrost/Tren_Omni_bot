@@ -113,7 +113,6 @@ async def _start_scheduler() -> None:
     logger.info("Периодическая очистка FSM-состояний запущена")
 
 
-
 async def run_vk_polling() -> None:
     retry_delay = 5
 
@@ -199,7 +198,7 @@ async def run_bot_service() -> None:
             polling_task = asyncio.create_task(run_vk_polling())
             stop_task = asyncio.create_task(stop_event.wait())
             try:
-                done, pending = await asyncio.wait(
+                _done, pending = await asyncio.wait(
                     [polling_task, stop_task],
                     return_when=asyncio.FIRST_COMPLETED,
                 )

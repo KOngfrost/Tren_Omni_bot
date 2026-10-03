@@ -426,8 +426,12 @@ async def test_rate_limit_cleanup_obeys_ip_retention_days(db_session_maker, monk
     async with db_session_maker() as session:
         session.add_all(
             [
-                LoginAttempt(ip="192.0.2.10", success=False, attempted_at=now - timedelta(days=31)),
-                LoginAttempt(ip="192.0.2.11", success=False, attempted_at=now - timedelta(days=29)),
+                LoginAttempt(
+                    ip="192.0.2.10", success=False, attempted_at=now - timedelta(days=31)
+                ),
+                LoginAttempt(
+                    ip="192.0.2.11", success=False, attempted_at=now - timedelta(days=29)
+                ),
                 CrudAttempt(
                     ip="192.0.2.12",
                     action="old-action",

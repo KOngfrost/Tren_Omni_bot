@@ -16,11 +16,16 @@ import re
 import sys
 
 _SENSITIVE_PATTERNS = [
-    (re.compile(r'(?i)(password|passwd|pwd)\s*([=:])\s*([\'"]?)([^\'"\s,;]+)\3'), r'\1\2\3***\3'),
-    (re.compile(r'(?i)(token|access_token|bot_token|secret|secret_key|api_key)\s*([=:])\s*([\'"]?)([^\'"\s,;]+)\3'), r'\1\2\3***\3'),
-    (re.compile(r'vk1\.a\.[a-zA-Z0-9_\-]+'), r'vk1.a.***'),
-    (re.compile(r'(?i)bearer\s+[a-zA-Z0-9_\-\.]+'), r'Bearer ***'),
-    (re.compile(r'(?i)session=([a-zA-Z0-9_\-\.]{10,})'), r'session=***'),
+    (re.compile(r'(?i)(password|passwd|pwd)\s*([=:])\s*([\'"]?)([^\'"\s,;]+)\3'), r"\1\2\3***\3"),
+    (
+        re.compile(
+            r'(?i)(token|access_token|bot_token|secret|secret_key|api_key)\s*([=:])\s*([\'"]?)([^\'"\s,;]+)\3'
+        ),
+        r"\1\2\3***\3",
+    ),
+    (re.compile(r"vk1\.a\.[a-zA-Z0-9_\-]+"), r"vk1.a.***"),
+    (re.compile(r"(?i)bearer\s+[a-zA-Z0-9_\-\.]+"), r"Bearer ***"),
+    (re.compile(r"(?i)session=([a-zA-Z0-9_\-\.]{10,})"), r"session=***"),
 ]
 
 
@@ -40,9 +45,14 @@ class SensitiveDataFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.args:
             if isinstance(record.args, dict):
-                record.args = {k: (mask_sensitive_data(v) if isinstance(v, str) else v) for k, v in record.args.items()}
+                record.args = {
+                    k: (mask_sensitive_data(v) if isinstance(v, str) else v)
+                    for k, v in record.args.items()
+                }
             elif isinstance(record.args, tuple):
-                record.args = tuple(mask_sensitive_data(a) if isinstance(a, str) else a for a in record.args)
+                record.args = tuple(
+                    mask_sensitive_data(a) if isinstance(a, str) else a for a in record.args
+                )
         else:
             if isinstance(record.msg, str):
                 record.msg = mask_sensitive_data(record.msg)

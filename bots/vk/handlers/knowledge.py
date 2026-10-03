@@ -103,9 +103,7 @@ async def knowledge_department_handler(message: Message):
         ans = entry.answer or ""
         if len(ans) > 400:
             ans = ans[:400] + "..."
-        card = (
-            f"📌 Тема / Теги: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{ans}"
-        )
+        card = f"📌 Тема / Теги: {entry.keywords}\n🏢 Отдел: {dept_name}\nℹ️ Материал:\n{ans}"
         cards.append(card)
 
     divider = "\n\n" + "─" * 28 + "\n\n"

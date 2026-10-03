@@ -59,7 +59,9 @@ async def test_settings_toggle_2fa_permissions(monkeypatch):
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            res = await client.post("/settings/2fa", data={"enabled": "false", "csrf_token": "mock"})
+            res = await client.post(
+                "/settings/2fa", data={"enabled": "false", "csrf_token": "mock"}
+            )
             assert res.status_code == 403
 
             res_json = await client.post(

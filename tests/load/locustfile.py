@@ -97,7 +97,15 @@ class PeakLoadBurstUser(HttpUser):
     @task(6)
     def fast_faq_search(self):
         """Параллельный поиск по FAQ (проверка Redis кэша и FTS в БД)."""
-        queries = ["стипендия", "деканат", "сессия", "перевод", "задолженность", "справка", "обходной лист"]
+        queries = [
+            "стипендия",
+            "деканат",
+            "сессия",
+            "перевод",
+            "задолженность",
+            "справка",
+            "обходной лист",
+        ]
         q = random.choice(queries)
         self.client.get(f"/api/v1/faq?query={q}", name="/api/v1/faq [Burst Search]")
 
@@ -127,4 +135,3 @@ class PeakLoadBurstUser(HttpUser):
                 resp.success()
             else:
                 resp.failure(f"Burst stress failed with code {resp.status_code}")
-

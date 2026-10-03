@@ -68,6 +68,7 @@ else:
 # тип остаётся не-Optional, что честно для 35+ мест использования.
 _session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+
 def async_session_maker(*args, **kwargs):
     if engine is None:
         raise RuntimeError("Не удалось создать сессию: engine is None. Проверьте настройки БД.")
@@ -145,8 +146,9 @@ async def ensure_database_exists(max_retries: int = 10, retry_delay: float = 2.0
 
 def run_migrations(max_retries: int = 5, retry_delay: float = 2.0) -> None:
     """Apply Alembic migrations to the database."""
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     last_error = None
 

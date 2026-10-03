@@ -55,7 +55,6 @@ from core.ticket_service import (
     StatusTransitionError,
     change_ticket_status,
     get_ticket_messages,
-    mask_anonymous_data,
     reply_to_ticket,
     status_label,
 )
@@ -125,7 +124,9 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         )
         if not is_super:
             if dept_id is not None:
-                stmt = stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                stmt = stmt.where(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
             else:
                 stmt = stmt.where(Ticket.department_id.is_(None))
 
@@ -136,8 +137,12 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         total_count_stmt = select(func.count(Ticket.id)).where(Ticket.created_at >= today_start)
         if not is_super:
             if dept_id is not None:
-                count_stmt = count_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
-                total_count_stmt = total_count_stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                count_stmt = count_stmt.where(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
+                total_count_stmt = total_count_stmt.where(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
             else:
                 count_stmt = count_stmt.where(Ticket.department_id.is_(None))
                 total_count_stmt = total_count_stmt.where(Ticket.department_id.is_(None))
@@ -231,7 +236,11 @@ async def admin_ticket_view_handler(message: Message):
     student_name = (
         "Аноним"
         if ticket.is_anonymous
-        else (ticket.user.full_name if ticket.user and ticket.user.full_name else f"VK ID {ticket.user.vk_id if ticket.user else '—'}")
+        else (
+            ticket.user.full_name
+            if ticket.user and ticket.user.full_name
+            else f"VK ID {ticket.user.vk_id if ticket.user else '—'}"
+        )
     )
     dorm = (
         f" (Общежитие: {ticket.user.dormitory})"
@@ -260,7 +269,9 @@ async def admin_ticket_view_handler(message: Message):
                 MessageAuthorType.SYSTEM: "Система",
             }.get(m.author_type, "—")
             m_time = m.created_at.strftime("%H:%M") if m.created_at else ""
-            lines.append(f"• [{m_time}] {author}: {m.message[:120]}{'...' if len(m.message) > 120 else ''}")
+            lines.append(
+                f"• [{m_time}] {author}: {m.message[:120]}{'...' if len(m.message) > 120 else ''}"
+            )
     elif ticket.response_text:
         lines.append(f"💬 Ответ: {ticket.response_text}")
 
@@ -287,9 +298,7 @@ async def admin_ticket_history_handler(message: Message):
 
     async with async_session_maker() as session:
         ticket = await session.scalar(
-            select(Ticket)
-            .options(selectinload(Ticket.department))
-            .where(Ticket.id == ticket_id)
+            select(Ticket).options(selectinload(Ticket.department)).where(Ticket.id == ticket_id)
         )
 
     if ticket is None:
@@ -366,20 +375,23 @@ async def admin_reply_text_handler(message: Message):
     if raw_text.casefold() in ("отмена", "отменить"):
         await vk_bot.state_dispenser.delete(message.from_id)
         keyboard = (
-            build_admin_ticket_actions_keyboard(ticket_id)
-            if ticket_id
-            else build_admin_keyboard()
+            build_admin_ticket_actions_keyboard(ticket_id) if ticket_id else build_admin_keyboard()
         )
         await message.answer("Ввод ответа отменён.", keyboard=keyboard)
         return
 
     if not ticket_id:
         await vk_bot.state_dispenser.delete(message.from_id)
-        await message.answer("Сессия ответа истекла. Пожалуйста, откройте заявку заново.", keyboard=build_admin_keyboard())
+        await message.answer(
+            "Сессия ответа истекла. Пожалуйста, откройте заявку заново.",
+            keyboard=build_admin_keyboard(),
+        )
         return
 
     if len(raw_text) < 2:
-        await message.answer("Текст ответа слишком короткий. Введите ответ подробнее или нажмите «Отмена»:")
+        await message.answer(
+            "Текст ответа слишком короткий. Введите ответ подробнее или нажмите «Отмена»:"
+        )
         return
 
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
@@ -397,7 +409,11 @@ async def admin_reply_text_handler(message: Message):
         await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
-    note = " (уведомление отправлено студенту в VK)" if delivered else " (заявка анонимная или без VK ID)"
+    note = (
+        " (уведомление отправлено студенту в VK)"
+        if delivered
+        else " (заявка анонимная или без VK ID)"
+    )
     await message.answer(
         f"✅ Ответ успешно сохранён в заявке #{ticket_id}{note}.\n"
         f"Текущий статус: {status_label(ticket.status)}.",

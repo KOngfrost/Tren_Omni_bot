@@ -211,6 +211,8 @@ __all__ = [
     "ALLOWED_TRANSITIONS",
     "COMPLETED_STATUSES",
     "StatusTransitionError",
+    "_match_department_in_memory",
+    "_resolve_department",
     "add_student_reply",
     "add_ticket_message",
     "assign_ticket_department",
@@ -234,6 +236,4 @@ __all__ = [
     "sync_unassigned_ticket_departments",
     "ticket_transaction",
     "validate_transition",
-    "_match_department_in_memory",
-    "_resolve_department",
 ]

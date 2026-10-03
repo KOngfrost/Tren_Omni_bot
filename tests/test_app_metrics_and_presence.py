@@ -218,7 +218,12 @@ async def test_temporary_admin_keeps_ticket_access(db_session_maker):
         session.add(student)
         await session.flush()
         session.add(
-            Ticket(user_id=student.id, department_id=dept_a.id, topic="Вопрос", status=TicketStatus.NEW)
+            Ticket(
+                user_id=student.id,
+                department_id=dept_a.id,
+                topic="Вопрос",
+                status=TicketStatus.NEW,
+            )
         )
         await _make_web_user(
             session,
@@ -332,11 +337,25 @@ async def test_notification_counters_show_own_and_general_tickets(db_session_mak
         session.add(student)
         await session.flush()
         # Своя заявка, чужая заявка и общее обращение.
-        session.add_all([
-            Ticket(user_id=student.id, department_id=dept_a.id, topic="Своя", status=TicketStatus.NEW),
-            Ticket(user_id=student.id, department_id=dept_b.id, topic="Чужая", status=TicketStatus.NEW),
-            Ticket(user_id=student.id, department_id=None, topic="Общая", status=TicketStatus.NEW),
-        ])
+        session.add_all(
+            [
+                Ticket(
+                    user_id=student.id,
+                    department_id=dept_a.id,
+                    topic="Своя",
+                    status=TicketStatus.NEW,
+                ),
+                Ticket(
+                    user_id=student.id,
+                    department_id=dept_b.id,
+                    topic="Чужая",
+                    status=TicketStatus.NEW,
+                ),
+                Ticket(
+                    user_id=student.id, department_id=None, topic="Общая", status=TicketStatus.NEW
+                ),
+            ]
+        )
         await _make_web_user(session, username="counter_admin", department_id=dept_a.id)
         await session.commit()
 
@@ -374,10 +393,22 @@ async def test_tickets_filter_department_none(db_session_maker):
         student = User(vk_id=900004, full_name="Студент")
         session.add(student)
         await session.flush()
-        session.add_all([
-            Ticket(user_id=student.id, department_id=dept_a.id, topic="Отделная", status=TicketStatus.NEW),
-            Ticket(user_id=student.id, department_id=None, topic="Общее обращение тест", status=TicketStatus.NEW),
-        ])
+        session.add_all(
+            [
+                Ticket(
+                    user_id=student.id,
+                    department_id=dept_a.id,
+                    topic="Отделная",
+                    status=TicketStatus.NEW,
+                ),
+                Ticket(
+                    user_id=student.id,
+                    department_id=None,
+                    topic="Общее обращение тест",
+                    status=TicketStatus.NEW,
+                ),
+            ]
+        )
         await _make_web_user(session, username="filter_super", role=WebRole.SUPERADMIN)
         await session.commit()
 
@@ -403,11 +434,22 @@ async def test_dashboard_shows_unassigned_widget(db_session_maker):
         student = User(vk_id=900005, full_name="Студент")
         session.add(student)
         await session.flush()
-        session.add_all([
-            Ticket(user_id=student.id, department_id=dept_a.id, topic="Отделная", status=TicketStatus.NEW),
-            Ticket(user_id=student.id, department_id=None, topic="Общая1", status=TicketStatus.NEW),
-            Ticket(user_id=student.id, department_id=None, topic="Общая2", status=TicketStatus.NEW),
-        ])
+        session.add_all(
+            [
+                Ticket(
+                    user_id=student.id,
+                    department_id=dept_a.id,
+                    topic="Отделная",
+                    status=TicketStatus.NEW,
+                ),
+                Ticket(
+                    user_id=student.id, department_id=None, topic="Общая1", status=TicketStatus.NEW
+                ),
+                Ticket(
+                    user_id=student.id, department_id=None, topic="Общая2", status=TicketStatus.NEW
+                ),
+            ]
+        )
         await _make_web_user(session, username="dash_super", role=WebRole.SUPERADMIN)
         await session.commit()
 
@@ -482,8 +524,9 @@ async def test_admins_page_shows_presence_badges(db_session_maker):
     """Страница администраторов показывает индикатор и текст статуса."""
     async with db_session_maker() as session:
         # Суперадмин с привязкой к VK-админу, чтобы сам быть постоянным.
-        viewer_admin = await _make_admin(session, vk_id=900009, department_id=None,
-                                         role=UserRole.SUPERADMIN)
+        viewer_admin = await _make_admin(
+            session, vk_id=900009, department_id=None, role=UserRole.SUPERADMIN
+        )
         await _make_web_user(
             session,
             username="presence_viewer",
@@ -522,9 +565,7 @@ async def test_collect_app_metrics_counts_business_data(db_session_maker):
         student = User(vk_id=900010, full_name="Студент", created_at=day_start_app_tz())
         session.add(student)
         await session.flush()
-        new_ticket = Ticket(
-            user_id=student.id, topic="Без отдела", status=TicketStatus.NEW
-        )
+        new_ticket = Ticket(user_id=student.id, topic="Без отдела", status=TicketStatus.NEW)
         done_ticket = Ticket(
             user_id=student.id,
             department_id=dept_a.id,
@@ -536,26 +577,34 @@ async def test_collect_app_metrics_counts_business_data(db_session_maker):
         )
         session.add_all([new_ticket, done_ticket])
         await session.flush()
-        session.add_all([
-            TicketMessage(
-                ticket_id=new_ticket.id,
-                author_type=MessageAuthorType.USER,
-                message="Привет",
-                created_at=day_start_app_tz(),
-            ),
-            VkOutbox(
-                vk_id=1, text="pending", status="pending",
-                created_at=now - timedelta(hours=1),
-            ),
-            VkOutbox(
-                vk_id=2, text="failed", status="failed",
-                created_at=now - timedelta(hours=1),
-            ),
-            PartnershipRequest(
-                vk_id=900011, proposal_text="Сотрудничество", status="new",
-                created_at=now - timedelta(hours=1),
-            ),
-        ])
+        session.add_all(
+            [
+                TicketMessage(
+                    ticket_id=new_ticket.id,
+                    author_type=MessageAuthorType.USER,
+                    message="Привет",
+                    created_at=day_start_app_tz(),
+                ),
+                VkOutbox(
+                    vk_id=1,
+                    text="pending",
+                    status="pending",
+                    created_at=now - timedelta(hours=1),
+                ),
+                VkOutbox(
+                    vk_id=2,
+                    text="failed",
+                    status="failed",
+                    created_at=now - timedelta(hours=1),
+                ),
+                PartnershipRequest(
+                    vk_id=900011,
+                    proposal_text="Сотрудничество",
+                    status="new",
+                    created_at=now - timedelta(hours=1),
+                ),
+            ]
+        )
         await session.commit()
 
     metrics = await collect_app_metrics()
@@ -647,4 +696,3 @@ async def test_render_status_content_app_view(db_session_maker):
     # Переключатель вида сохраняется, чтобы можно было вернуться к железу.
     callbacks = [b.callback_data for row in kb.inline_keyboard for b in row]
     assert "status:view:infra" in callbacks
-

@@ -134,6 +134,7 @@ def test_button_logout(auth_admin_client: TestClient):
 
 def test_buttons_tickets_filters_and_search(auth_admin_client: TestClient):
     import asyncio
+
     from core.database import async_session_maker
 
     async def _seed():
@@ -141,13 +142,23 @@ def test_buttons_tickets_filters_and_search(auth_admin_client: TestClient):
             dept = Department(name="Тестовый отдел билетов")
             session.add(dept)
             await session.flush()
-            t1 = Ticket(topic="Проблема с пропуском", description="Не работает карта", status=TicketStatus.NEW, department_id=dept.id)
-            t2 = Ticket(topic="Вопрос по стипендии", description="Когда выплата?", status=TicketStatus.IN_PROGRESS, department_id=dept.id)
+            t1 = Ticket(
+                topic="Проблема с пропуском",
+                description="Не работает карта",
+                status=TicketStatus.NEW,
+                department_id=dept.id,
+            )
+            t2 = Ticket(
+                topic="Вопрос по стипендии",
+                description="Когда выплата?",
+                status=TicketStatus.IN_PROGRESS,
+                department_id=dept.id,
+            )
             session.add_all([t1, t2])
             await session.commit()
             return t1.id, t2.id, dept.id
 
-    t1_id, t2_id, dept_id = asyncio.run(_seed())
+    _t1_id, _t2_id, _dept_id = asyncio.run(_seed())
 
     # Фильтр: Все
     res_all = auth_admin_client.get("/tickets/?status=all")
@@ -170,11 +181,16 @@ def test_buttons_tickets_filters_and_search(auth_admin_client: TestClient):
 
 def test_button_ticket_reply_and_status_change(auth_admin_client: TestClient):
     import asyncio
+
     from core.database import async_session_maker
 
     async def _seed_ticket():
         async with async_session_maker() as session:
-            t = Ticket(topic="Обращение для ответа", description="Нужна консультация", status=TicketStatus.NEW)
+            t = Ticket(
+                topic="Обращение для ответа",
+                description="Нужна консультация",
+                status=TicketStatus.NEW,
+            )
             session.add(t)
             await session.commit()
             await session.refresh(t)
@@ -190,7 +206,11 @@ def test_button_ticket_reply_and_status_change(auth_admin_client: TestClient):
     # Кнопка 'Ответить на заявку'
     res_reply = auth_admin_client.post(
         f"/tickets/{ticket_id}/reply",
-        data={"message": "Официальный ответ администратора", "csrf_token": csrf, "complete": "false"},
+        data={
+            "message": "Официальный ответ администратора",
+            "csrf_token": csrf,
+            "complete": "false",
+        },
         follow_redirects=True,
     )
     assert res_reply.status_code == 200
@@ -227,12 +247,16 @@ def test_buttons_departments_crud(auth_admin_client: TestClient):
 
     # Получаем ID созданного отдела
     import asyncio
-    from core.database import async_session_maker
+
     from sqlalchemy import select
+
+    from core.database import async_session_maker
 
     async def _get_dept_id():
         async with async_session_maker() as session:
-            row = await session.scalar(select(Department).where(Department.name == "Новый отдел кнопок"))
+            row = await session.scalar(
+                select(Department).where(Department.name == "Новый отдел кнопок")
+            )
             return row.id if row else None
 
     dept_id = asyncio.run(_get_dept_id())
@@ -263,8 +287,10 @@ def test_buttons_departments_crud(auth_admin_client: TestClient):
 
 def test_buttons_knowledge_base_crud(auth_admin_client: TestClient):
     import asyncio
-    from core.database import async_session_maker
+
     from sqlalchemy import select
+
+    from core.database import async_session_maker
 
     async def _ensure_dept():
         async with async_session_maker() as session:
@@ -301,7 +327,9 @@ def test_buttons_knowledge_base_crud(auth_admin_client: TestClient):
 
     async def _get_kb_id():
         async with async_session_maker() as session:
-            row = await session.scalar(select(KnowledgeBase).where(KnowledgeBase.keywords == "студенческий билет"))
+            row = await session.scalar(
+                select(KnowledgeBase).where(KnowledgeBase.keywords == "студенческий билет")
+            )
             return row.id if row else None
 
     kb_id = asyncio.run(_get_kb_id())
@@ -318,8 +346,10 @@ def test_buttons_knowledge_base_crud(auth_admin_client: TestClient):
 
 def test_buttons_faq_crud(auth_admin_client: TestClient):
     import asyncio
-    from core.database import async_session_maker
+
     from sqlalchemy import select
+
+    from core.database import async_session_maker
 
     async def _ensure_dept():
         async with async_session_maker() as session:
@@ -358,7 +388,9 @@ def test_buttons_faq_crud(auth_admin_client: TestClient):
 
     async def _get_faq_id():
         async with async_session_maker() as session:
-            row = await session.scalar(select(FAQNode).where(FAQNode.question == "Частый вопрос студента"))
+            row = await session.scalar(
+                select(FAQNode).where(FAQNode.question == "Частый вопрос студента")
+            )
             return row.id if row else None
 
     faq_id = asyncio.run(_get_faq_id())
@@ -380,8 +412,10 @@ def test_buttons_faq_crud(auth_admin_client: TestClient):
 
 def test_buttons_events_crud_and_export(auth_admin_client: TestClient):
     import asyncio
-    from core.database import async_session_maker
+
     from sqlalchemy import select
+
+    from core.database import async_session_maker
 
     async def _ensure_dept():
         async with async_session_maker() as session:
@@ -415,7 +449,9 @@ def test_buttons_events_crud_and_export(auth_admin_client: TestClient):
 
     async def _get_event_id():
         async with async_session_maker() as session:
-            row = await session.scalar(select(Event).where(Event.title == "День первокурсника 2026"))
+            row = await session.scalar(
+                select(Event).where(Event.title == "День первокурсника 2026")
+            )
             return row.id if row else None
 
     event_id = asyncio.run(_get_event_id())

@@ -77,7 +77,9 @@ async def update_partnership_status(
 
             item.status = new_status
             await session.commit()
-            request.session["flash_success"] = f"Статус заявки #{request_id} обновлён на «{ALLOWED_STATUSES[new_status]}»"
+            request.session["flash_success"] = (
+                f"Статус заявки #{request_id} обновлён на «{ALLOWED_STATUSES[new_status]}»"
+            )
     except Exception:
         logger.exception("Ошибка при обновлении статуса заявки на партнёрство #%s", request_id)
         request.session["flash_error"] = "Не удалось обновить статус заявки"

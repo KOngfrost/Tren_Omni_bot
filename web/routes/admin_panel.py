@@ -41,7 +41,9 @@ router = APIRouter()
 
 # Временный администратор ведёт диалог с отделом, но не управляет учётными
 # записями. Сообщение единое для всех защищаемых эндпоинтов.
-TEMPORARY_ADMIN_FORBIDDEN = "Временный администратор не имеет прав на создание или удаление учетных записей."
+TEMPORARY_ADMIN_FORBIDDEN = (
+    "Временный администратор не имеет прав на создание или удаление учетных записей."
+)
 
 
 def _deny_temporary_admin(request: Request, user: dict):
@@ -440,8 +442,6 @@ def _parse_vk_id(form) -> int:
         return int(form.get("vk_id", 0))
     except (TypeError, ValueError):
         raise ValueError("VK ID должен быть числом") from None
-
-
 
 
 def user_get_department_id(user: dict) -> int | None:

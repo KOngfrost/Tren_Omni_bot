@@ -261,9 +261,12 @@ async def _load_ticket_for_user(ticket_id: int, user: dict) -> Ticket:
     # Общие обращения (department_id IS NULL) доступны для просмотра, ответа и смены статуса ВСЕМ администраторам.
     # Если заявка привязана к отделу (department_id is not None), к ней имеют доступ только суперадмины
     # и администраторы соответствующего отдела.
-    if not is_super:
-        if ticket.department_id is not None and (dept_id is None or ticket.department_id != dept_id):
-            raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
+    if (
+        not is_super
+        and ticket.department_id is not None
+        and (dept_id is None or ticket.department_id != dept_id)
+    ):
+        raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
     return ticket
 
 
@@ -393,7 +396,9 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
         return {
             "success": True,
             "ticket_id": ticket_id,
-            "status": ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+            "status": ticket.status.value
+            if hasattr(ticket.status, "value")
+            else str(ticket.status),
             "vk_sent": vk_sent,
             "message": {
                 "author_type": "ADMIN",

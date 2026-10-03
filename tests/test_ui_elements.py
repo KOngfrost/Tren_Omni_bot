@@ -52,7 +52,7 @@ def client(monkeypatch):
         database_module,
         ticket_service_module,
         reporting_module,
-            report_period_module,
+        report_period_module,
         outbox_module,
     ]
     for mod_name in (

@@ -204,6 +204,7 @@ class WebUser(Base):
         if self.expires_at is None:
             return False
         from datetime import datetime
+
         now = datetime.now(UTC)
         exp = self.expires_at if self.expires_at.tzinfo else self.expires_at.replace(tzinfo=UTC)
         return now >= exp
@@ -248,7 +249,9 @@ class KnowledgeBase(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    department: Mapped["Department | None"] = relationship("Department", back_populates="knowledge_base")
+    department: Mapped["Department | None"] = relationship(
+        "Department", back_populates="knowledge_base"
+    )
 
 
 class FAQNode(Base):
@@ -381,9 +384,7 @@ class Log(Base):
     duration_ms = mapped_column(Integer, nullable=True)
     ip_address = mapped_column(String(64), nullable=True)
     # True, если действие меняет данные (POST/PUT/PATCH/DELETE).
-    is_mutation = mapped_column(
-        Boolean, default=False, server_default=false(), nullable=False
-    )
+    is_mutation = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
 
     user: Mapped["User | None"] = relationship("User", back_populates="logs")
 
@@ -476,4 +477,3 @@ class PartnershipRequest(Base):
     updated_at = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-

@@ -21,29 +21,24 @@ from bots.telegram.handlers.base import cmd_help, cmd_start
 from bots.telegram.handlers.containers import (
     callback_reboot_cancel,
     callback_reboot_confirm,
-    callback_restart_all,
-    callback_restart_single,
     callback_view_logs,
     cmd_logs_menu,
-    cmd_reboot,
     cmd_restart_menu,
 )
 from bots.telegram.handlers.maintenance import (
     callback_maintenance_disable,
     callback_maintenance_enable,
-    callback_maintenance_refresh,
     cmd_maintenance,
 )
 from bots.telegram.handlers.status import callback_status_refresh, cmd_status
 from bots.telegram.handlers.two_factor import (
     callback_two_factor_disable,
     callback_two_factor_enable,
-    callback_two_factor_refresh,
     cmd_two_factor,
 )
 from bots.telegram.keyboards import (
-    get_maintenance_inline_keyboard,
     get_main_reply_keyboard,
+    get_maintenance_inline_keyboard,
     get_panel_inline_keyboard,
     get_reboot_confirmation_keyboard,
     get_status_inline_keyboard,
@@ -100,7 +95,9 @@ def test_main_reply_keyboard_buttons():
 
 def test_status_inline_keyboard_buttons():
     kb = get_status_inline_keyboard(webapp_url="https://example.com/panel")
-    callbacks = [btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data]
+    callbacks = [
+        btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data
+    ]
     assert "status:refresh" in callbacks
     assert "menu:restart" in callbacks
     assert "menu:logs" in callbacks
@@ -142,7 +139,9 @@ def test_panel_inline_keyboard():
     kb = get_panel_inline_keyboard(webapp_url="https://example.com/panel")
     urls = [btn.url for row in kb.inline_keyboard for btn in row if btn.url]
     assert "https://example.com/panel" in urls
-    callbacks = [btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data]
+    callbacks = [
+        btn.callback_data for row in kb.inline_keyboard for btn in row if btn.callback_data
+    ]
     assert "status:refresh" in callbacks
 
 
@@ -154,6 +153,7 @@ def test_panel_inline_keyboard():
 @pytest.mark.asyncio
 async def test_button_start():
     from core.config import get_settings
+
     msg = _make_msg("/start")
     await cmd_start(msg, get_settings())
     assert msg.answer.call_count >= 1
@@ -163,6 +163,7 @@ async def test_button_start():
 @pytest.mark.asyncio
 async def test_button_help():
     from core.config import get_settings
+
     msg = _make_msg("ℹ️ Помощь")
     await cmd_help(msg, get_settings())
     msg.answer.assert_called_once()
@@ -185,7 +186,10 @@ async def test_button_status():
 @pytest.mark.asyncio
 async def test_button_maintenance_menu():
     msg = _make_msg("🚧 Техработы")
-    with patch("bots.telegram.handlers.maintenance.get_maintenance_info", return_value={"enabled": False, "message": "off"}):
+    with patch(
+        "bots.telegram.handlers.maintenance.get_maintenance_info",
+        return_value={"enabled": False, "message": "off"},
+    ):
         await cmd_maintenance(msg)
     msg.answer.assert_called_once()
     assert "Управление режимом технических работ" in msg.answer.call_args[0][0]
@@ -194,7 +198,10 @@ async def test_button_maintenance_menu():
 @pytest.mark.asyncio
 async def test_button_two_factor_menu():
     msg = _make_msg("🔐 2FA")
-    with patch("bots.telegram.handlers.two_factor.get_two_factor_info", return_value={"enabled": True, "source": "db"}):
+    with patch(
+        "bots.telegram.handlers.two_factor.get_two_factor_info",
+        return_value={"enabled": True, "source": "db"},
+    ):
         await cmd_two_factor(msg)
     msg.answer.assert_called_once()
     assert "Управление двухфакторной аутентификацией" in msg.answer.call_args[0][0]
@@ -203,10 +210,14 @@ async def test_button_two_factor_menu():
 @pytest.mark.asyncio
 async def test_button_backup_menu():
     from core.config import get_settings
+
     msg = _make_msg("💾 Бэкап")
     docker_mock = AsyncMock(spec=DockerClient)
     settings = get_settings()
-    with patch("bots.telegram.handlers.backup.perform_database_backup", new=AsyncMock(return_value=(True, b"backup", "backup.sql.gz"))):
+    with patch(
+        "bots.telegram.handlers.backup.perform_database_backup",
+        new=AsyncMock(return_value=(True, b"backup", "backup.sql.gz")),
+    ):
         await cmd_backup(msg, docker_mock, settings)
     msg.answer.assert_called_once()
 
@@ -275,7 +286,9 @@ async def test_inline_button_logs_menu():
 async def test_inline_button_view_logs():
     cb = _make_cb("logs:oss_bot_app")
     docker_mock = AsyncMock(spec=DockerClient)
-    docker_mock.get_container_logs.return_value = "Sample container log line 1\nSample container log line 2"
+    docker_mock.get_container_logs.return_value = (
+        "Sample container log line 1\nSample container log line 2"
+    )
     await callback_view_logs(cb, docker_mock)
     cb.answer.assert_called_once_with("Загрузка логов...")
     cb.message.edit_text.assert_called_once()
@@ -285,38 +298,58 @@ async def test_inline_button_view_logs():
 @pytest.mark.asyncio
 async def test_inline_button_maint_enable_and_disable():
     cb_en = _make_cb("maint:enable")
-    with patch("bots.telegram.handlers.maintenance.set_maintenance_mode", new=AsyncMock(return_value=True)):
+    with patch(
+        "bots.telegram.handlers.maintenance.set_maintenance_mode", new=AsyncMock(return_value=True)
+    ):
         await callback_maintenance_enable(cb_en)
     cb_en.answer.assert_called_once_with("🚨 Режим техработ ВКЛЮЧЕН!", show_alert=True)
 
     cb_dis = _make_cb("maint:disable")
-    with patch("bots.telegram.handlers.maintenance.set_maintenance_mode", new=AsyncMock(return_value=True)):
+    with patch(
+        "bots.telegram.handlers.maintenance.set_maintenance_mode", new=AsyncMock(return_value=True)
+    ):
         await callback_maintenance_disable(cb_dis)
-    cb_dis.answer.assert_called_once_with("✅ Режим техработ ВЫКЛЮЧЕН! Системы работают штатно.", show_alert=True)
+    cb_dis.answer.assert_called_once_with(
+        "✅ Режим техработ ВЫКЛЮЧЕН! Системы работают штатно.", show_alert=True
+    )
 
 
 @pytest.mark.asyncio
 async def test_inline_button_two_factor_enable_and_disable():
     cb_en = _make_cb("2fa:enable")
-    with patch("bots.telegram.handlers.two_factor.set_two_factor_mode", new=AsyncMock(return_value=True)):
+    with patch(
+        "bots.telegram.handlers.two_factor.set_two_factor_mode", new=AsyncMock(return_value=True)
+    ):
         await callback_two_factor_enable(cb_en)
-    cb_en.answer.assert_called_once_with("🔒 Двухфакторная аутентификация (2FA) ВКЛЮЧЕНА!", show_alert=True)
+    cb_en.answer.assert_called_once_with(
+        "🔒 Двухфакторная аутентификация (2FA) ВКЛЮЧЕНА!", show_alert=True
+    )
 
     cb_dis = _make_cb("2fa:disable")
-    with patch("bots.telegram.handlers.two_factor.set_two_factor_mode", new=AsyncMock(return_value=True)):
+    with patch(
+        "bots.telegram.handlers.two_factor.set_two_factor_mode", new=AsyncMock(return_value=True)
+    ):
         await callback_two_factor_disable(cb_dis)
-    cb_dis.answer.assert_called_once_with("🔓 Двухфакторная аутентификация (2FA) ОТКЛЮЧЕНА! Вход доступен по логину и паролю.", show_alert=True)
+    cb_dis.answer.assert_called_once_with(
+        "🔓 Двухфакторная аутентификация (2FA) ОТКЛЮЧЕНА! Вход доступен по логину и паролю.",
+        show_alert=True,
+    )
 
 
 @pytest.mark.asyncio
 async def test_inline_button_backup_create():
     import gzip
+
     from core.config import get_settings
+
     cb = _make_cb("backup:create")
     docker_mock = AsyncMock(spec=DockerClient)
     settings = get_settings()
     sql_data = b"CREATE TABLE test;"
     gz_data = gzip.compress(sql_data)
-    with patch("bots.telegram.handlers.backup.perform_database_backup", new=AsyncMock(return_value=(True, gz_data, "backup.sql.gz"))):
+    with patch(
+        "bots.telegram.handlers.backup.perform_database_backup",
+        new=AsyncMock(return_value=(True, gz_data, "backup.sql.gz")),
+    ):
         await cmd_backup(cb, docker_mock, settings)
     cb.answer.assert_called_once()

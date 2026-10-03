@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
@@ -16,7 +16,6 @@ from bots.vk.keyboards import (
 )
 from core.bot_core import BotCore
 from core.commands import (
-    COMMANDS_CANCEL,
     COMMANDS_REPORT,
     COMMANDS_REPORT_BY_DATE,
     COMMANDS_REPORT_BY_PERIOD,
@@ -87,7 +86,9 @@ async def report_today_handler(message: Message):
             report_bytes,
             filename,
         )
-        await BotCore.log_action(user, "report_generated", f"Сформирован отчёт за сегодня {filename}")
+        await BotCore.log_action(
+            user, "report_generated", f"Сформирован отчёт за сегодня {filename}"
+        )
         await message.answer(
             f"Отчёт за сегодня ({report_date:%d.%m.%Y}) сформирован и отправлен вам в VK.",
             keyboard=build_admin_keyboard(),
@@ -106,7 +107,8 @@ async def report_by_date(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
+            "Эта команда доступна только администраторам.",
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
@@ -179,7 +181,8 @@ async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "Эта команда доступна только администраторам.", keyboard=await _main_keyboard_for(message.from_id)
+            "Эта команда доступна только администраторам.",
+            keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 

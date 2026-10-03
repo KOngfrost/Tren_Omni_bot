@@ -1,10 +1,10 @@
 """Тесты санитизации чувствительных данных (PII, токены, пароли) в логах и Sentry."""
 
 import logging
+
 from core.logging_config import (
     JsonFormatter,
     SanitizedFormatter,
-    SensitiveDataFilter,
     mask_sensitive_data,
 )
 from core.sentry import _scrub_sentry_event

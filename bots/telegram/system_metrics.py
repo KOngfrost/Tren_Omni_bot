@@ -52,7 +52,9 @@ def get_system_metrics() -> dict[str, Any]:
     disk_total = _format_bytes(disk_usage.total)
     disk_used = _format_bytes(disk_usage.used)
     disk_free = _format_bytes(disk_usage.free)
-    disk_percent = round((disk_usage.used / disk_usage.total) * 100, 1) if disk_usage.total > 0 else 0.0
+    disk_percent = (
+        round((disk_usage.used / disk_usage.total) * 100, 1) if disk_usage.total > 0 else 0.0
+    )
 
     # 4. Uptime хоста
     boot_timestamp = psutil.boot_time()

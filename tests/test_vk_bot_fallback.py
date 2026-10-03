@@ -1,7 +1,9 @@
 """Тест fallback-обработчика бота ВК."""
 
 from unittest.mock import AsyncMock, patch
+
 import pytest
+
 from bots.vk.bot import fallback_handler
 
 

@@ -223,13 +223,19 @@ class MonitorService:
                         f"🕒 <b>Хранение:</b> сохранено локально (права 0600) с ротацией 7 дней."
                     )
                     with contextlib.suppress(Exception):
-                        await self.bot.send_message(chat_id=self.admin_id, text=msg, parse_mode="HTML")
+                        await self.bot.send_message(
+                            chat_id=self.admin_id, text=msg, parse_mode="HTML"
+                        )
             else:
                 logger.error("Сбой автоматического бэкапа: %s", filename)
                 if self.alerts_enabled and self.admin_id > 0:
-                    alert_msg = f"❌ <b>Сбой планового бэкапа базы данных!</b>\n\n<code>{filename}</code>"
+                    alert_msg = (
+                        f"❌ <b>Сбой планового бэкапа базы данных!</b>\n\n<code>{filename}</code>"
+                    )
                     with contextlib.suppress(Exception):
-                        await self.bot.send_message(chat_id=self.admin_id, text=alert_msg, parse_mode="HTML")
+                        await self.bot.send_message(
+                            chat_id=self.admin_id, text=alert_msg, parse_mode="HTML"
+                        )
         except Exception as exc:
             logger.error("Исключение при выполнении планового бэкапа: %s", exc)
 

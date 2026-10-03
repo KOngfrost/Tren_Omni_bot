@@ -7,6 +7,7 @@ Revises: b4c5d6e7f8a
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "f3a4b5c6d7e8"
@@ -24,8 +25,12 @@ def upgrade() -> None:
         sa.Column("proposal_text", sa.Text(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False, server_default="new"),
         sa.Column("contact_info", sa.String(length=255), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_partnership_requests_vk_id", "partnership_requests", ["vk_id"])

@@ -43,6 +43,7 @@ async def test_settings_page_authenticated(db_session_maker, monkeypatch):
         await session.commit()
 
     import re
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Авторизуемся

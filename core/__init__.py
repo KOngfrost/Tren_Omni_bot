@@ -5,9 +5,9 @@ import os
 from pathlib import Path
 
 
-def _resolve_project_version() -> str:
+def _resolve_project_version() -> str:  # noqa: C901
     """Определить версию приложения.
-    
+
     Приоритет:
     1. Переменные окружения APP_VERSION / PROJECT_VERSION / VERSION.
     2. Файл .env в корне проекта (если переменная не была экспортирована в OS env).
@@ -67,4 +67,4 @@ __version__ = _resolve_project_version()
 PROJECT_VERSION = __version__
 APP_VERSION = __version__
 
-__all__ = ["__version__", "PROJECT_VERSION", "APP_VERSION"]
+__all__ = ["APP_VERSION", "PROJECT_VERSION", "__version__"]

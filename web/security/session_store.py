@@ -184,7 +184,9 @@ class RedisSessionMiddleware:
                     # генерируем новый session_id и удаляем старый ключ из Redis.
                     was_authenticated = bool(data.get("user"))
                     now_authenticated = bool(current_session.get("user"))
-                    should_rotate = (not was_authenticated and now_authenticated) or scope.get("session_rotate")
+                    should_rotate = (not was_authenticated and now_authenticated) or scope.get(
+                        "session_rotate"
+                    )
 
                     if should_rotate and session_id and redis is not None:
                         try:

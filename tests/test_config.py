@@ -47,7 +47,7 @@ def test_trusted_proxies_empty_by_default(monkeypatch):
     Settings = _settings_env_only(monkeypatch)
     monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
     fresh = Settings()
-    assert fresh.TRUSTED_PROXIES == set()
+    assert set() == fresh.TRUSTED_PROXIES
 
 
 def test_session_https_only_default_false():

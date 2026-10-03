@@ -64,9 +64,13 @@ class AdminAccessMiddleware(BaseMiddleware):
 
         # Проверка соответствия Telegram ID
         if self.admin_id <= 0 or user.id != self.admin_id:
-            logger.warning("Отклонён запрос от неавторизованного пользователя Telegram ID=%s", user.id)
+            logger.warning(
+                "Отклонён запрос от неавторизованного пользователя Telegram ID=%s", user.id
+            )
             if isinstance(event, Message):
-                await event.answer("⛔ Доступ запрещён. Этот бот доступен только администратору сервера.")
+                await event.answer(
+                    "⛔ Доступ запрещён. Этот бот доступен только администратору сервера."
+                )
             elif isinstance(event, CallbackQuery):
                 await event.answer("⛔ Доступ запрещён.", show_alert=True)
             return None
@@ -117,7 +121,11 @@ async def setup_bot_commands(
                 commands=clean_commands,
                 scope=BotCommandScopeChat(chat_id=admin_id),
             )
-            logger.info("Зарегистрировано %d слэш-команд для администратора ID=%d", len(clean_commands), admin_id)
+            logger.info(
+                "Зарегистрировано %d слэш-команд для администратора ID=%d",
+                len(clean_commands),
+                admin_id,
+            )
         else:
             await bot.set_my_commands(commands=clean_commands, scope=BotCommandScopeDefault())
 
@@ -157,7 +165,9 @@ def create_telegram_bot(
     if docker_client is None:
         docker_client = DockerClient()
 
-    middleware = AdminAccessMiddleware(settings.TELEGRAM_ADMIN_ID, docker_client, settings=settings)
+    middleware = AdminAccessMiddleware(
+        settings.TELEGRAM_ADMIN_ID, docker_client, settings=settings
+    )
     router.message.middleware(middleware)
     router.callback_query.middleware(middleware)
 

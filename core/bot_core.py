@@ -53,10 +53,10 @@ class BotCore:
                     raise RuntimeError(
                         f"Не удалось получить пользователя vk_id={vk_id} после race condition"
                     ) from None
-                # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker, 
+                # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker,
                 # это ОК для скалярных атрибутов, но lazy-связи будут недоступны вне сессии.
                 return db_user
-            # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker, 
+            # Внимание: сессия закрывается до возврата db_user. Если expire_on_commit=False уже стоит в sessionmaker,
             # это ОК для скалярных атрибутов, но lazy-связи будут недоступны вне сессии.
             return db_user
 
