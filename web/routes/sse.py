@@ -300,9 +300,27 @@ async def _redis_pubsub_listener() -> None:
 def start_sse_redis_listener() -> asyncio.Task[None]:
     """Запустить фоновую задачу прослушивания Redis Pub/Sub для SSE."""
     global _redis_listener_task
-    if _redis_listener_task is None or _redis_listener_task.done():
-        _redis_listener_task = asyncio.create_task(_redis_pubsub_listener())
+    current_loop = asyncio.get_running_loop()
+    if (
+        _redis_listener_task is None
+        or _redis_listener_task.done()
+        or _redis_listener_task.get_loop() != current_loop
+    ):
+        _redis_listener_task = current_loop.create_task(_redis_pubsub_listener())
     return _redis_listener_task
+
+
+async def stop_sse_redis_listener(task: asyncio.Task[None] | None = None) -> None:
+    """Остановить фоновую задачу прослушивания Redis Pub/Sub для SSE."""
+    global _redis_listener_task
+    target = task or _redis_listener_task
+    if target is not None:
+        target.cancel()
+        with contextlib.suppress(asyncio.CancelledError, RuntimeError):
+            if target.get_loop() == asyncio.get_running_loop():
+                await target
+    if _redis_listener_task is target:
+        _redis_listener_task = None
 
 
 async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, None]:

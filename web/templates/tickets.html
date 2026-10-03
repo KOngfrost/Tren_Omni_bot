@@ -59,7 +59,7 @@
             </thead>
             <tbody>
                 {% for ticket in tickets %}
-                <tr id="ticket-row-{{ ticket.id }}" data-ticket-id="{{ ticket.id }}" data-status="{{ ticket.status.value }}" data-dept="{{ ticket.department.id if ticket.department else '' }}">
+                <tr id="ticket-row-{{ ticket.id }}" data-ticket-row-id="{{ ticket.id }}" data-status="{{ ticket.status.value }}" data-dept="{{ ticket.department.id if ticket.department else '' }}">
                     <td class="td-topic" data-label="Тема">{{ ticket.topic or '—' }}</td>
                     <td data-label="Пользователь">
                         {% if ticket.is_anonymous or not ticket.user %}
@@ -181,6 +181,7 @@ function openTicket(id) {
         })
         .then(ticket => {
             currentActiveTicket = ticket;
+            window.currentActiveTicket = ticket;
             document.getElementById('modal-title').textContent = 'Заявка #' + ticket.id + ' · Диалог с заявителем';
 
             var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
@@ -463,6 +464,7 @@ function escapeHtml(str) {
 function closeTicketModal() {
     document.getElementById('ticket-modal').classList.remove('active');
     currentActiveTicket = null;
+    window.currentActiveTicket = null;
 }
 
 // Делегирование событий: обработчик живёт на контейнере таблицы, поэтому

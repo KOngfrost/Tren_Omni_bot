@@ -438,8 +438,7 @@ code {
 }
 
 @media (min-width: 901px) {
-    .container:not(.sidebar-collapsed) .mobile-nav-toggle,
-    .container:not(.sidebar-collapsed) .nav-toggle-btn,
+    .container:not(.sidebar-collapsed) .top-nav-bar .nav-toggle-btn,
     .container:not(.sidebar-collapsed) .top-nav-bar .mobile-brand {
         display: none !important;
     }

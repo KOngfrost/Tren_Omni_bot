@@ -111,16 +111,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Периодическая очистка FSM-состояний запущена")
 
     from core.events import register_ticket_change_listener, unregister_ticket_change_listener
-    from web.routes.sse import start_sse_redis_listener, trigger_sse_update
+    from web.routes.sse import (
+        start_sse_redis_listener,
+        stop_sse_redis_listener,
+        trigger_sse_update,
+    )
 
     register_ticket_change_listener(trigger_sse_update)
     sse_redis_task = start_sse_redis_listener()
     yield
 
     unregister_ticket_change_listener(trigger_sse_update)
-    sse_redis_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await sse_redis_task
+    await stop_sse_redis_listener(sse_redis_task)
 
     # Дописываем накопленные события аудита перед остановкой, иначе
     # последние действия не попадут в журнал.

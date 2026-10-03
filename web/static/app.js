@@ -1165,6 +1165,8 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.28);
             } catch (_) {}
+        }
+
         function checkActiveTicketModalUpdate() {
             var modal = document.getElementById('ticket-modal');
             if (modal && modal.classList.contains('active') && window.currentActiveTicket && window.currentActiveTicket.id) {

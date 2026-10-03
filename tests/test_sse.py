@@ -118,9 +118,8 @@ def test_websocket_unauthorized(web_client):
     import pytest
     from starlette.websockets import WebSocketDisconnect
 
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with web_client.websocket_connect("/ws"):
-            pass
+    with pytest.raises(WebSocketDisconnect) as exc_info, web_client.websocket_connect("/ws"):
+        pass
     assert exc_info.value.code == 1008
 
 

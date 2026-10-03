@@ -138,7 +138,19 @@ def _get_css_version() -> str:
         return settings.APP_VERSION
 
 
+def _get_js_version() -> str:
+    from pathlib import Path
+
+    js_file = Path(__file__).resolve().parent / "static" / "app.js"
+    try:
+        mtime = int(js_file.stat().st_mtime)
+        return f"{settings.APP_VERSION}.{mtime}"
+    except Exception:
+        return settings.APP_VERSION
+
+
 templates.env.globals["css_version"] = _get_css_version()
+templates.env.globals["js_version"] = _get_js_version()
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%d.%m.%Y %H:%M") -> str:

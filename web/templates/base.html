@@ -64,8 +64,8 @@
             }
         } catch (e) {}
     </script>
-    <script src="/static/store.js?v={{ app_version }}" defer></script>
-    <script src="/static/app.js?v={{ app_version }}" defer></script>
+    <script src="/static/store.js?v={{ js_version|default(app_version) }}" defer></script>
+    <script src="/static/app.js?v={{ js_version|default(app_version) }}" defer></script>
 </head>
 <body>
     <a href="#main-content" class="skip-link">Перейти к основному содержимому</a>
@@ -211,7 +211,7 @@
                             <div class="notifications-dropdown-header">
                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                                     <div class="notifications-dropdown-title">Активные уведомления</div>
-                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--primary); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран ↗</button>
+                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--primary); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран {{ icon('arrow-right', 11) }}</button>
                                 </div>
                                 <div class="notifications-tags" id="notifications-tags">
                                     <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="tag-new-tickets">{{ icon('alert', 12) }} {{ request.state.new_tickets_count|default(0) }} новых заявок</span>
