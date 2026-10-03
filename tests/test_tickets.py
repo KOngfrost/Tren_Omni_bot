@@ -517,3 +517,85 @@ async def test_non_anonymous_ticket_user_name_fetched(db_session_maker, monkeypa
         user = await session.scalar(select(User).where(User.vk_id == new_student_vk))
         assert user is not None
         assert user.full_name == "Петр Сидоров"
+
+
+@pytest.mark.asyncio
+async def test_community_reply_target_by_prefix_number(db_session_maker):
+    from core.models import TicketStatus
+    from core.services.community_reply_service import handle_community_message_reply
+    from core.ticket_service import create_ticket
+
+    student_vk = 77112233
+    ticket1 = await create_ticket(
+        topic="Первое обращение",
+        description="Проблема 1",
+        vk_id=student_vk,
+        keep_identity=True,
+    )
+    ticket2 = await create_ticket(
+        topic="Второе обращение",
+        description="Проблема 2",
+        vk_id=student_vk,
+        keep_identity=True,
+    )
+
+    # Администратор явно указывает номер первого обращения в начале сообщения
+    updated = await handle_community_message_reply(
+        peer_id=student_vk,
+        text=f"#{ticket1.id} Ответ по первой проблеме",
+        admin_author_id=999999,
+    )
+    assert updated is not None
+    assert updated.id == ticket1.id
+    assert updated.status == TicketStatus.IN_PROGRESS
+    assert updated.response_text == "Ответ по первой проблеме"
+
+    # Проверяем, что второе обращение не затронуто
+    async with db_session_maker() as session:
+        t2 = await session.scalar(select(Ticket).where(Ticket.id == ticket2.id))
+        assert t2.status == TicketStatus.NEW
+
+
+@pytest.mark.asyncio
+async def test_community_reply_target_by_vk_quote(db_session_maker):
+    from core.models import TicketStatus
+    from core.services.community_reply_service import handle_community_message_reply
+    from core.ticket_service import create_ticket
+
+    student_vk = 77112244
+    ticket1 = await create_ticket(
+        topic="Тема 1",
+        description="оаоащалащар",
+        vk_id=student_vk,
+        keep_identity=True,
+    )
+    ticket2 = await create_ticket(
+        topic="Тема 2",
+        description="НАш км ничего не делает",
+        vk_id=student_vk,
+        keep_identity=True,
+    )
+
+    # Администратор цитирует описание первой заявки через интерфейс ВК
+    updated = await handle_community_message_reply(
+        peer_id=student_vk,
+        text="Мы всегда рады помочь",
+        admin_author_id=999999,
+        reply_message={"text": "оаоащалащар"},
+    )
+    assert updated is not None
+    assert updated.id == ticket1.id
+    assert updated.status == TicketStatus.IN_PROGRESS
+    assert updated.response_text == "Мы всегда рады помочь"
+
+    # Проверяем цитирование уведомления с номером второй заявки
+    updated2 = await handle_community_message_reply(
+        peer_id=student_vk,
+        text="Приняли ваше обращение",
+        admin_author_id=999999,
+        reply_message={"text": f"Новая заявка #{ticket2.id} [Культурно-массовый]"},
+    )
+    assert updated2 is not None
+    assert updated2.id == ticket2.id
+    assert updated2.status == TicketStatus.IN_PROGRESS
+    assert updated2.response_text == "Приняли ваше обращение"

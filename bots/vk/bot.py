@@ -178,11 +178,15 @@ async def message_reply_raw_handler(event: dict):
     peer_id = msg.get("peer_id") or obj.get("peer_id")
     text = msg.get("text") or obj.get("text") or ""
     admin_author_id = msg.get("admin_author_id") or obj.get("admin_author_id")
+    reply_message = msg.get("reply_message") or obj.get("reply_message")
+    fwd_messages = msg.get("fwd_messages") or obj.get("fwd_messages")
     if peer_id and text:
         await handle_community_message_reply(
             peer_id=int(peer_id),
             text=str(text),
             admin_author_id=int(admin_author_id) if admin_author_id else None,
+            reply_message=reply_message if isinstance(reply_message, dict) else None,
+            fwd_messages=fwd_messages if isinstance(fwd_messages, list) else None,
         )
 
 
