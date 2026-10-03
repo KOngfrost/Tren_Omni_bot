@@ -209,9 +209,9 @@
                         </button>
                         <div class="notifications-dropdown" id="notifications-dropdown" role="menu" aria-label="Список уведомлений">
                             <div class="notifications-dropdown-header">
-                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                <div class="notifications-dropdown-title-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                                     <div class="notifications-dropdown-title">Активные уведомления</div>
-                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--primary); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран {{ icon('arrow-right', 11) }}</button>
+                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--primary); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline; white-space: nowrap; flex-shrink: 0;">Во весь экран {{ icon('arrow-right', 11) }}</button>
                                 </div>
                                 <div class="notifications-tags" id="notifications-tags">
                                     <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="tag-new-tickets">{{ icon('alert', 12) }} {{ request.state.new_tickets_count|default(0) }} новых заявок</span>

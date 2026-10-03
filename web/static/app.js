@@ -522,6 +522,9 @@
             try {
                 localStorage.setItem('oss_sidebar_collapsed', isCollapsed ? '1' : '0');
             } catch (_) {}
+            if (window.positionNotificationsDropdown) {
+                setTimeout(window.positionNotificationsDropdown, 320);
+            }
         }
     }
     window.toggleSidebar = toggleSidebar;
@@ -1105,18 +1108,80 @@
             });
         });
 
+        function positionNotificationsDropdown() {
+            if (!dropdown || !notifBtn) return;
+            var sidebar = document.querySelector('.sidebar');
+            var isDesktopSidebarVisible = false;
+            var sidebarRight = 0;
+
+            if (sidebar && window.innerWidth > 900) {
+                var container = document.querySelector('.container');
+                if (!container || !container.classList.contains('sidebar-collapsed')) {
+                    var sRect = sidebar.getBoundingClientRect();
+                    if (sRect.width > 50 && sRect.right > 0) {
+                        isDesktopSidebarVisible = true;
+                        sidebarRight = sRect.right;
+                    }
+                }
+            }
+
+            var viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+            var margin = 12;
+            var minLeft = isDesktopSidebarVisible ? Math.max(margin, sidebarRight + margin) : margin;
+            var maxRight = viewportWidth - margin;
+            var availableWidth = Math.max(220, maxRight - minLeft);
+
+            var targetWidth = Math.min(360, availableWidth);
+            dropdown.style.width = targetWidth + 'px';
+            dropdown.style.maxWidth = availableWidth + 'px';
+
+            var wrapper = document.getElementById('notifications-wrapper');
+            var wrapperRect = wrapper ? wrapper.getBoundingClientRect() : notifBtn.getBoundingClientRect();
+
+            var defaultLeft = wrapperRect.right - targetWidth;
+            if (defaultLeft < minLeft) {
+                var shiftX = minLeft - defaultLeft;
+                dropdown.style.right = (-shiftX) + 'px';
+            } else {
+                dropdown.style.right = '0px';
+            }
+
+            var currentRight = wrapperRect.right - (parseFloat(dropdown.style.right) || 0);
+            if (currentRight > maxRight) {
+                var overflowRight = currentRight - maxRight;
+                dropdown.style.right = ((parseFloat(dropdown.style.right) || 0) + overflowRight) + 'px';
+            }
+        }
+        window.positionNotificationsDropdown = positionNotificationsDropdown;
+
         // Выпадающее меню уведомлений в шапке
         if (notifBtn && dropdown) {
             notifBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
                 var isOpen = dropdown.classList.contains('active');
+                if (!isOpen) {
+                    positionNotificationsDropdown();
+                }
                 dropdown.classList.toggle('active', !isOpen);
                 notifBtn.setAttribute('aria-expanded', String(!isOpen));
                 if (!isOpen) {
+                    positionNotificationsDropdown();
                     updateCounters();
                 }
             });
+
+            window.addEventListener('resize', function () {
+                if (dropdown && dropdown.classList.contains('active')) {
+                    positionNotificationsDropdown();
+                }
+            });
+
+            window.addEventListener('scroll', function () {
+                if (dropdown && dropdown.classList.contains('active')) {
+                    positionNotificationsDropdown();
+                }
+            }, { passive: true });
         }
 
         // Закрытие выпадающего меню при клике вне него

@@ -432,7 +432,7 @@ code {
     border-radius: var(--r-md);
     position: sticky;
     top: 12px;
-    z-index: 40;
+    z-index: 105;
     backdrop-filter: blur(8px);
     box-shadow: var(--shadow-sm);
 }
@@ -1048,8 +1048,8 @@ body.no-scroll {
     top: calc(100% + 10px);
     right: 0;
     width: 360px;
-    max-width: calc(100vw - 32px);
-    max-height: 480px;
+    max-width: min(360px, calc(100vw - 32px));
+    max-height: calc(100vh - 120px);
     display: none;
     flex-direction: column;
     background: var(--bg-surface);
@@ -1057,9 +1057,33 @@ body.no-scroll {
     border-radius: var(--r-md);
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     z-index: 1000;
     animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     overflow: hidden;
+    box-sizing: border-box;
+}
+
+@media (min-width: 901px) {
+    .container:not(.sidebar-collapsed) .notifications-dropdown {
+        /* Адаптивное ограничение по ширине с учётом боковой панели */
+        max-width: min(360px, calc(100vw - 280px));
+    }
+}
+
+@media (max-width: 900px) {
+    .notifications-dropdown {
+        width: min(360px, calc(100vw - 24px));
+        max-width: calc(100vw - 24px);
+    }
+}
+
+@media (max-width: 480px) {
+    .notifications-dropdown {
+        width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        right: -8px;
+    }
 }
 
 .notifications-dropdown.active {
@@ -1075,10 +1099,21 @@ body.no-scroll {
     background: var(--bg-surface-2);
 }
 
+.notifications-dropdown-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .notifications-dropdown-title {
     font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .notifications-tags {
@@ -1265,16 +1300,22 @@ body.no-scroll {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
     border-top: 1px solid var(--line);
     background: var(--bg-surface-2);
 }
 
 .notifications-footer-link {
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 600;
     color: var(--primary);
     text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .notifications-footer-link:hover {
