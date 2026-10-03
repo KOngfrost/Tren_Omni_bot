@@ -170,12 +170,14 @@ async def fallback_handler(message: Message):
 async def message_reply_raw_handler(event: dict):
     """Перехват ответов операторов из диалогов сообщества (LongPoll/Callback)."""
     touch_heartbeat()
+    logger.info("Получено событие message_reply от VK: %r", event)
     from core.services.community_reply_service import handle_community_message_reply
 
     obj = event.get("object") or {}
-    peer_id = obj.get("peer_id")
-    text = obj.get("text", "")
-    admin_author_id = obj.get("admin_author_id")
+    msg = obj.get("message") if isinstance(obj.get("message"), dict) else obj
+    peer_id = msg.get("peer_id") or obj.get("peer_id")
+    text = msg.get("text") or obj.get("text") or ""
+    admin_author_id = msg.get("admin_author_id") or obj.get("admin_author_id")
     if peer_id and text:
         await handle_community_message_reply(
             peer_id=int(peer_id),

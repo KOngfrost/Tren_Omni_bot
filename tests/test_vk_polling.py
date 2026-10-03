@@ -113,3 +113,27 @@ async def test_listen_resets_server_after_consecutive_errors():
     assert events[0]["ts"] == "3"
     # get_server вызывался как минимум дважды (первоначальный + повторный после 3 ошибок)
     assert polling.get_server.call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_ensure_event_settings_activates_message_reply():
+    """Проверка автоматической активации message_reply через groups.setLongPollSettings."""
+    polling = RobustBotPolling()
+    polling.group_id = 999
+
+    mock_api = MagicMock()
+    mock_api.request = AsyncMock(return_value={"response": 1})
+    polling._api = mock_api
+
+    await polling.ensure_event_settings()
+
+    mock_api.request.assert_called_once_with(
+        "groups.setLongPollSettings",
+        {
+            "group_id": 999,
+            "enabled": 1,
+            "message_new": 1,
+            "message_reply": 1,
+            "message_event": 1,
+        },
+    )

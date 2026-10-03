@@ -142,6 +142,31 @@ class RobustBotPolling(BotPolling):
             # Возврат пустого dict гарантирует, что listen() не продолжит крутиться с протухшим key
             return {}
 
+    async def ensure_event_settings(self) -> None:
+        """Гарантированная настройка событий LongPoll (включение message_reply и message_new)."""
+        if self.group_id is None:
+            return
+        try:
+            await self.api.request(
+                "groups.setLongPollSettings",
+                {
+                    "group_id": self.group_id,
+                    "enabled": 1,
+                    "message_new": 1,
+                    "message_reply": 1,
+                    "message_event": 1,
+                },
+            )
+            logger.info(
+                "События LongPoll для сообщества %s успешно активированы (message_reply=1)",
+                self.group_id,
+            )
+        except Exception as lp_err:
+            logger.warning(
+                "Не удалось автоматически настроить LongPoll события через groups.setLongPollSettings: %s",
+                lp_err,
+            )
+
     async def listen(self) -> AsyncGenerator[dict[str, Any], None]:
         """Основной цикл прослушивания LongPoll с защитой от зависаний на протухших ключах."""
         self._stop_event = asyncio.Event()
@@ -149,6 +174,7 @@ class RobustBotPolling(BotPolling):
 
         # Инициализация первого сервера
         server = self.restore_server_ts(await self.get_server())
+        await self.ensure_event_settings()
         touch_heartbeat()
         logger.info("Запущен отказоустойчивый цикл LongPoll для сообщества %s", self.group_id)
 
