@@ -26,10 +26,13 @@ router = Router(name="status")
 
 async def render_metrics_content(
     webapp_url: str | None = None,
+    tab: str = "summary",
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Сформировать текст и клавиатуру карточки бизнес-метрик сайта и бота."""
     metrics = await collect_app_metrics()
-    return format_app_metrics_message(metrics), get_metrics_inline_keyboard(webapp_url)
+    return format_app_metrics_message(metrics, tab=tab), get_metrics_inline_keyboard(
+        webapp_url, tab=tab
+    )
 
 
 async def render_status_content(
@@ -127,11 +130,28 @@ async def cmd_metrics(message: Message) -> None:
 @router.callback_query(F.data == "metrics:refresh")
 async def callback_metrics_refresh(callback: CallbackQuery) -> None:
     """Немедленное обновление бизнес-метрик."""
-    text, keyboard = await render_metrics_content()
+    text, keyboard = await render_metrics_content(tab="summary")
     try:
         if callback.message:
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         await callback.answer("Показатели обновлены.")
+    except Exception:
+        await callback.answer("Показатели актуальны.")
+
+
+@router.callback_query(F.data.startswith("metrics:tab:"))
+async def callback_metrics_tab(callback: CallbackQuery) -> None:
+    """Переключение вкладок метрик: summary, site, bot, kpi."""
+    tab = (callback.data or "").rsplit(":", 1)[-1]
+    if tab not in ("summary", "site", "bot", "kpi"):
+        await callback.answer("Неизвестный раздел.")
+        return
+
+    text, keyboard = await render_metrics_content(tab=tab)
+    try:
+        if callback.message:
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await callback.answer()
     except Exception:
         await callback.answer("Показатели актуальны.")
 

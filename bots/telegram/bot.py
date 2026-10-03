@@ -112,6 +112,7 @@ async def setup_bot_commands(
             BotCommand(command="logs", description="📋 Просмотр свежих логов контейнера"),
             BotCommand(command="backup", description="💾 Резервная копия базы данных"),
             BotCommand(command="maintenance", description="🚧 Режим технических работ (503)"),
+            BotCommand(command="kickall", description="🚪 Сброс всех активных сессий"),
             BotCommand(command="2fa", description="🔐 Управление двухфакторной аутентификацией"),
             BotCommand(command="help", description="ℹ️ Справка и документация"),
         ]

@@ -30,7 +30,8 @@ def get_main_reply_keyboard(webapp_url: str | None = None) -> ReplyKeyboardMarku
             [KeyboardButton(text="📊 Статус"), KeyboardButton(text="📈 Статистика")],
             [KeyboardButton(text="🔄 Перезапуск"), KeyboardButton(text="📋 Логи")],
             [KeyboardButton(text="💾 Бэкап"), KeyboardButton(text="🚧 Техработы")],
-            [KeyboardButton(text="🔐 2FA"), KeyboardButton(text="ℹ️ Помощь")],
+            [KeyboardButton(text="🔐 2FA"), KeyboardButton(text="🚪 Сброс сессий")],
+            [KeyboardButton(text="ℹ️ Помощь")],
         ]
     )
 
@@ -138,6 +139,9 @@ def get_maintenance_inline_keyboard(enabled: bool) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [action_btn],
             [
+                InlineKeyboardButton(text="🚪 Сбросить все сессии", callback_data="kickall:menu"),
+            ],
+            [
                 InlineKeyboardButton(text="🔄 Обновить", callback_data="maint:refresh"),
                 InlineKeyboardButton(text="📊 Статус", callback_data="status:refresh"),
             ],
@@ -163,8 +167,11 @@ def get_two_factor_inline_keyboard(enabled: bool) -> InlineKeyboardMarkup:
     )
 
 
-def get_metrics_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboardMarkup:
-    """Инлайн-клавиатура карточки бизнес-метрик (сайт + бот)."""
+def get_metrics_inline_keyboard(
+    webapp_url: str | None = None,
+    tab: str = "summary",
+) -> InlineKeyboardMarkup:
+    """Инлайн-клавиатура карточки бизнес-метрик с вкладками (Сводка/Сайт/Бот/KPI)."""
     url = webapp_url or get_settings().TELEGRAM_WEBAPP_URL
     buttons: list[list[InlineKeyboardButton]] = []
 
@@ -174,6 +181,25 @@ def get_metrics_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboard
                 InlineKeyboardButton(text="📱 Открыть веб-панель", web_app=WebAppInfo(url=url)),
             ]
         )
+
+    # Вкладки метрик
+    tabs = [
+        ("summary", "📊 Сводка"),
+        ("site", "🌐 Сайт"),
+        ("bot", "🤖 Бот"),
+        ("kpi", "🎯 KPI"),
+    ]
+    tab_row1: list[InlineKeyboardButton] = []
+    tab_row2: list[InlineKeyboardButton] = []
+    for idx, (code, label) in enumerate(tabs):
+        text = f"• {label} •" if code == tab else label
+        cb = "status:noop" if code == tab else f"metrics:tab:{code}"
+        if idx < 2:
+            tab_row1.append(InlineKeyboardButton(text=text, callback_data=cb))
+        else:
+            tab_row2.append(InlineKeyboardButton(text=text, callback_data=cb))
+    buttons.append(tab_row1)
+    buttons.append(tab_row2)
 
     buttons.extend(
         [
@@ -191,6 +217,20 @@ def get_metrics_inline_keyboard(webapp_url: str | None = None) -> InlineKeyboard
     )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_kickall_confirmation_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура подтверждения сброса всех активных сессий."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚪 Да, завершить все сессии", callback_data="kickall:confirm"
+                ),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="kickall:cancel"),
+            ]
+        ]
+    )
 
 
 def get_reboot_confirmation_keyboard() -> InlineKeyboardMarkup:

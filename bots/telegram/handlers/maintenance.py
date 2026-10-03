@@ -104,3 +104,54 @@ async def callback_maintenance_disable(callback: CallbackQuery) -> None:
     text, keyboard = await render_maintenance_content()
     if callback.message:
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.message(Command("kickall"))
+@router.message(Command("logout_all"))
+@router.message(F.text == "🚪 Сброс сессий")
+@router.callback_query(F.data == "kickall:menu")
+async def cmd_kickall_prompt(event: Message | CallbackQuery) -> None:
+    """Запрос подтверждения принудительного завершения всех активных сессий."""
+    from bots.telegram.keyboards import get_kickall_confirmation_keyboard
+
+    text = (
+        "🚪 <b>Принудительный сброс активных сессий</b>\n\n"
+        "Вы собираетесь отозвать все активные сессии администраторов во всех воркерах веб-панели.\n\n"
+        "⚠️ Все вошедшие администраторы будут немедленно разлогинены и перенаправлены на страницу входа.\n\n"
+        "Вы уверены?"
+    )
+    keyboard = get_kickall_confirmation_keyboard()
+    if isinstance(event, CallbackQuery):
+        if event.message:
+            await event.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "kickall:confirm")
+async def callback_kickall_confirm(callback: CallbackQuery) -> None:
+    """Подтверждение завершения всех сессий."""
+    from core.admin_presence import revoke_all_active_sessions
+
+    user_id = callback.from_user.id if callback.from_user else 0
+    logger.info("Admin %s triggered revoke_all_active_sessions via Telegram", user_id)
+    revoked_count = await revoke_all_active_sessions()
+
+    text = (
+        "✅ <b>Все активные сессии сброшены</b>\n\n"
+        f"Отозвано сессий и статусов присутствия: <b>{revoked_count}</b>.\n"
+        "Все пользователи веб-панели были принудительно разлогинены."
+    )
+    if callback.message:
+        await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.answer(f"Сброшено {revoked_count} сессий!", show_alert=True)
+
+
+@router.callback_query(F.data == "kickall:cancel")
+async def callback_kickall_cancel(callback: CallbackQuery) -> None:
+    """Отмена сброса сессий."""
+    text = "❌ Сброс сессий отменён."
+    if callback.message:
+        await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.answer("Отменено.")

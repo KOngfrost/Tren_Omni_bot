@@ -129,6 +129,46 @@ async def clear_presence(web_user_id: int) -> None:
         logger.debug("Не удалось удалить heartbeat из Redis: %s", exc)
 
 
+async def revoke_all_active_sessions() -> int:
+    """Принудительно завершить все активные сессии администраторов.
+
+    1. Находит и удаляет все ключи `session:*` в Redis.
+    2. Удаляет все heartbeat-ключи `admin:heartbeat:*` в Redis.
+    3. Очищает локальный in-memory словарь присутствия.
+
+    Возвращает количество завершённых сессий.
+    """
+    mem_count = len(_memory_presence)
+    _memory_presence.clear()
+    total_revoked = mem_count
+
+    redis: Any = await get_redis_client()
+    if redis is not None:
+        try:
+            session_keys: list[str] = [
+                key async for key in redis.scan_iter(match="session:*", count=100)
+            ]
+            if session_keys:
+                await redis.delete(*session_keys)
+                total_revoked += len(session_keys)
+
+            hb_keys: list[str] = [
+                key async for key in redis.scan_iter(match=f"{ADMIN_HEARTBEAT_PREFIX}*", count=100)
+            ]
+            if hb_keys:
+                await redis.delete(*hb_keys)
+                total_revoked += len(hb_keys)
+
+            logger.warning(
+                "Все активные сессии администраторов принудительно завершены: удалено %d записей",
+                total_revoked,
+            )
+        except Exception as exc:
+            logger.error("Ошибка при отзыве сессий в Redis: %s", exc)
+
+    return total_revoked
+
+
 __all__ = [
     "ADMIN_HEARTBEAT_PREFIX",
     "ADMIN_PRESENCE_TTL_SECONDS",
@@ -137,5 +177,6 @@ __all__ = [
     "get_online_ids",
     "heartbeat_key",
     "is_online",
+    "revoke_all_active_sessions",
     "touch_presence",
 ]

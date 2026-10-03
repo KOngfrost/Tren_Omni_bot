@@ -9,7 +9,11 @@ from vkbottle.bot import Message
 
 from core.config import settings
 from core.heartbeat import touch_heartbeat
-from core.maintenance import get_maintenance_info, is_maintenance_mode
+from core.maintenance import (
+    get_maintenance_info,
+    is_maintenance_mode,
+    is_maintenance_trigger,
+)
 from core.state_dispenser import RedisStateDispenser
 
 from bots.vk.polling import RobustBotPolling
@@ -128,17 +132,20 @@ class VKMaintenanceMiddleware(BaseMiddleware[Message]):
     async def pre(self) -> None:
         if await is_maintenance_mode():
             touch_heartbeat()
-            info = await get_maintenance_info()
-            bot_msg = info.get("bot_message") or (
-                "🛠 Ведутся технические работы\n\n"
-                "В данный момент проводятся плановые технические работы. "
-                "Приём и обработка обращений временно приостановлены.\n\n"
-                "Приносим извинения за временные неудобства. Пожалуйста, повторите попытку позже."
-            )
-            try:
-                await self.event.answer(bot_msg)
-            except Exception:
-                logger.exception("Не удалось отправить сообщение о техработах в VK")
+            # Отвечаем сообщением о техработах ТОЛЬКО на триггерные слова или нажатия кнопок
+            payload = getattr(self.event, "payload", None)
+            if is_maintenance_trigger(self.event.text, payload):
+                info = await get_maintenance_info()
+                bot_msg = info.get("bot_message") or (
+                    "🛠 Ведутся технические работы\n\n"
+                    "В данный момент проводятся плановые технические работы. "
+                    "Приём и обработка обращений временно приостановлены.\n\n"
+                    "Приносим извинения за временные неудобства. Пожалуйста, повторите попытку позже."
+                )
+                try:
+                    await self.event.answer(bot_msg)
+                except Exception:
+                    logger.exception("Не удалось отправить сообщение о техработах в VK")
             self.stop("maintenance_mode_active")
 
 
