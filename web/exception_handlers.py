@@ -146,7 +146,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             _get_error_page_context(request, 422),
             status_code=422,
         )
-    return JSONResponse(content={"detail": exc.errors()}, status_code=422)
+    # Sanitize validation errors: strip input values to prevent PII/secret leakage
+    safe_errors = [
+        {"loc": e.get("loc"), "msg": e.get("msg"), "type": e.get("type")} for e in exc.errors()
+    ]
+    return JSONResponse(content={"detail": safe_errors}, status_code=422)
 
 
 async def global_exception_handler(request: Request, exc: Exception):

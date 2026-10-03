@@ -100,7 +100,6 @@ class UserDataErasureResponse(BaseModel):
 
     success: bool
     vk_id: int
-    user_id: int | None = None
     tickets_anonymized: int = 0
     messages_anonymized: int = 0
     subscriptions_deleted: int = 0

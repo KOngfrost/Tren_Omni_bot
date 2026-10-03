@@ -625,6 +625,7 @@ async def v1_get_tickets(
 )
 async def v1_delete_user_data(
     vk_id: int,
+    request: Request,
     user=Depends(require_superadmin),
 ) -> UserDataErasureResponse:
     """Удалить и анонимизировать персональные данные пользователя.
@@ -632,6 +633,7 @@ async def v1_delete_user_data(
     Доступно только суперадминистраторам.
     Анонимизирует тикеты, удаляет подписки, регистрации и профиль пользователя.
     """
+    await require_crud_rate_limit(request)
     async with async_session_maker() as session:
         try:
             result = await delete_user_personal_data(session, vk_id)

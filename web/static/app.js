@@ -1107,6 +1107,210 @@
 
         var counterIntervalId = null;
         var counterAbortController = null;
+        var sseSource = null;
+        var sseReconnectTimeout = null;
+        var sseReconnectDelay = 1000;
+
+        function updateDashboardFromSSE(data) {
+            var dashMetrics = document.querySelector('.dash-metrics');
+            if (!dashMetrics || !data.dashboard) return;
+            
+            // Update metric numbers
+            var counters = dashMetrics.querySelectorAll('[data-counter]');
+            for (var i = 0; i < counters.length; i++) {
+                var el = counters[i];
+                var key = el.getAttribute('data-counter');
+                if (data.dashboard[key] !== undefined) {
+                    el.textContent = data.dashboard[key];
+                }
+            }
+            
+            // Update unassigned badges if present
+            var unassignedTotal = document.getElementById('dash-unassigned-total');
+            var unassignedNew = document.getElementById('dash-unassigned-new');
+            if (unassignedTotal && data.dashboard.unassigned_total !== undefined) {
+                unassignedTotal.textContent = data.dashboard.unassigned_total;
+            }
+            if (unassignedNew && data.dashboard.unassigned_new !== undefined) {
+                unassignedNew.textContent = data.dashboard.unassigned_new;
+            }
+
+            // Update recent tickets table
+            var tbody = document.querySelector('.recent-tickets-table tbody');
+            if (tbody && data.recent_tickets) {
+                if (data.recent_tickets.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary); padding: var(--spacing-xl) 0;">Нет обращений для отображения</td></tr>';
+                } else {
+                    var html = '';
+                    for (var j = 0; j < data.recent_tickets.length; j++) {
+                        var t = data.recent_tickets[j];
+                        html += '<tr class="ticket-row" onclick="window.location.href=\'/tickets/?open=' + t.id + '\'">' +
+                            '<td>#' + t.id + '</td>' +
+                            '<td>' + escapeHtml(t.topic) + '</td>' +
+                            '<td>' + escapeHtml(t.department) + '</td>' +
+                            '<td><span class="badge ' + escapeHtml(t.status_badge) + '">' + escapeHtml(t.status_label) + '</span></td>' +
+                            '<td>' + escapeHtml(t.created_at) + '</td>' +
+                            '</tr>';
+                    }
+                    tbody.innerHTML = html;
+                }
+            }
+        }
+
+        function processCountersData(data) {
+            directTicketUrl = data.new_ticket_direct_url || null;
+            directReplyUrl = data.student_reply_direct_url || null;
+            directPartnerUrl = data.partnership_direct_url || null;
+
+            var newTickets = data.new_tickets || 0;
+            var studentReplies = data.student_replies || 0;
+            var newParts = data.new_partnerships || 0;
+            var totalCount = data.total_notifications || (newTickets + studentReplies + newParts);
+            var totalDisplay = totalCount > 99 ? '99+' : totalCount;
+
+            // 1. Общий бейдж на колокольчике в шапке
+            if (totalBadge) {
+                if (totalCount > 0) {
+                    totalBadge.textContent = totalDisplay;
+                    totalBadge.classList.remove('hidden');
+                } else {
+                    totalBadge.classList.add('hidden');
+                }
+            }
+
+            // 1.1. Колокольчик в боковом меню (Рабочая область)
+            if (sidebarNotifBadge) {
+                if (totalCount > 0) {
+                    sidebarNotifBadge.textContent = totalDisplay;
+                    sidebarNotifBadge.classList.remove('hidden');
+                } else {
+                    sidebarNotifBadge.classList.add('hidden');
+                }
+            }
+
+            // 2. Раздельные бейджи в боковом меню
+            if (ticketsBadge) {
+                if (newTickets > 0) {
+                    ticketsBadge.textContent = newTickets;
+                    ticketsBadge.title = newTickets === 1 ? 'Нажмите для перехода к новой заявке' : 'Новые нерассмотренные заявки (' + newTickets + ')';
+                    ticketsBadge.classList.remove('hidden');
+                } else {
+                    ticketsBadge.classList.add('hidden');
+                }
+            }
+            if (repliesBadge) {
+                if (studentReplies > 0) {
+                    repliesBadge.textContent = studentReplies;
+                    repliesBadge.title = studentReplies === 1 ? 'Нажмите для перехода к ответу студента' : 'Новые ответы студентов (' + studentReplies + ')';
+                    repliesBadge.classList.remove('hidden');
+                } else {
+                    repliesBadge.classList.add('hidden');
+                }
+            }
+            if (partBadge) {
+                if (newParts > 0) {
+                    partBadge.textContent = newParts;
+                    partBadge.title = newParts === 1 ? 'Нажмите для перехода к заявке на партнёрство' : 'Заявки на партнёрство (' + newParts + ')';
+                    partBadge.classList.remove('hidden');
+                } else {
+                    partBadge.classList.add('hidden');
+                }
+            }
+
+            // 3. Теги в шапке выпадающего списка
+            var ticketsTagText = newTickets + ' новых заявок';
+            var repliesTagText = studentReplies + ' ответов';
+            var partsTagText = newParts + ' партнёрств';
+
+            if (tagTickets) {
+                if (newTickets > 0) {
+                    tagTickets.textContent = ticketsTagText;
+                    tagTickets.classList.remove('hidden');
+                } else {
+                    tagTickets.classList.add('hidden');
+                }
+            }
+            if (modalTagTickets) {
+                if (newTickets > 0) {
+                    modalTagTickets.textContent = newTickets + ' новых заявок';
+                    modalTagTickets.classList.remove('hidden');
+                } else {
+                    modalTagTickets.classList.add('hidden');
+                }
+            }
+
+            if (tagReplies) {
+                if (studentReplies > 0) {
+                    tagReplies.textContent = repliesTagText;
+                    tagReplies.classList.remove('hidden');
+                } else {
+                    tagReplies.classList.add('hidden');
+                }
+            }
+            if (modalTagReplies) {
+                if (studentReplies > 0) {
+                    modalTagReplies.textContent = studentReplies + ' ответов';
+                    modalTagReplies.classList.remove('hidden');
+                } else {
+                    modalTagReplies.classList.add('hidden');
+                }
+            }
+
+            if (tagPart) {
+                if (newParts > 0) {
+                    tagPart.textContent = partsTagText;
+                    tagPart.classList.remove('hidden');
+                } else {
+                    tagPart.classList.add('hidden');
+                }
+            }
+            if (modalTagPart) {
+                if (newParts > 0) {
+                    modalTagPart.textContent = newParts + ' партнёрств';
+                    modalTagPart.classList.remove('hidden');
+                } else {
+                    modalTagPart.classList.add('hidden');
+                }
+            }
+
+            // 4. Список конкретных уведомлений со ссылками
+            if (data.items) {
+                var html = '';
+                if (data.items.length === 0) {
+                    html = '<div class="notifications-empty">Нет новых уведомлений</div>';
+                } else {
+                    for (var i = 0; i < data.items.length; i++) {
+                        var item = data.items[i];
+                        var iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+                        if (item.type === 'student_reply') {
+                            iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+                        } else if (item.type === 'new_ticket') {
+                            iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h10M7 9h10"/></svg>';
+                        } else if (item.type === 'partnership') {
+                            iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+                        }
+
+                        html += '<a href="' + escapeHtml(item.url) + '" class="notifications-item notif-type-' + escapeHtml(item.type) + '">' +
+                            '<div class="notifications-item-icon" aria-hidden="true">' + iconSvg + '</div>' +
+                            '<div class="notifications-item-content">' +
+                                '<div class="notifications-item-title-row">' +
+                                    '<span class="notifications-item-title">' + escapeHtml(item.title) + '</span> ' +
+                                    '<span class="notifications-item-badge badge-' + escapeHtml(item.type) + '">' + escapeHtml(item.type_label) + '</span>' +
+                                    (item.is_general ? '<span class="notifications-item-general">' + escapeHtml(item.general_label || 'Общее обращение') + '</span>' : '') +
+                                '</div>' +
+                                (item.department ? '<div class="notifications-item-dept">' + escapeHtml(item.department) + '</div>' : '') +
+                                (item.text ? '<div class="notifications-item-text">' + escapeHtml(item.text) + '</div>' : '') +
+                                (item.time ? '<div class="notifications-item-time">' + escapeHtml(item.time) + '</div>' : '') +
+                            '</div>' +
+                        '</a>';
+                    }
+                }
+                if (itemsList) itemsList.innerHTML = html;
+                if (modalItemsList) modalItemsList.innerHTML = html;
+            }
+
+            updateDashboardFromSSE(data);
+        }
 
         function updateCounters() {
             if (document.hidden) return;
@@ -1126,172 +1330,59 @@
                 })
                 .then(function (result) {
                     if (!result || !result.success || !result.data) return;
-                    var data = result.data;
-
-                    directTicketUrl = data.new_ticket_direct_url || null;
-                    directReplyUrl = data.student_reply_direct_url || null;
-                    directPartnerUrl = data.partnership_direct_url || null;
-
-                    var newTickets = data.new_tickets || 0;
-                    var studentReplies = data.student_replies || 0;
-                    var newParts = data.new_partnerships || 0;
-                    var totalCount = data.total_notifications || (newTickets + studentReplies + newParts);
-                    var totalDisplay = totalCount > 99 ? '99+' : totalCount;
-
-                    // 1. Общий бейдж на колокольчике в шапке
-                    if (totalBadge) {
-                        if (totalCount > 0) {
-                            totalBadge.textContent = totalDisplay;
-                            totalBadge.classList.remove('hidden');
-                        } else {
-                            totalBadge.classList.add('hidden');
-                        }
-                    }
-
-                    // 1.1. Колокольчик в боковом меню (Рабочая область)
-                    if (sidebarNotifBadge) {
-                        if (totalCount > 0) {
-                            sidebarNotifBadge.textContent = totalDisplay;
-                            sidebarNotifBadge.classList.remove('hidden');
-                        } else {
-                            sidebarNotifBadge.classList.add('hidden');
-                        }
-                    }
-
-                    // 2. Раздельные бейджи в боковом меню
-                    if (ticketsBadge) {
-                        if (newTickets > 0) {
-                            ticketsBadge.textContent = newTickets;
-                            ticketsBadge.title = newTickets === 1 ? 'Нажмите для перехода к новой заявке' : 'Новые нерассмотренные заявки (' + newTickets + ')';
-                            ticketsBadge.classList.remove('hidden');
-                        } else {
-                            ticketsBadge.classList.add('hidden');
-                        }
-                    }
-                    if (repliesBadge) {
-                        if (studentReplies > 0) {
-                            repliesBadge.textContent = studentReplies;
-                            repliesBadge.title = studentReplies === 1 ? 'Нажмите для перехода к ответу студента' : 'Новые ответы студентов (' + studentReplies + ')';
-                            repliesBadge.classList.remove('hidden');
-                        } else {
-                            repliesBadge.classList.add('hidden');
-                        }
-                    }
-                    if (partBadge) {
-                        if (newParts > 0) {
-                            partBadge.textContent = newParts;
-                            partBadge.title = newParts === 1 ? 'Нажмите для перехода к заявке на партнёрство' : 'Заявки на партнёрство (' + newParts + ')';
-                            partBadge.classList.remove('hidden');
-                        } else {
-                            partBadge.classList.add('hidden');
-                        }
-                    }
-
-                    // 3. Теги в шапке выпадающего списка
-                    var ticketsTagText = newTickets + ' новых заявок';
-                    var repliesTagText = studentReplies + ' ответов';
-                    var partsTagText = newParts + ' партнёрств';
-
-                    if (tagTickets) {
-                        if (newTickets > 0) {
-                            tagTickets.textContent = ticketsTagText;
-                            tagTickets.classList.remove('hidden');
-                        } else {
-                            tagTickets.classList.add('hidden');
-                        }
-                    }
-                    if (modalTagTickets) {
-                        if (newTickets > 0) {
-                            modalTagTickets.textContent = newTickets + ' новых заявок';
-                            modalTagTickets.classList.remove('hidden');
-                        } else {
-                            modalTagTickets.classList.add('hidden');
-                        }
-                    }
-
-                    if (tagReplies) {
-                        if (studentReplies > 0) {
-                            tagReplies.textContent = repliesTagText;
-                            tagReplies.classList.remove('hidden');
-                        } else {
-                            tagReplies.classList.add('hidden');
-                        }
-                    }
-                    if (modalTagReplies) {
-                        if (studentReplies > 0) {
-                            modalTagReplies.textContent = studentReplies + ' ответов';
-                            modalTagReplies.classList.remove('hidden');
-                        } else {
-                            modalTagReplies.classList.add('hidden');
-                        }
-                    }
-
-                    if (tagPart) {
-                        if (newParts > 0) {
-                            tagPart.textContent = partsTagText;
-                            tagPart.classList.remove('hidden');
-                        } else {
-                            tagPart.classList.add('hidden');
-                        }
-                    }
-                    if (modalTagPart) {
-                        if (newParts > 0) {
-                            modalTagPart.textContent = newParts + ' партнёрств';
-                            modalTagPart.classList.remove('hidden');
-                        } else {
-                            modalTagPart.classList.add('hidden');
-                        }
-                    }
-
-                    // 4. Список конкретных уведомлений со ссылками
-                    if (data.items) {
-                        var html = '';
-                        if (data.items.length === 0) {
-                            html = '<div class="notifications-empty">Нет новых уведомлений</div>';
-                        } else {
-                            for (var i = 0; i < data.items.length; i++) {
-                                var item = data.items[i];
-                                var iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
-                                if (item.type === 'student_reply') {
-                                    iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-                                } else if (item.type === 'new_ticket') {
-                                    iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h10M7 9h10"/></svg>';
-                                } else if (item.type === 'partnership') {
-                                    iconSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
-                                }
-
-                                html += '<a href="' + escapeHtml(item.url) + '" class="notifications-item notif-type-' + escapeHtml(item.type) + '">' +
-                                    '<div class="notifications-item-icon" aria-hidden="true">' + iconSvg + '</div>' +
-                                    '<div class="notifications-item-content">' +
-                                        '<div class="notifications-item-title-row">' +
-                                            '<span class="notifications-item-title">' + escapeHtml(item.title) + '</span> ' +
-                                            '<span class="notifications-item-badge badge-' + escapeHtml(item.type) + '">' + escapeHtml(item.type_label) + '</span>' +
-                                            // Общее обращение (без отдела) помечаем явно:
-                                            // за ним не закреплён ни один отдел.
-                                            (item.is_general ? '<span class="notifications-item-general">' + escapeHtml(item.general_label || 'Общее обращение') + '</span>' : '') +
-                                        '</div>' +
-                                        (item.department ? '<div class="notifications-item-dept">' + escapeHtml(item.department) + '</div>' : '') +
-                                        (item.text ? '<div class="notifications-item-text">' + escapeHtml(item.text) + '</div>' : '') +
-                                        (item.time ? '<div class="notifications-item-time">' + escapeHtml(item.time) + '</div>' : '') +
-                                    '</div>' +
-                                '</a>';
-                            }
-                        }
-                        if (itemsList) itemsList.innerHTML = html;
-                        if (modalItemsList) modalItemsList.innerHTML = html;
-                    }
+                    processCountersData(result.data);
                 })
                 .catch(function (err) {
                     if (err && err.name === 'AbortError') return;
                 });
         }
 
-        // Первичная загрузка и периодический опрос каждые 20 секунд с проверкой видимости
-        updateCounters();
-        counterIntervalId = setInterval(updateCounters, 20000);
+        function startSSE() {
+            if (typeof EventSource === 'undefined') {
+                updateCounters();
+                counterIntervalId = setInterval(updateCounters, 20000);
+                return;
+            }
+
+            if (sseSource) {
+                sseSource.close();
+            }
+
+            sseSource = new EventSource('/api/stream');
+
+            sseSource.addEventListener('counters', function(e) {
+                try {
+                    var data = JSON.parse(e.data);
+                    processCountersData(data);
+                    sseReconnectDelay = 1000; // reset backoff
+                } catch (err) {}
+            });
+
+            sseSource.addEventListener('error', function(e) {
+                sseSource.close();
+                sseSource = null;
+                
+                // Fallback to single fetch
+                updateCounters();
+
+                if (sseReconnectTimeout) clearTimeout(sseReconnectTimeout);
+                sseReconnectTimeout = setTimeout(startSSE, sseReconnectDelay);
+                
+                sseReconnectDelay *= 2;
+                if (sseReconnectDelay > 30000) sseReconnectDelay = 30000;
+            });
+        }
+
+        // Первичная загрузка через SSE (с фоллбэком)
+        startSSE();
+
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) {
-                updateCounters();
+                if (sseSource && sseSource.readyState !== EventSource.OPEN) {
+                    startSSE();
+                } else if (!sseSource) {
+                    startSSE();
+                }
             }
         });
     }

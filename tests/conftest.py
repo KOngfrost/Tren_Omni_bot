@@ -61,6 +61,9 @@ ALL_MODULE_NAMES = (
     "web.routes.auth",
     "web.security.login_rate_limiter",
     "web.routes.dept_frame",
+    "web.routes.sse",
+    "core.archival",
+    "core.services.privacy_service",
 )
 
 

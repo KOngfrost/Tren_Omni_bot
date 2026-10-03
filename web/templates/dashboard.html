@@ -41,22 +41,22 @@
 <div class="dash-metrics">
     <a class="dash-metric" href="/tickets/">
         <div class="dash-metric-head">{{ icon('ticket', 14) }} Всего заявок</div>
-        <div class="dash-metric-value" data-counter>{{ stats.total_tickets }}</div>
+        <div class="dash-metric-value" data-counter="total_tickets">{{ stats.total_tickets }}</div>
         <span class="dash-metric-accent"></span>
     </a>
     <a class="dash-metric" href="/tickets/?status=%D0%9D%D0%BE%D0%B2%D0%BE%D0%B5" data-tone="danger">
         <div class="dash-metric-head">{{ icon('alert', 14) }} Новые</div>
-        <div class="dash-metric-value" data-counter>{{ stats.new_tickets }}</div>
+        <div class="dash-metric-value" data-counter="new_tickets">{{ stats.new_tickets }}</div>
         <span class="dash-metric-accent"></span>
     </a>
     <a class="dash-metric" href="/tickets/?status=%D0%92+%D0%BE%D0%B1%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B5" data-tone="warn">
         <div class="dash-metric-head">{{ icon('clock', 14) }} В обработке</div>
-        <div class="dash-metric-value" data-counter>{{ stats.in_progress }}</div>
+        <div class="dash-metric-value" data-counter="in_progress">{{ stats.in_progress }}</div>
         <span class="dash-metric-accent"></span>
     </a>
     <a class="dash-metric" href="/tickets/?status=%D0%92%D1%8B%D0%BF%D0%BE%D0%BB%D0%BD%D0%B5%D0%BD%D0%BE" data-tone="ok">
         <div class="dash-metric-head">{{ icon('check-circle', 14) }} Решено сегодня</div>
-        <div class="dash-metric-value" data-counter>{{ stats.completed_today }}</div>
+        <div class="dash-metric-value" data-counter="completed_today">{{ stats.completed_today }}</div>
         <span class="dash-metric-accent"></span>
     </a>
 </div>
@@ -81,12 +81,12 @@
                 <div class="dash-list-item">
                     {{ icon('folder', 16) }}
                     <span class="dash-list-item-text">Всего общих обращений</span>
-                    <span class="dash-list-item-value">{{ unassigned_total }}</span>
+                    <span class="dash-list-item-value" id="dash-unassigned-total">{{ unassigned_total }}</span>
                 </div>
                 <div class="dash-list-item {% if unassigned_new > 0 %}is-alert{% endif %}">
                     {{ icon('alert', 16) }}
                     <span class="dash-list-item-text">Требуют внимания</span>
-                    <span class="dash-list-item-value">{{ unassigned_new }}</span>
+                    <span class="dash-list-item-value" id="dash-unassigned-new">{{ unassigned_new }}</span>
                 </div>
                 <div class="dash-list-item">
                     {{ icon('check-circle', 16) }}
@@ -113,7 +113,7 @@
             <a href="/tickets/" class="btn btn-secondary btn-small">Все заявки</a>
         </div>
         <div class="table-container">
-            <table>
+            <table class="recent-tickets-table">
                 <thead>
                     <tr>
                         <th>ID</th>

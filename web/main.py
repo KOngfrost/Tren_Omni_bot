@@ -72,6 +72,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cleanup_task = start_rate_limit_cleanup()
     logger.info("Фоновая очистка rate-limit журналов запущена")
 
+    # Би-недельная архивация старых логов и завершённых заявок (gzip → archives/)
+    from core.archival import start_archival
+
+    archival_task: asyncio.Task[None] = start_archival()
+    logger.info("Фоновая архивация логов и заявок запущена")
+
     # Автоудаление истёкших временных учётных записей. Первая чистка
     # выполняется сразу при старте, дальше — по таймеру.
     temp_admin_task: asyncio.Task[None] | None = None
@@ -133,6 +139,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
         logger.info("Фоновая очистка rate-limit журналов остановлена")
+    archival_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await archival_task
+    logger.info("Фоновая архивация логов и заявок остановлена")
     if worker_task is not None:
         worker_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -202,6 +212,7 @@ from web.routes import (
     legal,
     logs,
     partnerships,
+    sse,
     system,
     tickets,
     vk_callback,
@@ -223,5 +234,6 @@ app.include_router(dept_frame.router, prefix="/dept", tags=["dept_frame"])
 app.include_router(departments.router, prefix="/departments", tags=["departments"])
 app.include_router(api_v1.router, prefix="/api", tags=["api_v1"])
 app.include_router(api.router, prefix="/api", tags=["api"])
+app.include_router(sse.router, prefix="/api", tags=["sse"])
 app.include_router(vk_callback.router)
 app.include_router(system.router)

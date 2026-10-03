@@ -124,6 +124,8 @@ async def test_cannot_delete_active_admin_account_via_student_privacy(db_session
 
 @pytest.mark.asyncio
 async def test_v1_delete_user_data_endpoint(db_session_maker, monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
     from web.routes.api_v1 import v1_delete_user_data
 
     async with db_session_maker() as session:
@@ -132,7 +134,9 @@ async def test_v1_delete_user_data_endpoint(db_session_maker, monkeypatch):
         await session.commit()
 
     monkeypatch.setattr("web.routes.api_v1.async_session_maker", db_session_maker)
+    monkeypatch.setattr("web.routes.api_v1.require_crud_rate_limit", AsyncMock())
     admin_user = {"username": "superadmin", "role": "SUPERADMIN"}
-    resp = await v1_delete_user_data(vk_id=88888888, user=admin_user)
+    mock_request = MagicMock()
+    resp = await v1_delete_user_data(vk_id=88888888, request=mock_request, user=admin_user)
     assert resp.success is True
     assert resp.vk_id == 88888888

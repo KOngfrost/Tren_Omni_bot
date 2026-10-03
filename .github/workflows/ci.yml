@@ -167,9 +167,11 @@ jobs:
       - name: Install SAST scanners
         run: pip install bandit semgrep
       - name: Bandit Security Scan
-        run: bandit -r core web bots -ll -ii -f screen || true
+        continue-on-error: true
+        run: bandit -r core web bots -ll -ii -f screen
       - name: Semgrep Security Scan
-        run: semgrep --config=p/ci core web bots || true
+        continue-on-error: true
+        run: semgrep --config=p/ci core web bots
 
   dast:
     name: DAST Baseline (OWASP ZAP)
