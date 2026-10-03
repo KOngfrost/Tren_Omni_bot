@@ -60,7 +60,7 @@ def _resolve_project_version() -> str:  # noqa: C901
         pass
 
     # 5. Фоллбэк
-    return "0.8.8.8"
+    return "0.8.8.9"
 
 
 __version__ = _resolve_project_version()
