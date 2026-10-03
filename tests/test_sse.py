@@ -113,6 +113,17 @@ def test_sse_stream_unauthorized(web_client):
     assert response.status_code == 401
 
 
+def test_websocket_unauthorized(web_client):
+    """WebSocket-эндпоинт отклоняет неавторизованные соединения."""
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with web_client.websocket_connect("/ws"):
+            pass
+    assert exc_info.value.code == 1008
+
+
 def test_core_events_dispatch():
     """Тест регистрации и уведомления подписчиков в core/events.py."""
     from core.events import (

@@ -246,5 +246,6 @@ app.include_router(departments.router, prefix="/departments", tags=["departments
 app.include_router(api_v1.router, prefix="/api", tags=["api_v1"])
 app.include_router(api.router, prefix="/api", tags=["api"])
 app.include_router(sse.router, prefix="/api", tags=["sse"])
+app.add_api_websocket_route("/ws", sse.websocket_stream)
 app.include_router(vk_callback.router)
 app.include_router(system.router)

@@ -10,7 +10,7 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import selectinload
@@ -316,7 +316,9 @@ async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, Non
 
             try:
                 data = await fetch_counters_and_dashboard(user)
-                yield f"event: counters\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                payload = json.dumps(data, ensure_ascii=False)
+                yield f"event: counters\ndata: {payload}\n\n"
+                yield f"data: {payload}\n\n"
             except Exception:
                 logger.error("Error fetching SSE data", exc_info=True)
 
@@ -361,3 +363,68 @@ async def sse_stream(request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+async def _process_ws_incoming_text(websocket: WebSocket, text: str) -> None:
+    """Обработать входящее сообщение от WebSocket-клиента."""
+    try:
+        msg_obj = json.loads(text)
+        if msg_obj.get("type") == "ping":
+            await websocket.send_json({"type": "pong"})
+    except Exception:
+        pass
+
+
+@router.websocket("/ws")
+async def websocket_stream(websocket: WebSocket):
+    """Двусторонний real-time WebSocket поток обновлений заявок и счётчиков."""
+    session = websocket.scope.get("session", {})
+    user = session.get("user")
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    event = asyncio.Event()
+    _subscribers.add(event)
+    try:
+        data = await fetch_counters_and_dashboard(user)
+        await websocket.send_json({"type": "counters", "data": data})
+
+        while True:
+            receive_task = asyncio.create_task(websocket.receive_text())
+            wait_event_task = asyncio.create_task(event.wait())
+
+            done, pending = await asyncio.wait(
+                [receive_task, wait_event_task],
+                timeout=25.0,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            for task in pending:
+                task.cancel()
+
+            if receive_task in done:
+                try:
+                    msg_text = receive_task.result()
+                    if msg_text:
+                        await _process_ws_incoming_text(websocket, msg_text)
+                except WebSocketDisconnect:
+                    break
+                except Exception:
+                    pass
+
+            if wait_event_task in done:
+                event.clear()
+                fresh_data = await fetch_counters_and_dashboard(user)
+                await websocket.send_json({"type": "item_updated", "data": fresh_data})
+                await websocket.send_json({"type": "counters", "data": fresh_data})
+            elif not done:
+                await websocket.send_json({"type": "ping"})
+
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        pass
+    except Exception as exc:
+        logger.debug("WebSocket connection closed/error: %s", exc)
+    finally:
+        _subscribers.discard(event)

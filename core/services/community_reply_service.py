@@ -9,12 +9,12 @@
 
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.models import Log, MessageAuthorType, Ticket, TicketMessage, TicketStatus, User, VkOutbox
+from core.models import Log, MessageAuthorType, Ticket, TicketMessage, TicketStatus, User
 from core.services.ticket_primitives import (
     COMPLETED_STATUSES,
     add_ticket_message,
@@ -30,6 +30,11 @@ TICKET_PREFIX_RE = re.compile(
 
 TICKET_IN_TEXT_RE = re.compile(
     r"(?:заявка|обращение|тикет)?\s*[#№]\s*(\d+)",
+    re.IGNORECASE,
+)
+
+BOT_SYSTEM_PATTERNS = re.compile(
+    r"(?:ваше обращение принято|номер обращения\s*:\s*#?\d+|раздел\s*:|главное меню|выберите (?:отдел|действие|нужное действие)|не удалось отправить|введите текст обращения|анонимное обращение|спасибо за обращение)",
     re.IGNORECASE,
 )
 
@@ -233,6 +238,25 @@ async def resolve_target_ticket(
     return await _resolve_fallback(session, user_id, text)
 
 
+async def _resolve_admin_name(session: AsyncSession, admin_author_id: int | None) -> str:
+    """Определить читаемое имя администратора ВК."""
+    if not admin_author_id:
+        return "Сообщество VK"
+
+    admin_user = await session.scalar(select(User).where(User.vk_id == admin_author_id))
+    if admin_user and admin_user.full_name:
+        return admin_user.full_name
+
+    from core.vk_client import fetch_vk_user_name
+
+    fetched_name = await fetch_vk_user_name(admin_author_id)
+    if fetched_name:
+        if admin_user:
+            admin_user.full_name = fetched_name
+        return fetched_name
+    return f"VK ID {admin_author_id}"
+
+
 async def handle_community_message_reply(
     peer_id: int,
     text: str,
@@ -246,34 +270,28 @@ async def handle_community_message_reply(
 
     clean_text = text.strip()
 
-    async with ticket_transaction() as session:
-        # Проверяем, не является ли это исходящим сообщением самого бота:
-        if admin_author_id is None:
-            now_utc = datetime.now(UTC)
-            cutoff = now_utc - timedelta(seconds=60)
-            recent_outbox = await session.scalar(
-                select(VkOutbox)
-                .where(
-                    VkOutbox.vk_id == peer_id,
-                    VkOutbox.created_at >= cutoff,
-                )
-                .order_by(VkOutbox.id.desc())
-                .limit(1)
-            )
-            if recent_outbox and (
-                clean_text == recent_outbox.text.strip()
-                or recent_outbox.text.strip().startswith(clean_text)
-            ):
-                logger.debug("Пропуск исходящего сообщения бота (совпадение с VkOutbox)")
-                return None
+    # 1. Проверяем, не является ли это системным автоответом бота:
+    if BOT_SYSTEM_PATTERNS.search(clean_text):
+        logger.debug(
+            "Пропуск системного сообщения бота (паттерн системного автоответа): %s",
+            clean_text[:40],
+        )
+        return None
 
-        # Ищем пользователя в системе
+    # 2. Если admin_author_id отсутствует или <= 0 — это сообщение отправлено ботом через API,
+    # а не живым администратором сообщества в интерфейсе ВКонтакте:
+    if not admin_author_id or admin_author_id <= 0:
+        logger.debug("Пропуск сообщения сообщества: отправлено ботом/API без admin_author_id")
+        return None
+
+    async with ticket_transaction() as session:
+        # 3. Ищем пользователя в системе
         user = await session.scalar(select(User).where(User.vk_id == peer_id))
         if user is None:
             logger.info("Пользователь vk_id=%d не найден в БД при ответе сообщества", peer_id)
             return None
 
-        # Находим конкретную целевую заявку студента
+        # 4. Находим конкретную целевую заявку студента
         ticket, final_text = await resolve_target_ticket(
             session=session,
             user_id=user.id,
@@ -285,21 +303,7 @@ async def handle_community_message_reply(
             logger.info("Для пользователя vk_id=%d не удалось определить заявку", peer_id)
             return None
 
-        admin_name = "Сообщество VK"
-        if admin_author_id:
-            admin_user = await session.scalar(select(User).where(User.vk_id == admin_author_id))
-            if admin_user and admin_user.full_name:
-                admin_name = admin_user.full_name
-            else:
-                from core.vk_client import fetch_vk_user_name
-
-                fetched_name = await fetch_vk_user_name(admin_author_id)
-                if fetched_name:
-                    admin_name = fetched_name
-                    if admin_user:
-                        admin_user.full_name = fetched_name
-                else:
-                    admin_name = f"VK ID {admin_author_id}"
+        admin_name = await _resolve_admin_name(session, admin_author_id)
 
         # Фиксируем сообщение оператора в истории заявки
         add_ticket_message(

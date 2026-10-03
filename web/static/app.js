@@ -1165,7 +1165,43 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.28);
             } catch (_) {}
+        function checkActiveTicketModalUpdate() {
+            var modal = document.getElementById('ticket-modal');
+            if (modal && modal.classList.contains('active') && window.currentActiveTicket && window.currentActiveTicket.id) {
+                var activeId = window.currentActiveTicket.id;
+                fetch('/tickets/' + activeId)
+                    .then(function (res) { return res.ok ? res.json() : null; })
+                    .then(function (ticket) {
+                        if (!ticket || !window.currentActiveTicket || window.currentActiveTicket.id !== activeId) return;
+                        window.currentActiveTicket = ticket;
+                        var rawStatus = (typeof ticket.status === 'object' && ticket.status) ? (ticket.status.value || '') : (ticket.status || '');
+                        var displayStatus = (window.STATUS_LABELS && window.STATUS_LABELS[rawStatus]) || rawStatus || '—';
+                        var badgeEl = document.getElementById('modal-ticket-status-badge');
+                        if (badgeEl) {
+                            badgeEl.innerHTML = '<span class="badge">' + escapeHtml(displayStatus) + '</span>';
+                        }
+                        var chatBox = document.getElementById('ticket-chat-box');
+                        if (chatBox && ticket.messages && ticket.messages.length > 0) {
+                            var html = '';
+                            ticket.messages.forEach(function (m) {
+                                var authorType = String(m.author_type || '').toUpperCase();
+                                var timeStr = m.created_at_display || (m.created_at ? formatTimeStr(m.created_at) : '');
+                                if (authorType === 'SYSTEM') {
+                                    html += '<div class="chat-bubble chat-bubble-system">' + escapeHtml(m.message) + (timeStr ? ' · <span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div>';
+                                } else if (authorType === 'ADMIN') {
+                                    html += '<div class="chat-bubble chat-bubble-admin"><div class="chat-bubble-header"><span>Администратор</span>' + (timeStr ? '<span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div><div class="chat-bubble-text">' + escapeHtml(m.message) + '</div></div>';
+                                } else {
+                                    var userLabel = ticket.is_anonymous ? 'Студент (анонимно)' : (ticket.user && ticket.user.full_name ? ticket.user.full_name : (ticket.user && ticket.user.vk_id ? ('VK ID ' + ticket.user.vk_id) : 'Студент'));
+                                    html += '<div class="chat-bubble chat-bubble-user"><div class="chat-bubble-header"><span>' + escapeHtml(userLabel) + '</span>' + (timeStr ? '<span class="chat-bubble-time">' + escapeHtml(timeStr) + '</span>' : '') + '</div><div class="chat-bubble-text">' + escapeHtml(m.message) + '</div></div>';
+                                }
+                            });
+                            chatBox.innerHTML = html;
+                        }
+                    })
+                    .catch(function () {});
+            }
         }
+        window.checkActiveTicketModalUpdate = checkActiveTicketModalUpdate;
 
         var isRefreshingTicketsTable = false;
         function refreshTicketsTable() {
@@ -1191,6 +1227,11 @@
                 var curTbody = document.querySelector('#tickets-table tbody');
                 if (newTbody && curTbody) {
                     curTbody.innerHTML = newTbody.innerHTML;
+                    var firstRow = curTbody.querySelector('tr');
+                    if (firstRow) {
+                        firstRow.classList.add('ticket-row-updated');
+                        setTimeout(function () { firstRow.classList.remove('ticket-row-updated'); }, 2600);
+                    }
                 }
                 var newPag = doc.querySelector('.pagination');
                 var curPag = document.querySelector('.pagination');
@@ -1202,6 +1243,7 @@
                 if (newCount && curCount) {
                     curCount.innerHTML = newCount.innerHTML;
                 }
+                checkActiveTicketModalUpdate();
             })
             .catch(function () {})
             .finally(function () {
@@ -1509,6 +1551,82 @@
                 });
         }
 
+        var wsClient = null;
+        var wsReconnectTimeout = null;
+
+        function handleRealtimeMessage(msg) {
+            if (!msg) return;
+            var type = msg.type || 'counters';
+            var data = msg.data || msg;
+
+            if (type === 'item_added' || type === 'item_updated') {
+                if (data && typeof data === 'object') {
+                    processCountersData(data);
+                }
+                refreshTicketsTable();
+                checkActiveTicketModalUpdate();
+            } else if (type === 'counters') {
+                if (data && typeof data === 'object') {
+                    processCountersData(data);
+                }
+                checkActiveTicketModalUpdate();
+            }
+        }
+
+        function startWebSocket() {
+            if (typeof WebSocket === 'undefined') {
+                startSSE();
+                return;
+            }
+
+            var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            var wsUrl = protocol + '//' + window.location.host + '/ws';
+
+            try {
+                if (wsClient) {
+                    try { wsClient.close(); } catch (_) {}
+                }
+                wsClient = new WebSocket(wsUrl);
+
+                wsClient.onopen = function () {
+                    if (sseSource) {
+                        try { sseSource.close(); } catch (_) {}
+                        sseSource = null;
+                    }
+                    if (counterIntervalId) {
+                        clearInterval(counterIntervalId);
+                        counterIntervalId = null;
+                    }
+                };
+
+                wsClient.onmessage = function (e) {
+                    try {
+                        var parsed = JSON.parse(e.data);
+                        if (parsed.type === 'ping') {
+                            if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+                                wsClient.send(JSON.stringify({ type: 'pong' }));
+                            }
+                            return;
+                        }
+                        handleRealtimeMessage(parsed);
+                    } catch (_) {}
+                };
+
+                wsClient.onerror = function () {
+                    try { wsClient.close(); } catch (_) {}
+                };
+
+                wsClient.onclose = function () {
+                    wsClient = null;
+                    startSSE();
+                    if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+                    wsReconnectTimeout = setTimeout(startWebSocket, 3000);
+                };
+            } catch (err) {
+                startSSE();
+            }
+        }
+
         function startSSE() {
             if (typeof EventSource === 'undefined') {
                 updateCounters();
@@ -1527,8 +1645,8 @@
             sseSource.addEventListener('counters', function(e) {
                 try {
                     var data = JSON.parse(e.data);
-                    processCountersData(data);
-                    sseReconnectDelay = 1000; // reset backoff
+                    handleRealtimeMessage({ type: 'counters', data: data });
+                    sseReconnectDelay = 1000;
                     sseFailures = 0;
                     if (counterIntervalId) {
                         clearInterval(counterIntervalId);
@@ -1536,6 +1654,14 @@
                     }
                 } catch (err) {}
             });
+
+            // Поддержка стандартного onmessage (реактивные EventSource-потоки без именованного event)
+            sseSource.onmessage = function(e) {
+                try {
+                    var data = JSON.parse(e.data);
+                    handleRealtimeMessage(data);
+                } catch (err) {}
+            };
 
             sseSource.addEventListener('error', function(e) {
                 if (sseSource) {
@@ -1559,15 +1685,15 @@
             });
         }
 
-        // Первичная немедленная загрузка данных счетчиков и SSE-подписка
+        // Первичная немедленная загрузка данных счетчиков и real-time подписка (WebSocket с фоллбэком на SSE)
         updateCounters();
-        startSSE();
+        startWebSocket();
 
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) {
                 updateCounters();
-                if (!sseSource || sseSource.readyState !== EventSource.OPEN) {
-                    startSSE();
+                if ((!wsClient || wsClient.readyState !== WebSocket.OPEN) && (!sseSource || sseSource.readyState !== EventSource.OPEN)) {
+                    startWebSocket();
                 }
             }
         });

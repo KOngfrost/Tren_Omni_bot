@@ -298,6 +298,15 @@ a:hover {
     font-weight: 600;
 }
 
+@keyframes rowGlowPink {
+    0% { background-color: rgba(253, 96, 201, 0.28); }
+    100% { background-color: transparent; }
+}
+
+.ticket-row-updated {
+    animation: rowGlowPink 2.5s ease-out;
+}
+
 button:disabled,
 button[disabled] {
     cursor: not-allowed;

@@ -59,7 +59,7 @@
             </thead>
             <tbody>
                 {% for ticket in tickets %}
-                <tr data-status="{{ ticket.status.value }}" data-dept="{{ ticket.department.id if ticket.department else '' }}">
+                <tr id="ticket-row-{{ ticket.id }}" data-ticket-id="{{ ticket.id }}" data-status="{{ ticket.status.value }}" data-dept="{{ ticket.department.id if ticket.department else '' }}">
                     <td class="td-topic" data-label="Тема">{{ ticket.topic or '—' }}</td>
                     <td data-label="Пользователь">
                         {% if ticket.is_anonymous or not ticket.user %}
@@ -77,7 +77,7 @@
                         <span class="badge badge-general">Общее обращение</span>
                         {% endif %}
                     </td>
-                    <td data-label="Статус">
+                    <td class="td-status" data-label="Статус" id="ticket-status-{{ ticket.id }}">
                         <span class="badge {{ ticket.status|status_badge }}">{{ ticket.status|status_label }}</span>
                     </td>
                     <td data-label="Аноним">
