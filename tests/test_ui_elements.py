@@ -34,6 +34,7 @@ def client(monkeypatch):
     import core.database as database_module
     import core.outbox as outbox_module
     import core.reporting as reporting_module
+    import core.reports.period as report_period_module
     import core.ticket_service as ticket_service_module
     from core.models import Base
 
@@ -51,6 +52,7 @@ def client(monkeypatch):
         database_module,
         ticket_service_module,
         reporting_module,
+            report_period_module,
         outbox_module,
     ]
     for mod_name in (

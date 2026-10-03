@@ -23,8 +23,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from web.security.csrf import get_csrf_token, rotate_csrf_token, validate_csrf
 from web.security.middleware import (
+    DBRateLimiter,
     RequestSizeValidator,
     escape_for_csv,
+    mask_ip_for_logs,
     sanitize_csv_field,
     sanitize_html,
 )
@@ -127,6 +129,53 @@ class TestSecurityHeaders:
         assert "Permissions-Policy" in SECURITY_HEADERS
         assert "camera=()" in SECURITY_HEADERS["Permissions-Policy"]
         assert "microphone=()" in SECURITY_HEADERS["Permissions-Policy"]
+
+
+@pytest.mark.parametrize(
+    ("table_name", "expected_table"),
+    (("crud_attempts", "crud_attempts"), ("login_attempts", "login_attempts")),
+)
+async def test_db_rate_limiter_uses_static_whitelisted_tables(table_name, expected_table):
+    class FakeSession:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement, params):
+            self.statements.append(str(statement))
+
+            class Result:
+                @staticmethod
+                def scalar():
+                    return 0
+
+            return Result()
+
+        async def commit(self):
+            pass
+
+    session = FakeSession()
+    limiter = DBRateLimiter(table_name, max_requests=5, window_seconds=60)
+
+    assert await limiter.is_allowed(session, "192.0.2.1", "test-action") is True
+    assert len(session.statements) == 2
+    assert all(expected_table in statement for statement in session.statements)
+
+
+def test_db_rate_limiter_rejects_untrusted_table_name():
+    with pytest.raises(ValueError):
+        DBRateLimiter("login_attempts; DROP TABLE users", max_requests=5, window_seconds=60)
+
+
+@pytest.mark.parametrize(
+    ("ip_address", "expected"),
+    (
+        ("203.0.113.42", "203.0.113.*"),
+        ("2001:db8:abcd:12::42", "2001:db8:abcd:12::/64"),
+        ("invalid", "unknown"),
+    ),
+)
+def test_mask_ip_for_logs(ip_address, expected):
+    assert mask_ip_for_logs(ip_address) == expected
 
 
 # ==========================================

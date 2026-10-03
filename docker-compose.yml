@@ -145,7 +145,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8.8}
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     networks:
@@ -199,7 +199,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8.8}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
@@ -299,6 +299,7 @@ services:
     memswap_limit: 64m
     environment:
       - CONTAINERS=1
+      # Required for pg_dump and temporary .pgpass cleanup in the monitor backup handler.
       - EXEC=1
       - POST=1
       - ALLOW_RESTARTS=1
@@ -326,7 +327,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.8.7}
+      - APP_VERSION=${APP_VERSION:-0.8.8.8}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
       # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}

@@ -19,5 +19,10 @@ def test_csp_nonce_matches_inline_scripts(web_client):
         "Inline-скрипты страницы не содержат nonce из CSP-заголовка "
         "— браузер заблокирует их (csp_nonce не прокидывается в контекст)"
     )
+    style_src = next(directive for directive in csp.split(";") if directive.strip().startswith("style-src "))
+    style_match = re.search(r"'nonce-([A-Za-z0-9_\-]+)'", style_src)
+    assert style_match, f"В style-src нет nonce: {style_src!r}"
+    assert f'<style nonce="{style_match.group(1)}">' in resp.text
+    assert "'unsafe-inline'" not in style_src
     # Пустой атрибут nonce="" означает, что middleware не смог передать nonce
     assert 'nonce=""' not in resp.text

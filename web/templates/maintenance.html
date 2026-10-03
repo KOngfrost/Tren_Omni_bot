@@ -36,7 +36,7 @@
         })();
     </script>
     <link rel="stylesheet" href="/static/style.css?v={{ app_version }}">
-    <style>
+    <style nonce="{{ csp_nonce('style') }}">
         :root, html[data-theme="dark"] {
             --m-bg: #08080c;
             --m-bg-gradient: radial-gradient(circle at 18% 15%, rgba(255, 77, 157, 0.16) 0%, transparent 45%), radial-gradient(circle at 82% 80%, rgba(214, 93, 177, 0.12) 0%, transparent 45%), #08080c;

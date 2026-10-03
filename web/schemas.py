@@ -93,3 +93,16 @@ class TicketSummarySchema(BaseModel):
     department_id: int | None = None
     department_name: str | None = None
     created_at: str | None = None
+
+
+class UserDataErasureResponse(BaseModel):
+    """Ответ на запрос об удалении персональных данных (152-ФЗ / GDPR)."""
+
+    success: bool
+    vk_id: int
+    user_id: int | None = None
+    tickets_anonymized: int = 0
+    messages_anonymized: int = 0
+    subscriptions_deleted: int = 0
+    registrations_deleted: int = 0
+    outbox_deleted: int = 0

@@ -119,7 +119,7 @@ class TestSessionHelpers:
         assert is_super is False
         assert department_id is None
 
-    async def test_writer_dependency_awaits_authentication(self):
+    async def test_writer_dependency_awaits_authentication(self, db_session_maker):
         request = MagicMock()
         request.session = {"user": {"username": "admin", "role": "SUPERADMIN", "bootstrap": True}}
 
@@ -127,7 +127,7 @@ class TestSessionHelpers:
 
         assert user["username"] == "admin"
 
-    async def test_superadmin_dependency_awaits_authentication(self):
+    async def test_superadmin_dependency_awaits_authentication(self, db_session_maker):
         request = MagicMock()
         request.session = {"user": {"username": "admin", "role": "SUPERADMIN", "bootstrap": True}}
 

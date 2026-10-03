@@ -4,6 +4,13 @@
 {% block canonical_url %}/auth/login{% endblock %}
 
 {% block content %}
+<style nonce="{{ csp_nonce('style') }}">
+.login-maintenance-alert { margin-bottom: 20px; border-left: 4px solid var(--primary); background: var(--primary-soft); color: var(--text-primary); padding: 12px 16px; border-radius: 8px; font-size: 13.5px; line-height: 1.5; text-align: left; }
+.login-maintenance-content { display: flex; align-items: flex-start; gap: 8px; }
+.login-maintenance-icon { display: inline-flex; align-items: center; color: var(--primary); }
+.login-maintenance-page-link { margin-top: 6px; }
+.login-maintenance-link { color: var(--primary); text-decoration: underline; font-weight: 600; }
+</style>
 <div class="login-container">
     <div class="login-card">
         <div class="login-brand">
@@ -15,16 +22,16 @@
         </div>
         
         {% if maintenance_active %}
-        <div class="alert alert-warning" role="alert" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: var(--primary-soft); color: var(--text-primary); padding: 12px 16px; border-radius: 8px; font-size: 13.5px; line-height: 1.5; text-align: left;">
-            <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <span style="display: inline-flex; align-items: center; color: var(--primary);" aria-hidden="true">
+        <div class="alert alert-warning login-maintenance-alert" role="alert">
+            <div class="login-maintenance-content">
+                <span class="login-maintenance-icon" aria-hidden="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 </span>
                 <div>
                     <strong>Ведутся технические работы</strong><br>
                     <span>На платформе проводятся плановые работы по обновлению системы.</span>
-                    <div style="margin-top: 6px;">
-                        <a href="/maintenance" style="color: var(--primary); text-decoration: underline; font-weight: 600;">{{ icon('chevron-left', 14) }} Страница технических работ</a>
+                    <div class="login-maintenance-page-link">
+                        <a href="/maintenance" class="login-maintenance-link">{{ icon('chevron-left', 14) }} Страница технических работ</a>
                     </div>
                 </div>
             </div>

@@ -17,15 +17,16 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from core.cache import cache_delete, cache_get, cache_set
 from core.config import settings
-from core.database import async_session_maker, get_db
-from core.models import Department, Log, Ticket, TicketStatus, WebRole, WebUser
+from core.database import async_session_maker
+from core.models import Department, Ticket, TicketStatus, WebRole, WebUser
 from core.redis_client import is_redis_available
+from core.services.privacy_service import AdminAccountDeletionError, delete_user_personal_data
 from core.two_factor import is_two_factor_enabled
 from web.dependencies import get_admin_scope, require_auth, require_superadmin
 from web.routes.api import _get_all_departments_usage, _get_department_usage
@@ -48,6 +49,7 @@ from web.schemas import (
     DepartmentUsageSchema,
     SystemStatsResponse,
     TicketSummarySchema,
+    UserDataErasureResponse,
 )
 from web.security import otp_store
 from web.security.csrf import get_csrf_token
@@ -80,7 +82,9 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, st
         received_hash = parsed.pop("hash")
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-        computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        computed_hash = hmac.new(
+            secret_key, data_check_string.encode(), hashlib.sha256
+        ).hexdigest()
         if not secrets.compare_digest(received_hash, computed_hash):
             return None
         return parsed
@@ -118,7 +122,9 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
 
     async with async_session_maker() as session:
         if await _is_rate_limited(session, client_ip):
-            details = f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
+            details = (
+                f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
+            )
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
             raise HTTPException(
@@ -129,13 +135,16 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
         user_data = await _authenticate(session, username, password)
         if user_data is None:
             await _record_failed_attempt(client_ip)
-            await _log_action("web_login_failed", f"Неудачный вход с IP {client_ip} (username={username!r})")
+            await _log_action(
+                "web_login_failed", f"Неудачный вход с IP {client_ip} (username={username!r})"
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Неверный логин или пароль",
             )
 
         from core.maintenance import is_maintenance_mode
+
         if await is_maintenance_mode():
             user_role = str(user_data.get("role", "")).upper()
             if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
@@ -207,12 +216,16 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
     result = await otp_store.verify(request, code)
     if result.status == "expired":
         await otp_store.cancel(request)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Срок действия кода истёк")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Срок действия кода истёк"
+        )
 
     if not result.ok:
         if result.status == "locked":
             await otp_store.cancel(request)
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Превышено число попыток ввода 2FA")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Превышено число попыток ввода 2FA"
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Неверный код. Осталось попыток: {result.remaining}",
@@ -224,12 +237,18 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
             web_user = await session.get(WebUser, user_data["web_user_id"])
             if not web_user or not web_user.is_active or web_user.is_expired:
                 await otp_store.cancel(request)
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись не активна или срок действия истёк")
-            user_data["role"] = web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Учётная запись не активна или срок действия истёк",
+                )
+            user_data["role"] = (
+                web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value
+            )
             user_data["department_id"] = web_user.department_id
             user_data["username"] = web_user.username
 
     from core.maintenance import is_maintenance_mode
+
     if await is_maintenance_mode():
         user_role = str(user_data.get("role", "")).upper()
         if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
@@ -259,24 +278,35 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
     "/auth/telegram-webapp",
     summary="Авторизация через Telegram Mini App",
 )
-async def v1_auth_telegram_webapp(payload: TelegramAuthRequest, request: Request) -> dict[str, Any]:
+async def v1_auth_telegram_webapp(
+    payload: TelegramAuthRequest, request: Request
+) -> dict[str, Any]:
     """Бесшовный вход для Telegram-администратора через Telegram.WebApp.initData."""
     if not settings.TELEGRAM_BOT_TOKEN or settings.TELEGRAM_ADMIN_ID <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram интеграция не настроена")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram интеграция не настроена"
+        )
 
     validated = _validate_telegram_init_data(payload.init_data, settings.TELEGRAM_BOT_TOKEN)
     if not validated:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительная подпись Telegram")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительная подпись Telegram"
+        )
 
     try:
         user_raw = json.loads(validated.get("user", "{}"))
         tg_user_id = int(user_raw.get("id", 0))
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверные данные пользователя Telegram")
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Неверные данные пользователя Telegram"
+        ) from err
 
     if tg_user_id != settings.TELEGRAM_ADMIN_ID:
         logger.warning("Попытка входа через WebApp с недоверенного Telegram ID=%s", tg_user_id)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён для данного Telegram аккаунта")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён для данного Telegram аккаунта",
+        )
 
     # Авторизуем как главного администратора
     user_data = {
@@ -290,7 +320,9 @@ async def v1_auth_telegram_webapp(payload: TelegramAuthRequest, request: Request
     request.session["user"] = user_data
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     client_ip = _get_client_ip(request)
-    await _log_action("web_login_tg_success", f"Вход через Telegram WebApp ID={tg_user_id} с IP {client_ip}")
+    await _log_action(
+        "web_login_tg_success", f"Вход через Telegram WebApp ID={tg_user_id} с IP {client_ip}"
+    )
 
     return {
         "success": True,
@@ -307,7 +339,6 @@ async def v1_auth_logout(request: Request) -> dict[str, Any]:
     """Сброс сессии пользователя."""
     request.session.clear()
     return {"success": True}
-
 
 
 @router.get(
@@ -516,7 +547,9 @@ async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
             if dept_id is None:
                 ticket_filter = [Ticket.department_id.is_(None)]
             else:
-                ticket_filter = [or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))]
+                ticket_filter = [
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                ]
 
         total = await session.scalar(select(func.count(Ticket.id)).where(*ticket_filter)) or 0
         active = (
@@ -567,7 +600,9 @@ async def v1_get_tickets(
             if dept_id is None:
                 stmt = stmt.where(Ticket.department_id.is_(None))
             else:
-                stmt = stmt.where(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                stmt = stmt.where(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
 
         tickets = list((await session.execute(stmt)).scalars().all())
         return [
@@ -581,3 +616,40 @@ async def v1_get_tickets(
             )
             for t in tickets
         ]
+
+
+@router.delete(
+    "/users/{vk_id}/data",
+    response_model=UserDataErasureResponse,
+    summary="Удаление персональных данных пользователя (152-ФЗ / GDPR)",
+)
+async def v1_delete_user_data(
+    vk_id: int,
+    user=Depends(require_superadmin),
+) -> UserDataErasureResponse:
+    """Удалить и анонимизировать персональные данные пользователя.
+
+    Доступно только суперадминистраторам.
+    Анонимизирует тикеты, удаляет подписки, регистрации и профиль пользователя.
+    """
+    async with async_session_maker() as session:
+        try:
+            result = await delete_user_personal_data(session, vk_id)
+        except AdminAccountDeletionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Пользователь с VK ID {vk_id} не найден",
+            )
+
+        await _log_action(
+            action="USER_DATA_ERASURE",
+            details=f"Удалены и анонимизированы данные студента VK ID {vk_id} администратором {user.get('username')}",
+        )
+
+        return UserDataErasureResponse(**result)

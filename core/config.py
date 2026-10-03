@@ -163,6 +163,7 @@ class Settings(BaseSettings):
     WEB_ADMIN_PASSWORD: str = ""
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:8000"])
     WEB_OUTBOX_WORKER: bool = True
+    ENABLE_API_DOCS: bool = False
 
     # Outbox
     OUTBOX_BATCH_SIZE: int = 50
@@ -170,6 +171,7 @@ class Settings(BaseSettings):
     OUTBOX_CLAIM_TIMEOUT_SECONDS: int = 300
 
     # Redis
+    REDIS_PASSWORD: str = ""
     REDIS_URL: str | None = None
     CACHE_DEFAULT_TTL: int = 300
     SESSION_TTL: int = 86400
@@ -340,7 +342,6 @@ class Settings(BaseSettings):
             self.SESSION_SAME_SITE = "strict"
         return self
 
-
     def __setattr__(self, name: str, value: Any) -> None:
         if "__pydantic_fields_set__" not in self.__dict__:
             object.__setattr__(self, "__pydantic_fields_set__", set())
@@ -407,6 +408,12 @@ class Settings(BaseSettings):
                 "(через запятую, например: 123456789,987654321)."
             )
 
+        if self.IS_PRODUCTION and "*" in self.CORS_ORIGINS:
+            errors.append("CORS_ORIGINS не может содержать '*' в production.")
+
+        if self.IS_PRODUCTION and not self.VK_CALLBACK_SECRET:
+            errors.append("VK_CALLBACK_SECRET обязателен в production.")
+
         if errors:
             raise RuntimeError("Неверная конфигурация:\n" + "\n".join(f"  - {e}" for e in errors))
 
@@ -421,7 +428,14 @@ class Settings(BaseSettings):
                 "(пустой или дефолтные 'student_bot', 'postgres', 'root' запрещены в production). "
                 "Укажите имя пользователя в .env."
             )
-        if not self.DB_PASS or self.DB_PASS in ("student_bot", "oss_bot", "password", "postgres", "root", "123456"):
+        if not self.DB_PASS or self.DB_PASS in (
+            "student_bot",
+            "oss_bot",
+            "password",
+            "postgres",
+            "root",
+            "123456",
+        ):
             raise RuntimeError(
                 "APP_ENV=production, но POSTGRES_PASSWORD не задан явно или небезопасен. "
                 "Укажите стойкий пароль в .env."

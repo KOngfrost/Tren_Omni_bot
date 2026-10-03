@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 # Значения-заглушки, которые нельзя оставлять в production.
 PLACEHOLDER_TOKENS: tuple[str, ...] = (
     "change_me",
+    "change_me_redis_password",
+    "change_this",
     "changeme",
     "change-me",
     "replace_me",
@@ -52,6 +54,9 @@ PLACEHOLDER_TOKENS: tuple[str, ...] = (
 # Проверяемые секреты: имя поля конфигурации -> минимальная длина.
 SECRET_REQUIREMENTS: dict[str, int] = {
     "SESSION_SECRET_KEY": 32,
+    "DB_PASS": 12,
+    "REDIS_PASSWORD": 32,
+    "VK_CALLBACK_SECRET": 32,
 }
 
 # Минимальная длина bootstrap-пароля, который сознательно вшивают в .env.

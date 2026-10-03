@@ -332,6 +332,7 @@ def _prod_settings(**overrides):
         "DB_USER": "oss_prod",
         "DB_PASS": "s3cret-pass-not-default",
         "VK_BOT_TOKEN": "vk-token",
+        "VK_CALLBACK_SECRET": "callback-secret-with-at-least-32-characters",
         "ADMIN_VK_IDS": {1},
         "SESSION_SECRET_KEY": "x" * 48,
         "WEB_ADMIN_USERNAME": "",
@@ -351,6 +352,14 @@ def test_bootstrap_guard_blocks_placeholder_session_secret():
         SESSION_SECRET_KEY="change_me_session_secret_change_me_session_secret"
     )
     with pytest.raises(RuntimeError, match="Placeholder"):
+        enforce_startup_security(settings_with_placeholder, component="web-admin")
+
+
+def test_bootstrap_guard_blocks_placeholder_redis_password():
+    from core.startup_guard import enforce_startup_security
+
+    settings_with_placeholder = _prod_settings(REDIS_PASSWORD="change_me_redis_password")
+    with pytest.raises(RuntimeError, match="REDIS_PASSWORD"):
         enforce_startup_security(settings_with_placeholder, component="web-admin")
 
 
@@ -375,6 +384,73 @@ def test_startup_guard_only_warns_in_development():
     )
     assert report.ok, "В разработке ошибки конфигурации не блокируют запуск"
     assert any("Placeholder" in text for text in report.warnings)
+
+
+def test_startup_guard_warns_for_tmpdir_session_secret(caplog):
+    from core.startup_guard import enforce_startup_security
+
+    enforce_startup_security(
+        _prod_settings(APP_ENV="development", SESSION_SECRET_KEY=""), component="web-admin"
+    )
+    assert "tmpdir" in caplog.text
+
+
+def test_production_rejects_missing_session_secret():
+    settings_without_secret = _prod_settings(SESSION_SECRET_KEY="")
+    with pytest.raises(RuntimeError, match="SESSION_SECRET_KEY"):
+        settings_without_secret.ensure_production_config()
+
+
+def test_openapi_endpoints_require_auth(web_client):
+    for path in ("/api/docs", "/api/redoc", "/api/openapi.json"):
+        response = web_client.get(path, follow_redirects=False)
+        assert response.status_code == 401, path
+
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert web_client.get(path, follow_redirects=False).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_cleanup_obeys_ip_retention_days(db_session_maker, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    import core.rate_limit_cleanup as rate_limit_cleanup
+    from core.models import CrudAttempt, LoginAttempt
+
+    monkeypatch.setattr(rate_limit_cleanup, "async_session_maker", db_session_maker)
+    monkeypatch.setattr(rate_limit_cleanup, "LOG_IP_RETENTION_DAYS", 30)
+    now = datetime(2026, 10, 3, tzinfo=UTC)
+
+    async with db_session_maker() as session:
+        session.add_all(
+            [
+                LoginAttempt(ip="192.0.2.10", success=False, attempted_at=now - timedelta(days=31)),
+                LoginAttempt(ip="192.0.2.11", success=False, attempted_at=now - timedelta(days=29)),
+                CrudAttempt(
+                    ip="192.0.2.12",
+                    action="old-action",
+                    attempted_at=now - timedelta(days=31),
+                ),
+                CrudAttempt(
+                    ip="192.0.2.13",
+                    action="recent-action",
+                    attempted_at=now - timedelta(days=29),
+                ),
+            ]
+        )
+        await session.commit()
+
+    deleted = await rate_limit_cleanup.purge_stale_attempts(now=now)
+    assert deleted["login_attempts"] == 1
+    assert deleted["crud_attempts"] == 1
+
+    async with db_session_maker() as session:
+        login_rows = (await session.execute(select(LoginAttempt))).scalars().all()
+        crud_rows = (await session.execute(select(CrudAttempt))).scalars().all()
+        assert [row.ip for row in login_rows] == ["192.0.2.11"]
+        assert [row.ip for row in crud_rows] == ["192.0.2.13"]
 
 
 @pytest.mark.asyncio

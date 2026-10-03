@@ -30,7 +30,12 @@ from core.models import Base
 ALL_MODULE_NAMES = (
     "core.database",
     "core.ticket_service",
+    "core.repositories.ticket_repo",
+    "core.services.ticket_primitives",
+    "core.services.ticket_admin_service",
+    "core.services.ticket_routing_service",
     "core.reporting",
+    "core.reports.period",
     "core.outbox",
     "core.bot_core",
     "bots.vk.bot",
@@ -54,6 +59,7 @@ ALL_MODULE_NAMES = (
     "web.routes.logs",
     "web.routes.admin_panel",
     "web.routes.auth",
+    "web.security.login_rate_limiter",
     "web.routes.dept_frame",
 )
 
@@ -172,10 +178,10 @@ def web_client(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def reset_maintenance_mode():
-    from core.maintenance import MAINTENANCE_FALLBACK_FILE
     import core.maintenance as maint
-    from core.two_factor import TWO_FACTOR_FALLBACK_FILE
     import core.two_factor as tf
+    from core.maintenance import MAINTENANCE_FALLBACK_FILE
+    from core.two_factor import TWO_FACTOR_FALLBACK_FILE
 
     maint._cached_state = None
     maint._cached_expires_at = 0.0

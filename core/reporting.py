@@ -3,25 +3,35 @@ import contextlib
 import logging
 import os
 import secrets
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from io import BytesIO
-from typing import Any
-from zoneinfo import ZoneInfo
 
 import aiosmtplib
-from openpyxl import Workbook
-from openpyxl.styles import Font
 from sqlalchemy import and_, select
 from vkbottle.tools.uploader import DocMessagesUploader
 
 from core.config import settings
 from core.database import async_session_maker
 from core.models import Admin, Department, ReportRun, Ticket, TicketStatus, User, UserRole
+from core.reports.daily import (
+    DEFAULT_DEPTS,
+    _DeptRef,
+    _TicketRow,
+    _UserRef,
+    build_daily_report,
+    get_app_tz,
+)
 from core.ticket_service import COMPLETED_STATUSES, status_label
+from core.reports.period import (
+    REPORT_CHUNK_SIZE,
+    _fetch_report_data,
+    get_report_for_date,
+    get_report_for_period,
+    is_report_already_sent,
+    mark_report_sent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,270 +41,31 @@ logger = logging.getLogger(__name__)
 REPORT_CHUNK_SIZE = int(os.environ.get("REPORT_CHUNK_SIZE", "1000"))
 
 
-def get_app_tz() -> ZoneInfo:
-    """Часовой пояс приложения (APP_TIMEZONE, по умолчанию Europe/Moscow)."""
-    return ZoneInfo(settings.APP_TIMEZONE)
 
 
 # Dev-фоллбэк: список отделов по умолчанию. Используется ТОЛЬКО если в базе
 # ещё нет ни одного отдела, чтобы отчёт формировался в пустой системе.
 # В production отделы создаёт администратор через панель управления, и
 # книга Excel получает по вкладке на каждый отдел из БД (Ошибка #16).
-DEFAULT_DEPTS = ["Жилищно-бытовой", "Информационный", "Корпоративный", "Культурно-массовый"]
 
 
-@dataclass(frozen=True, slots=True)
-class _DeptRef:
-    """Облегчённая ссылка на отдел вместо ORM-объекта Department."""
-
-    id: int | None = None
-    name: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class _UserRef:
-    """Облегчённая ссылка на пользователя вместо ORM-объекта User."""
-
-    full_name: str | None = None
-    dormitory: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class _TicketRow:
-    """Заявка в виде, достаточном для Excel-отчёта.
-
-    Сборщики листов обращаются к полям по тем же именам, что и у модели
-    Ticket (id, status, department.name, user.full_name, ...), поэтому
-    замена ORM-объектов на лёгкие строки не меняет логику отчёта, но
-    освобождает память: ORM identity map сессии не держит все заявки периода.
-    """
-
-    id: int
-    created_at: datetime | None = None
-    topic: str | None = None
-    description: str | None = None
-    status: TicketStatus = TicketStatus.NEW
-    response_text: str | None = None
-    auto_closed: bool = False
-    is_anonymous: bool = False
-    department_id: int | None = None
-    department: _DeptRef | None = None
-    user: _UserRef | None = None
 
 
-def _get_report_departments(data: dict) -> list[Department]:
-    """Список отделов для отчёта: ВСЕ отделы, существующие в БД.
-
-    Ошибка #16: количество вкладок больше не ограничено четырьмя —
-    лист создаётся для каждого отдела на момент формирования отчёта,
-    включая добавленные администратором через панель управления.
-    Если в БД нет ни одного отдела — используется DEFAULT_DEPTS (dev-фоллбэк).
-    """
-    departments = list(data.get("departments", []))
-    if departments:
-        return departments
-    return [Department(id=-(i + 1), name=name) for i, name in enumerate(DEFAULT_DEPTS)]
 
 
-def _build_summary_sheet(workbook: Workbook, data: dict) -> None:
-    """Формирует Лист 1 ('Краткая информация') со сводной аналитикой.
-
-    Содержит разбивку по каждому отделу:
-    - количество тикетов по статусам (новые, в работе, переданные, завершённые, анонимные)
-    - общее количество и процент выполнения
-    - итоговую строку 'ИТОГО' с суммой по всем отделам.
-    """
-    sheet = workbook.active
-    sheet.title = "Краткая информация"
-
-    headers = [
-        "Отдел",
-        "Новые",
-        "В обработке",
-        "Передано в адм.",
-        "Передано в локальный Студсовет",
-        "Выполнено",
-        "Выполнено (авто)",
-        "Анонимные",
-        "Всего",
-        "% выполнения",
-    ]
-    sheet.append(headers)
-    for cell in sheet[1]:
-        cell.font = Font(bold=True)
-
-    tickets = data.get("tickets", [])
-    departments = _get_report_departments(data)
-
-    def _count(predicate) -> int:
-        return sum(1 for t in tickets if predicate(t))
-
-    rows = []
-    for department in departments:
-        dept_tickets = [
-            t
-            for t in tickets
-            if (getattr(t, "department_id", None) == getattr(department, "id", None))
-            or (
-                getattr(getattr(t, "department", None), "name", None)
-                == getattr(department, "name", None)
-            )
-        ]
-        total = len(dept_tickets)
-        completed = sum(1 for t in dept_tickets if t.status in COMPLETED_STATUSES)
-        percent = round(completed / total * 100, 1) if total else 0.0
-
-        def _count_dept(predicate, tickets_list=dept_tickets) -> int:
-            return sum(1 for t in tickets_list if predicate(t))
-
-        rows.append(
-            [
-                department.name,
-                _count_dept(lambda t: t.status == TicketStatus.NEW),
-                _count_dept(lambda t: t.status == TicketStatus.IN_PROGRESS),
-                _count_dept(lambda t: t.status == TicketStatus.TRANSFERRED_ADMIN),
-                _count_dept(lambda t: t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING),
-                _count_dept(lambda t: t.status == TicketStatus.COMPLETED),
-                _count_dept(lambda t: t.status == TicketStatus.COMPLETED_AUTO),
-                _count_dept(lambda t: t.status == TicketStatus.ANONYMOUS),
-                total,
-                percent,
-            ]
-        )
-
-    total = len(tickets)
-    completed = sum(1 for t in tickets if t.status in COMPLETED_STATUSES)
-    percent = round(completed / total * 100, 1) if total else 0.0
-    rows.append(
-        [
-            "ИТОГО",
-            _count(lambda t: t.status == TicketStatus.NEW),
-            _count(lambda t: t.status == TicketStatus.IN_PROGRESS),
-            _count(lambda t: t.status == TicketStatus.TRANSFERRED_ADMIN),
-            _count(lambda t: t.status == TicketStatus.TRANSFERRED_HOUSEKEEPING),
-            _count(lambda t: t.status == TicketStatus.COMPLETED),
-            _count(lambda t: t.status == TicketStatus.COMPLETED_AUTO),
-            _count(lambda t: t.status == TicketStatus.ANONYMOUS),
-            total,
-            percent,
-        ]
-    )
-
-    for row in rows:
-        sheet.append(row)
-
-    # Автоподбор ширины столбцов под длину текста
-    for column in sheet.columns:
-        max_length = max(len(str(cell.value or "")) for cell in column)
-        sheet.column_dimensions[column[0].column_letter].width = max_length + 2
 
 
-def _sanitize_excel_cell(val: Any) -> Any:
-    """Защита от Formula / CSV Injection (CWE-1236).
-
-    Если строка начинается с формульного символа (=, +, -, @, \t, \r),
-    добавляет ведущую одинарную кавычку, чтобы Excel интерпретировал значение как текст.
-    """
-    if not isinstance(val, str):
-        return val
-    stripped = val.lstrip()
-    if stripped and stripped[0] in ("=", "+", "-", "@", "\t", "\r"):
-        return f"'{val}"
-    return val
 
 
-def _build_department_sheets(workbook: Workbook, data: dict) -> None:
-    """Формирует листы 2–N+1 с подробным реестром тикетов по каждому отделу.
-
-    Особенности (Ошибка #16):
-    - по одному листу на КАЖДЫЙ отдел, существующий в БД на момент
-      формирования отчёта (ограничение «ровно 4 листа» снято: отдел,
-      добавленный администратором через панель управления, попадает в отчёт);
-    - если в БД нет ни одного отдела — DEFAULT_DEPTS (dev-фоллбэк);
-    - маскирование персональных данных для анонимных обращений ('Аноним');
-    - маркер способа закрытия: 'авто' (по таймауту) или 'ручной' (оператором).
-    """
-    tickets = data.get("tickets", [])
-    final_depts = _get_report_departments(data)
-
-    headers = [
-        "ID",
-        "Дата",
-        "ФИО",
-        "Общежитие",
-        "Тема",
-        "Описание",
-        "Статус",
-        "Ответ",
-        "Маркер",
-    ]
-
-    used_titles = {"Краткая информация"}
-    for dept in final_depts:
-        base_title = (dept.name or f"Отдел {dept.id}")[:31]
-        title = base_title
-        counter = 1
-        while title in used_titles:
-            title = f"{base_title[:28]}_{counter}"
-            counter += 1
-        used_titles.add(title)
-        sheet = workbook.create_sheet(title)
-        sheet.append(headers)
-        for cell in sheet[1]:
-            cell.font = Font(bold=True)
-
-        dept_tickets = [
-            t
-            for t in tickets
-            if (getattr(t, "department_id", None) == getattr(dept, "id", None))
-            or (getattr(getattr(t, "department", None), "name", None) == dept.name)
-        ]
-
-        for ticket in dept_tickets:
-            marker = "авто" if getattr(ticket, "auto_closed", False) else "ручной"
-            if getattr(ticket, "is_anonymous", False):
-                full_name = "Аноним"
-                dormitory = "Аноним"
-            else:
-                user = getattr(ticket, "user", None)
-                full_name = user.full_name if user and user.full_name else "—"
-                dormitory = user.dormitory if user and user.dormitory else "—"
-
-            if getattr(ticket, "created_at", None):
-                t_dt = ticket.created_at
-                if t_dt.tzinfo is None:
-                    t_dt = t_dt.replace(tzinfo=UTC)
-                created_str = t_dt.astimezone(get_app_tz()).strftime("%Y-%m-%d %H:%M")
-            else:
-                created_str = ""
-
-            sheet.append(
-                [
-                    ticket.id,
-                    created_str,
-                    _sanitize_excel_cell(full_name),
-                    _sanitize_excel_cell(dormitory),
-                    _sanitize_excel_cell(ticket.topic or ""),
-                    _sanitize_excel_cell(ticket.description or ""),
-                    status_label(ticket.status),
-                    _sanitize_excel_cell(ticket.response_text or ""),
-                    marker,
-                ]
-            )
-
-        for column in sheet.columns:
-            max_length = max(len(str(cell.value or "")) for cell in column)
-            sheet.column_dimensions[column[0].column_letter].width = min(max_length + 2, 50)
 
 
-def build_daily_report(data: dict, report_date: datetime) -> bytes:
-    workbook = Workbook()
-    _build_summary_sheet(workbook, data)
-    _build_department_sheets(workbook, data)
 
-    output = BytesIO()
-    workbook.save(output)
-    return output.getvalue()
+
+
 
 
 async def send_report_email(report_bytes: bytes, filename: str) -> None:
@@ -419,156 +190,16 @@ def parse_report_date(text: str) -> date | None:
     return None
 
 
-def _ticket_from_record(row) -> _TicketRow:
-    """Строка потоковой выборки (колонки) -> облегчённая заявка отчёта."""
-    return _TicketRow(
-        id=row.id,
-        created_at=row.created_at,
-        topic=row.topic,
-        description=row.description,
-        status=row.status,
-        response_text=row.response_text,
-        auto_closed=bool(row.auto_closed),
-        is_anonymous=bool(row.is_anonymous),
-        department_id=row.department_id,
-        department=_DeptRef(row.department_id, row.name) if row.department_id else None,
-        user=_UserRef(row.full_name, row.dormitory) if row.full_name or row.dormitory else None,
-    )
 
 
-async def _fetch_report_data(
-    period_start: datetime,
-    period_end: datetime,
-    *,
-    end_inclusive: bool,
-) -> dict:
-    """Пакетно прочитать заявки периода и собрать данные отчёта.
-
-    Вместо ``select(Ticket)`` со связями (весь период сразу в памяти ORM)
-    читаются только нужные для Excel колонки, порциями по REPORT_CHUNK_SIZE
-    строк (``stream`` + ``yield_per``), и каждая строка тут же превращается
-    в лёгкий ``_TicketRow``. Пик памяти ограничен размером чанка курсора,
-    а не количеством заявок за период.
-    """
-    if end_inclusive:
-        period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at <= period_end)
-    else:
-        period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at < period_end)
-
-    stmt = (
-        select(
-            Ticket.id,
-            Ticket.created_at,
-            Ticket.topic,
-            Ticket.description,
-            Ticket.status,
-            Ticket.response_text,
-            Ticket.auto_closed,
-            Ticket.is_anonymous,
-            Ticket.department_id,
-            Department.name,
-            User.full_name,
-            User.dormitory,
-        )
-        .outerjoin(Department, Department.id == Ticket.department_id)
-        .outerjoin(User, User.id == Ticket.user_id)
-        .where(period_filter)
-        .order_by(Ticket.created_at, Ticket.id)
-    )
-
-    async with async_session_maker() as session:
-        departments = list(
-            (await session.scalars(select(Department).order_by(Department.name))).all()
-        )
-        result = await session.execute(stmt)
-        tickets = [_ticket_from_record(row) for row in result.all()]
-
-    if len(tickets) >= REPORT_CHUNK_SIZE:
-        logger.info(
-            "Отчёт: выбрано %s заявок",
-            len(tickets),
-        )
-    return {"tickets": tickets, "departments": departments}
 
 
-async def get_report_for_date(report_day: date) -> dict:
-    """Собирает данные для отчёта за одну конкретную дату (асинхронная обёртка)."""
-    tz = get_app_tz()
-    day_start = datetime.combine(report_day, datetime.min.time(), tzinfo=tz)
-    day_end = day_start + timedelta(days=1)
-
-    return await _fetch_report_data(day_start, day_end, end_inclusive=False)
 
 
-async def get_report_for_period(date_from: date, date_to: date) -> dict:
-    """Собирает данные для отчёта за период (от date_from до date_to включительно)."""
-    if date_from > date_to:
-        raise ValueError("Дата начала не может быть позже даты окончания")
-
-    tz = get_app_tz()
-    period_start = datetime.combine(date_from, datetime.min.time(), tzinfo=tz)
-    period_end = datetime.combine(date_to, datetime.max.time(), tzinfo=tz)
-
-    return await _fetch_report_data(period_start, period_end, end_inclusive=True)
 
 
-async def is_report_already_sent(report_day: date) -> bool:
-    """Был ли отчёт за указанную дату уже отправлен (Redis + DB)."""
-    # 1. Мгновенная проверка через Redis-кэш
-    try:
-        from core.redis_client import get_redis_client
-
-        redis = await get_redis_client()
-        if redis and await redis.get(f"oss_bot:report_sent:{report_day}"):
-            return True
-    except Exception:
-        pass
-
-    # 2. Проверка через постоянную таблицу report_runs в БД
-    try:
-        async with async_session_maker() as session:
-            existing = await session.scalar(
-                select(ReportRun).where(ReportRun.report_date == report_day)
-            )
-            if existing is not None:
-                # Синхронизируем состояние в Redis (TTL 48 часов)
-                try:
-                    redis = await get_redis_client()
-                    if redis:
-                        await redis.set(f"oss_bot:report_sent:{report_day}", "1", ex=86400 * 2)
-                except Exception:
-                    pass
-                return True
-    except Exception as exc:
-        logger.warning("Не удалось проверить статус отправки отчёта в БД: %s", exc)
-
-    return False
 
 
-async def mark_report_sent(report_day: date, status: str = "sent") -> None:
-    """Зафиксировать факт отправки отчёта за дату (защита от дублей, идемпотентно в Redis + DB)."""
-    # 1. Мгновенная фиксация в Redis для блокировки параллельных/повторных отправок
-    try:
-        from core.redis_client import get_redis_client
-
-        redis = await get_redis_client()
-        if redis:
-            await redis.set(f"oss_bot:report_sent:{report_day}", "1", ex=86400 * 2)
-    except Exception as exc:
-        logger.warning("Не удалось записать статус отчёта в Redis: %s", exc)
-
-    # 2. Персистентная запись в PostgreSQL
-    try:
-        async with async_session_maker() as session:
-            existing = await session.scalar(
-                select(ReportRun).where(ReportRun.report_date == report_day)
-            )
-            if existing is not None:
-                return
-            session.add(ReportRun(report_date=report_day, status=status))
-            await session.commit()
-    except Exception as exc:
-        logger.error("Не удалось зафиксировать ReportRun в БД: %s", exc)
 
 
 async def _run_report(api, admin_vk_ids: list[int], report_date: datetime) -> bool:
@@ -711,3 +342,30 @@ def start_report_scheduler(api) -> asyncio.Task:
     """Запускает asyncio-планировщик ежедневных отчётов."""
     task = asyncio.create_task(_report_loop(api))
     return task
+
+
+__all__ = [
+    "DEFAULT_DEPTS",
+    "REPORT_CHUNK_SIZE",
+    "TicketStatus",
+    "_DeptRef",
+    "_TicketRow",
+    "_UserRef",
+    "_fetch_report_data",
+    "_report_loop",
+    "_run_report",
+    "_seconds_until_report",
+    "build_daily_report",
+    "get_app_tz",
+    "get_report_for_date",
+    "get_report_for_period",
+    "get_superadmin_vk_ids",
+    "is_report_already_sent",
+    "mark_report_sent",
+    "parse_report_date",
+    "send_report_email",
+    "send_report_to_vk",
+    "start_report_scheduler",
+    "COMPLETED_STATUSES",
+    "status_label",
+]

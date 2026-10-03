@@ -33,6 +33,10 @@ def _report_log_lines(report: GuardReport, settings: Settings) -> list[str]:
     lines = [f"Startup guard [{component}]"]
     lines += [f"  ERROR: {item}" for item in report.errors]
     lines += [f"  WARNING: {item}" for item in report.warnings]
+    if not settings.IS_PRODUCTION and not settings.SESSION_SECRET_KEY:
+        lines.append(
+            "  WARNING: SESSION_SECRET_KEY не задан; используется development secret из системного tmpdir."
+        )
     return lines
 
 

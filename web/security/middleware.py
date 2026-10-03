@@ -3,6 +3,7 @@
 """
 
 import html
+import ipaddress
 import json
 import logging
 import secrets
@@ -47,13 +48,12 @@ SECURITY_HEADERS = {
     "Pragma": "no-cache",
 }
 
-# CSP без 'unsafe-inline' — nonce добавляется динамически в middleware
-# 'unsafe-inline' удалён: он позволяет выполнение инлайнового JS, что
-# снижает защиту от XSS. Все скрипты должны быть подключены через nonce.
+# CSP nonce для style-элементов добавляется динамически в middleware.
 CONTENT_SECURITY_POLICY_BASE = (
     "default-src 'self'; "
     "script-src 'self' 'nonce-{nonce}' https://telegram.org; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "style-src 'self' 'nonce-{style_nonce}' https://fonts.googleapis.com; "
+    "style-src-attr 'unsafe-inline'; "
     "font-src 'self' https://fonts.gstatic.com; "
     "img-src 'self' data:; "
     "frame-ancestors 'self' https://*.telegram.org https://telegram.org; "
@@ -91,6 +91,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Формируем CSP с nonce
         csp = CONTENT_SECURITY_POLICY_BASE.format(
             nonce=script_nonce,
+            style_nonce=style_nonce,
         )
 
         try:
@@ -111,6 +112,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 # === Rate Limiting ===
+
+
+def mask_ip_for_logs(value: str) -> str:
+    """Маскировать host-часть IP перед записью в логи и аудит."""
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return "unknown"
+    if address.version == 4:
+        return f"{address.exploded.rsplit('.', 1)[0]}.*"
+    network = ipaddress.ip_network(f"{address}/64", strict=False)
+    return f"{network.network_address.compressed}/64"
 
 
 class RateLimiter:
@@ -169,16 +182,11 @@ class DBRateLimiter:
         now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=self.window_seconds)
 
-        # Параметризованные запросы с явным указанием таблицы из белого списка.
-        # Имя таблицы подставляется через безопасный форматный строковый шаблон,
-        # а не через f-string, чтобы исключить риск SQL-инъекции при будущих
-        # изменениях логики валидации.
+        # Имена таблиц — статические SQL-идентификаторы; их нельзя bind-параметризовать.
         if self.table_name == "crud_attempts":
             count_stmt = text(
-                "SELECT COUNT(*) FROM {table} "  # noqa: UP032
-                "WHERE ip = :ip AND action = :action AND attempted_at >= :cutoff".format(
-                    table=self.table_name
-                )
+                "SELECT COUNT(*) FROM crud_attempts "
+                "WHERE ip = :ip AND action = :action AND attempted_at >= :cutoff"
             )
             count_result = await session.execute(
                 count_stmt, {"ip": ip, "action": action, "cutoff": cutoff}
@@ -190,14 +198,14 @@ class DBRateLimiter:
 
             # Записать новую попытку
             insert_stmt = text(
-                "INSERT INTO {table} (ip, action, attempted_at) "  # noqa: UP032
-                "VALUES (:ip, :action, :now)".format(table=self.table_name)
+                "INSERT INTO crud_attempts (ip, action, attempted_at) "
+                "VALUES (:ip, :action, :now)"
             )
             await session.execute(insert_stmt, {"ip": ip, "action": action, "now": now})
         else:
             count_stmt = text(
-                "SELECT COUNT(*) FROM {table} "  # noqa: UP032
-                "WHERE ip = :ip AND attempted_at >= :cutoff".format(table=self.table_name)
+                "SELECT COUNT(*) FROM login_attempts "
+                "WHERE ip = :ip AND attempted_at >= :cutoff"
             )
             count_result = await session.execute(count_stmt, {"ip": ip, "cutoff": cutoff})
             count = int(count_result.scalar() or 0)
@@ -207,9 +215,8 @@ class DBRateLimiter:
 
             # Записать новую попытку
             insert_stmt = text(
-                "INSERT INTO {table} (ip, attempted_at, success) VALUES (:ip, :now, false)".format(  # noqa: UP032
-                    table=self.table_name
-                )
+                "INSERT INTO login_attempts (ip, attempted_at, success) "
+                "VALUES (:ip, :now, false)"
             )
             await session.execute(insert_stmt, {"ip": ip, "now": now})
 
@@ -224,7 +231,7 @@ class DBRateLimiter:
                 "DBRateLimiter: ошибка при фиксации лимита для таблицы %s, "
                 "IP %s, action %s — запрос блокируется (fail-close)",
                 self.table_name,
-                ip,
+                mask_ip_for_logs(ip),
                 action,
                 exc_info=True,
             )

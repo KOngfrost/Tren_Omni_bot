@@ -30,10 +30,12 @@
 """
 
 import re
+
 import pytest
 from fastapi.testclient import TestClient
 
 from core.models import (
+    Admin,
     Department,
     Event,
     FAQNode,
@@ -62,23 +64,31 @@ def client(web_client: TestClient) -> TestClient:
 @pytest.fixture
 def auth_admin_client(web_client: TestClient):
     """Клиент с предварительно авторизованным суперадминистратором."""
-    from core.database import async_session_maker
     import asyncio
+
+    from core.database import async_session_maker
 
     async def _setup_admin():
         async with async_session_maker() as session:
+            vk_user = User(vk_id=987654321, full_name="Кнопочный тестировщик")
+            session.add(vk_user)
+            await session.flush()
+            admin = Admin(user_id=vk_user.id, role="ADMIN")
+            session.add(admin)
+            await session.flush()
             admin_user = WebUser(
                 username="button_tester",
                 password_hash=hash_password("SuperSecret123"),
                 role=WebRole.SUPERADMIN,
                 is_active=True,
+                admin_id=admin.id,
             )
             session.add(admin_user)
             await session.commit()
             await session.refresh(admin_user)
             return admin_user.id
 
-    admin_id = asyncio.run(_setup_admin())
+    asyncio.run(_setup_admin())
 
     # Входим через форму
     login_page = web_client.get("/auth/login")

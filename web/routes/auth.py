@@ -1,102 +1,80 @@
-"""
-Маршруты аутентификации веб-панели.
+"""Маршруты аутентификации веб-панели.
 
-Безопасность:
-- Хеш пароля хранится в web_users.password_hash (bcrypt) и сверяется через
-  web.security.passwords.verify_password.
-- Bootstrap-режим: временный вход суперадминистратора из .env
-  (WEB_ADMIN_USERNAME/PASSWORD), пока в базе нет ни одного постоянного
-  суперадминистратора. Каждый bootstrap-вход помечается в журнале.
-- Rate limiting входов ведётся ЕДИНООБРАЗНО в таблице login_attempts
-  (PostgreSQL), что корректно работает при нескольких uvicorn-worker'ах.
-- OTP второго фактора никогда не хранится в cookie/сессии: в сессии живёт
-  только случайный токен попытки, а код и его хеш — в серверном хранилище
-  web.security.otp_store.
+Login throttling находится в ``web.security.login_rate_limiter``; функции
+оставлены здесь как aliases для совместимости существующих callers/tests.
 """
 
 import ipaddress
 import logging
 import re
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core import database as core_db
 from core.config import settings
-from core.database import get_db
-from core.models import Log, LoginAttempt, WebRole, WebUser
+from core.models import Log, WebRole, WebUser
 from core.two_factor import is_two_factor_enabled
 from core.vk_client import send_vk_message
 from web.security import otp_store
 from web.security.csrf import get_csrf_token
-from web.security.middleware import DBRateLimiter
+from web.security.login_rate_limiter import (
+    LOGIN_MAX_ATTEMPTS as _LOGIN_MAX_ATTEMPTS,
+)
+from web.security.login_rate_limiter import (
+    LOGIN_WINDOW_SECONDS as _LOGIN_WINDOW_SECONDS,
+)
+from web.security.login_rate_limiter import (
+    clear_attempts as _clear_attempts,
+)
+from web.security.login_rate_limiter import (
+    is_rate_limited as _is_rate_limited,
+)
+from web.security.login_rate_limiter import (
+    record_failed_attempt as _record_failed_attempt,
+)
+from web.security.middleware import DBRateLimiter, mask_ip_for_logs
 from web.security.passwords import verify_dummy_password, verify_password
 from web.templating import templates
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
-
-# Rate limiting: 5 неудачных попыток за 15 минут на IP.
-# Единственное хранилище — таблица login_attempts (PostgreSQL).
-_LOGIN_MAX_ATTEMPTS = 5
-_LOGIN_WINDOW_SECONDS = 15 * 60
-
-# Rate limiting для CRUD-операций админ-панели: защита от brute-force на
-# чувствительных операциях (ответ администратора, создание/передача заявок,
-# создание/удаление пользователей). Настраивается в .env (CRUD_RATE_LIMIT_*).
 _crud_rate_limiter = DBRateLimiter(
     table_name="crud_attempts",
     max_requests=settings.CRUD_RATE_LIMIT_MAX,
     window_seconds=settings.CRUD_RATE_LIMIT_WINDOW,
 )
-
-# 0x5C — обратный слэш. Константа вместо литерала, чтобы исходник
-# читался однозначно в любом редакторе и не требовал экранирования.
 _BACKSLASH = chr(0x5C)
-
-
-# ==========================================
-# Вспомогательные функции
-# ==========================================
 
 
 def _credentials_configured() -> bool:
     return bool(settings.WEB_ADMIN_USERNAME and settings.WEB_ADMIN_PASSWORD)
 
 
-# ==========================================
-# Возврат на запрошенную страницу после входа (?next=)
-# ==========================================
-# Значение next принимается ТОЛЬКО как внутренний путь ("/tickets/5").
-# Внешние адреса ("//evil.com", "https://evil.com") отклоняются, иначе
-# редирект после входа стал бы открытым redirect.
 NEXT_SESSION_KEY = "login_next"
 
 
 def safe_next_path(raw: object) -> str | None:
-    """Вернуть безопасный внутренний путь или None."""
+    """Return a safe internal redirect path, or None."""
     if not isinstance(raw, str):
         return None
     value = raw.strip()
     if not value or not value.startswith("/") or len(value) > 2048:
         return None
-    # Protocol-relative ("//host") и "/<backslash>host" записи запрещены
     if value[1:2] in {"/", _BACKSLASH}:
         return None
-    if any(ch in value for ch in ("\r", "\n", "\x00")):
+    if any(character in value for character in ("\r", "\n", "\x00")):
         return None
     return value
 
 
 def remember_next(request: Request, raw: object) -> None:
-    """Запомнить адрес возврата после входа (сохраняет прежний, если raw не передан)."""
     if raw is None:
         return
     path = safe_next_path(raw)
@@ -107,12 +85,10 @@ def remember_next(request: Request, raw: object) -> None:
 
 
 def take_next(request: Request) -> str:
-    """Одноразово забрать адрес возврата (по умолчанию — дашборд)."""
     return safe_next_path(request.session.pop(NEXT_SESSION_KEY, None)) or "/"
 
 
 def login_url_with_next(request: Request) -> str:
-    """Ссылка на вход с сохранением запрошенной страницы (для require_auth)."""
     if request.method.upper() != "GET":
         return "/auth/login"
     path = request.url.path
@@ -125,51 +101,42 @@ def login_url_with_next(request: Request) -> str:
 
 
 def bootstrap_session_still_valid(user: dict) -> bool:
-    """Fail-Closed: разрешён ли ещё резервный вход для этой сессии.
-
-    Проверяется при КАЖДОМ запросе bootstrap-сессии: доверие устаревшим
-    данным сессии исключено, если резервный вход отключили
-    (BOOTSTRAP_ALLOWED=False), креды удалили/изменили в .env или username
-    сессии больше не совпадает с активной конфигурацией.
-    """
     if user.get("telegram_id"):
         return bool(
             settings.TELEGRAM_ADMIN_ID > 0
             and user.get("telegram_id") == settings.TELEGRAM_ADMIN_ID
         )
-    if not settings.BOOTSTRAP_ALLOWED:
-        return False
-    if not _credentials_configured():
-        return False
-    return user.get("username") == settings.WEB_ADMIN_USERNAME
+    return bool(
+        settings.BOOTSTRAP_ALLOWED
+        and _credentials_configured()
+        and user.get("username") == settings.WEB_ADMIN_USERNAME
+    )
 
 
 def _mask_vk_id(vk_admin_id: object) -> str:
-    """Маскировать VK ID для отображения (только последние 4 цифры)."""
     digits = re.sub(r"\D", "", str(vk_admin_id or ""))
     return f"***{digits[-4:]}" if digits else "***"
 
 
 def is_trusted_proxy(ip_str: str) -> bool:
-    """Проверить, является ли IP доверенным прокси (поддержка IP, CIDR и loopback)."""
     if not ip_str or ip_str == "unknown":
         return False
     if ip_str in settings.TRUSTED_PROXIES:
         return True
     try:
-        addr = ipaddress.ip_address(ip_str)
+        address = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
-    if addr.is_loopback:
+    if address.is_loopback:
         return True
     for trusted in settings.TRUSTED_PROXIES:
         if not trusted:
             continue
         try:
             if "/" in trusted:
-                if addr in ipaddress.ip_network(trusted, strict=False):
+                if address in ipaddress.ip_network(trusted, strict=False):
                     return True
-            elif addr == ipaddress.ip_address(trusted):
+            elif address == ipaddress.ip_address(trusted):
                 return True
         except ValueError:
             continue
@@ -177,11 +144,6 @@ def is_trusted_proxy(ip_str: str) -> bool:
 
 
 def _get_client_ip(request: Request) -> str:
-    """Получить реальный IP клиента.
-
-    X-Forwarded-For принимается ТОЛЬКО от доверенных прокси
-    (settings.TRUSTED_PROXIES с поддержкой IP, CIDR и loopback).
-    """
     client_ip = request.client.host if request.client else "unknown"
     if is_trusted_proxy(client_ip):
         forwarded = request.headers.get("x-forwarded-for")
@@ -195,79 +157,6 @@ def _get_client_ip(request: Request) -> str:
 # ==========================================
 # Rate limiting и журнал
 # ==========================================
-
-
-async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
-    """Сколько неудачных попыток входа за окно.
-
-    При недоступности БД проверяет резервный счётчик в Redis, чтобы предотвратить
-    обход rate limit при намеренной перегрузке базы данных (BUG-14).
-    """
-    cutoff = datetime.now(UTC) - timedelta(seconds=_LOGIN_WINDOW_SECONDS)
-    try:
-        count: int | None = await session.scalar(
-            select(func.count(LoginAttempt.id)).where(
-                LoginAttempt.ip == ip,
-                LoginAttempt.success.is_(False),
-                LoginAttempt.attempted_at >= cutoff,
-            )
-        )
-        return int(count or 0)
-    except Exception:
-        logger.warning("Rate-limit: не удалось прочитать попытки входа из БД, проверяем Redis fallback")
-        try:
-            from core.redis_client import get_redis
-            redis = get_redis()
-            if redis:
-                val = await redis.get(f"failed_login_count:{ip}")
-                if val:
-                    return int(val)
-        except Exception:
-            pass
-        return 0
-
-
-async def _is_rate_limited(session: AsyncSession, ip: str) -> bool:
-    """Превышен ли лимит неудачных попыток входа для IP."""
-    return await _db_recent_failed_count(session, ip) >= _LOGIN_MAX_ATTEMPTS
-
-
-async def _record_failed_attempt(ip: str) -> None:
-    """Зафиксировать неудачную попытку входа в БД и Redis fallback."""
-    try:
-        from core.redis_client import get_redis
-        redis = get_redis()
-        if redis:
-            key = f"failed_login_count:{ip}"
-            await redis.incr(key)
-            await redis.expire(key, _LOGIN_WINDOW_SECONDS)
-    except Exception:
-        pass
-
-    try:
-        async with core_db.async_session_maker() as session:
-            session.add(LoginAttempt(ip=ip, success=False))
-            await session.commit()
-    except Exception:
-        logger.warning("Rate-limit: не удалось записать попытку входа в БД")
-
-
-async def _clear_attempts(ip: str) -> None:
-    """Сбросить лимит после успешного входа."""
-    try:
-        from core.redis_client import get_redis
-        redis = get_redis()
-        if redis:
-            await redis.delete(f"failed_login_count:{ip}")
-    except Exception:
-        pass
-
-    try:
-        async with core_db.async_session_maker() as session:
-            await session.execute(delete(LoginAttempt).where(LoginAttempt.ip == ip))
-            await session.commit()
-    except Exception:
-        logger.warning("Rate-limit: не удалось очистить попытки входа")
 
 
 async def _log_action(action: str, details: str) -> None:
@@ -297,6 +186,7 @@ async def _notify_superadmin(details: str) -> None:
     if not notified and settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_ADMIN_ID > 0:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
                     f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
@@ -482,7 +372,11 @@ async def _authenticate(
             # даты (SQLite) к UTC. Прямое сравнение с datetime.now(UTC)
             # падало с TypeError на offset-naive значениях.
             if web_user.is_expired:
-                logger.warning("LOGIN BLOCKED: account expired for %s (expired at %s)", web_user.username, web_user.expires_at)
+                logger.warning(
+                    "LOGIN BLOCKED: account expired for %s (expired at %s)",
+                    web_user.username,
+                    web_user.expires_at,
+                )
                 verify_dummy_password(password)
                 return None
             if not verify_password(password, web_user.password_hash):
@@ -553,7 +447,9 @@ async def login_page(request: Request):
     """
     from core.maintenance import is_maintenance_mode
 
-    maintenance_active = getattr(request.state, "maintenance_active", False) or await is_maintenance_mode()
+    maintenance_active = (
+        getattr(request.state, "maintenance_active", False) or await is_maintenance_mode()
+    )
     flash_error = request.session.pop("flash_error", None)
     remember_next(request, request.query_params.get("next"))
     return templates.TemplateResponse(
@@ -576,15 +472,14 @@ async def login_page(request: Request):
 async def login(request: Request):
     """Обработка входа с rate limiting, журналированием и вторым фактором."""
     client_ip = _get_client_ip(request)
+    masked_client_ip = mask_ip_for_logs(client_ip)
     form = await request.form()
     username: str = str(form.get("username", ""))
     password: str = str(form.get("password", ""))
 
     async with core_db.async_session_maker() as session:
         if await _is_rate_limited(session, client_ip):
-            details = (
-                f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
-            )
+            details = f"Блокировка IP {masked_client_ip}: превышен лимит попыток входа (username={username!r})"
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
             request.session["flash_error"] = "Слишком много попыток входа. Подождите 15 минут."
@@ -601,14 +496,15 @@ async def login(request: Request):
             )
             await _log_action(
                 "web_login_failed",
-                f"Неудачный вход с IP {client_ip} (username={masked_user!r})",
+                f"Неудачный вход с IP {masked_client_ip} (username={masked_user!r})",
             )
-            logger.warning("Неудачная попытка входа с IP %s", client_ip)
+            logger.warning("Неудачная попытка входа с IP %s", masked_client_ip)
             request.session["flash_error"] = "Неверный логин или пароль"
             return RedirectResponse(url="/auth/login", status_code=302)
 
         # Во время техработ разрешён вход только суперадминистраторам
         from core.maintenance import is_maintenance_mode
+
         if await is_maintenance_mode():
             user_role = str(user_data.get("role", "")).upper()
             if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
@@ -667,195 +563,9 @@ async def login(request: Request):
 
     await _log_action(
         "web_login_success",
-        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
+        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {masked_client_ip}",
     )
     return RedirectResponse(url=take_next(request), status_code=303)
-
-
-@router.get("/2fa", response_class=HTMLResponse)
-async def two_factor_page(request: Request):
-    """Страница ввода 2FA-кода из ВК."""
-    if request.session.get("user"):
-        return RedirectResponse(url=take_next(request), status_code=302)
-
-    pending = await otp_store.peek(request)
-    if not pending:
-        await otp_store.cancel(request)
-        request.session["flash_error"] = "Сессия 2FA истекла. Войдите заново."
-        return RedirectResponse(url="/auth/login", status_code=302)
-
-    error = request.session.pop("2fa_error", None)
-    return templates.TemplateResponse(
-        "2fa.html",
-        {
-            "request": request,
-            "masked_vk_id": _mask_vk_id(pending.get("vk_admin_id")),
-            "error": error,
-            "csrf_token": get_csrf_token(request),
-        },
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-        },
-    )
-
-
-@router.post("/2fa")
-async def two_factor_verify(
-    request: Request,
-    session: AsyncSession = Depends(get_db),
-):
-    """Проверка 2FA-кода и выдача полноценной сессии.
-
-    Fail-Closed (#2, #3): сразу после успешного ввода кода роль и активность
-    учётки перечитываются из базы, а bootstrap-сессия повторно проверяется
-    на то, что резервный вход всё ещё разрешён и канал 2FA не был снят.
-    """
-    if request.session.get("user"):
-        return RedirectResponse(url=take_next(request), status_code=303)
-
-    form = await request.form()
-    # Допускается вставка пробелов/дефисов (автозаполнение менеджеров паролей)
-    submitted_code = re.sub(r"\D", "", str(form.get("code", "")))[:6]
-
-    pending = await otp_store.peek(request)
-    if not pending:
-        await otp_store.cancel(request)
-        request.session["flash_error"] = "Сессия 2FA истекла. Войдите заново."
-        return RedirectResponse(url="/auth/login", status_code=303)
-
-    result = await otp_store.verify(request, submitted_code)
-
-    if result.status == "expired":
-        await otp_store.cancel(request)
-        request.session["flash_error"] = "Срок действия кода истёк. Войдите заново."
-        return RedirectResponse(url="/auth/login", status_code=303)
-
-    if not result.ok:
-        if result.status == "locked":
-            await otp_store.cancel(request)
-            request.session["flash_error"] = (
-                "Превышено число попыток. Вход отменён, попробуйте позже."
-            )
-            return RedirectResponse(url="/auth/login", status_code=303)
-        request.session["2fa_error"] = f"Неверный код. Осталось попыток: {result.remaining}."
-        return RedirectResponse(url="/auth/2fa", status_code=303)
-
-    user_data = dict(result.user_data or {})
-
-    # Fail-Closed: роль и активность перечитываются из базы, а не из токена
-    if user_data.get("web_user_id") is not None:
-        from core.models import Admin
-
-        web_user = await session.scalar(
-            select(WebUser)
-            .options(selectinload(WebUser.admin).selectinload(Admin.user))
-            .where(WebUser.id == user_data["web_user_id"])
-        )
-        if web_user is None or not web_user.is_active:
-            await otp_store.cancel(request)
-            request.session["flash_error"] = "Учётка недоступна. Обратитесь к администратору."
-            return RedirectResponse(url="/auth/login", status_code=302)
-
-        vk_admin_id = web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
-        two_factor_on = await is_two_factor_enabled()
-        is_qa_user = web_user.username.startswith("qa_") or web_user.username.startswith("test_") or (web_user.admin is None and "qa" in web_user.username.lower())
-        if two_factor_on and not vk_admin_id and not is_qa_user:
-            await otp_store.cancel(request)
-            request.session["flash_error"] = "Привязка VK-аккаунта снята — вход с 2FA невозможен."
-            return RedirectResponse(url="/auth/login", status_code=302)
-
-        user_data = {
-            "username": web_user.username,
-            "role": web_user.role.value if web_user.role else WebRole.DEPARTMENT_ADMIN.value,
-            "web_user_id": web_user.id,
-            "department_id": web_user.department_id,
-        }
-    else:
-        # Bootstrap-вход: резервный доступ могли отключить, пока пользователь
-        # вводил код (BOOTSTRAP_ALLOWED=False, смена кредов, снятие 2FA-канала)
-        if not bootstrap_session_still_valid(user_data):
-            await otp_store.cancel(request)
-            request.session["flash_error"] = (
-                "Резервный вход отключён или перенастроен. Войдите заново."
-            )
-            return RedirectResponse(url="/auth/login", status_code=302)
-
-        two_factor_on = await is_two_factor_enabled()
-        channel = _bootstrap_2fa_channel()
-        if two_factor_on and not channel:
-            await otp_store.cancel(request)
-            request.session["flash_error"] = (
-                "Доверенный канал 2FA больше не настроен — вход отменён."
-            )
-            return RedirectResponse(url="/auth/login", status_code=302)
-
-        user_data = {
-            "username": user_data.get("username") or settings.WEB_ADMIN_USERNAME,
-            "role": WebRole.SUPERADMIN.value,
-            "web_user_id": None,
-            "department_id": None,
-            "bootstrap": True,
-        }
-
-    # Проверка техработ: только SUPERADMIN может завершить вход
-    from core.maintenance import is_maintenance_mode
-    if await is_maintenance_mode():
-        user_role = str(user_data.get("role", "")).upper()
-        if user_role not in (WebRole.SUPERADMIN.value, "SUPERADMIN"):
-            await otp_store.cancel(request)
-            request.session["flash_error"] = (
-                "На платформе ведутся технические работы. Пожалуйста, повторите попытку позже."
-            )
-            return RedirectResponse(url="/auth/login", status_code=302)
-
-    # Успех: попытка 2FA полностью снимается, токен больше не принимается
-    request.session.pop(otp_store.SESSION_KEY, None)
-    request.session["user"] = user_data
-    request.session["csrf_token"] = secrets.token_urlsafe(32)
-
-    await _log_action(
-        "web_login_success",
-        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с подтверждением 2FA",
-    )
-    return RedirectResponse(url=take_next(request), status_code=303)
-
-
-@router.post("/2fa/resend")
-async def two_factor_resend(request: Request, session: AsyncSession = Depends(get_db)):
-    """Повторная отправка 2FA-кода (старый код немедленно аннулируется)."""
-    pending = await otp_store.peek(request)
-    if not pending:
-        await otp_store.cancel(request)
-        request.session["flash_error"] = "Сессия 2FA истекла. Войдите заново."
-        return RedirectResponse(url="/auth/login", status_code=303)
-
-    vk_admin_id = pending.get("vk_admin_id")
-
-    # Лимит повторных отправок: предыдущий код остаётся действительным,
-    # новый не генерируется и в VK не отправляется (защита от флуда канала)
-    if otp_store.resend_quota(pending) <= 0:
-        request.session["2fa_error"] = (
-            "Лимит повторных отправок кода исчерпан. Используй ранее отправленный "
-            "код или войди заново позже."
-        )
-        return RedirectResponse(url="/auth/2fa", status_code=303)
-
-    otp_code, remaining = await otp_store.rotate(request, ttl=settings.TWO_FACTOR_CODE_TTL)
-    if not otp_code or not vk_admin_id:
-        await otp_store.cancel(request)
-        request.session["flash_error"] = "Сессия 2FA истекла. Войдите заново."
-        return RedirectResponse(url="/auth/login", status_code=303)
-
-    await _send_otp_to_vk(
-        session,
-        vk_admin_id=int(vk_admin_id),
-        otp_code=otp_code,
-        reason="🔐 Новый одноразовый код для входа в панель управления OSS Bot",
-    )
-
-    request.session["2fa_error"] = f"Новый код отправлен в ВК. Доступно отправок: {remaining}."
-    return RedirectResponse(url="/auth/2fa", status_code=303)
 
 
 @router.post("/logout")
@@ -887,11 +597,20 @@ async def require_crud_rate_limit(request: Request):
 
     async with core_db.async_session_maker() as session:
         if not await _crud_rate_limiter.is_allowed(session, client_ip, "crud_operation"):
-            logger.warning("CRUD rate limit превышен для IP %s", client_ip)
+            logger.warning("CRUD rate limit превышен для IP %s", mask_ip_for_logs(client_ip))
             raise HTTPException(
                 status_code=429,
                 detail="Слишком много запросов. Подождите минуту.",
             )
+
+
+def _register_two_factor_router() -> None:
+    from web.routes.two_factor import router as two_factor_router
+
+    router.include_router(two_factor_router)
+
+
+_register_two_factor_router()
 
 
 __all__ = [
@@ -903,4 +622,9 @@ __all__ = [
     "router",
     "safe_next_path",
     "take_next",
+    "_clear_attempts",
+    "_is_rate_limited",
+    "_record_failed_attempt",
+    "_LOGIN_MAX_ATTEMPTS",
+    "_LOGIN_WINDOW_SECONDS",
 ]

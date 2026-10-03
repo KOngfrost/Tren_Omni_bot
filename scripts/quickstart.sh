@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}       🚀 OSS Bot — Быстрый старт системы (v0.8.8.7)        ${NC}"
+echo -e "${BLUE}       🚀 OSS Bot — Быстрый старт системы (v0.8.8.8)        ${NC}"
 echo -e "${BLUE}============================================================${NC}"
 
 # 1. Проверка наличия Docker и Docker Compose
@@ -36,9 +36,9 @@ if [ ! -f .env ]; then
     REDIS_PASS=$(openssl rand -hex 16 2>/dev/null || date +%s%N | sha256sum | head -c 32)
     SESSION_SEC=$(openssl rand -hex 24 2>/dev/null || date +%s%N | sha256sum | head -c 48)
 
-    sed -i "s/POSTGRES_PASSWORD=change_me_to_a_long_secret/POSTGRES_PASSWORD=${PG_PASS}/" .env
-    sed -i "s/REDIS_PASSWORD=change_me_to_a_long_secret/REDIS_PASSWORD=${REDIS_PASS}/" .env
-    sed -i "s/SESSION_SECRET_KEY=change_me_to_a_long_secret/SESSION_SECRET_KEY=${SESSION_SEC}/" .env
+    sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PG_PASS}|" .env
+    sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${REDIS_PASS}|" .env
+    sed -i "s|^SESSION_SECRET_KEY=.*|SESSION_SECRET_KEY=${SESSION_SEC}|" .env
 
     echo -e "${GREEN}✅ Сгенерированы надёжные пароли для PostgreSQL, Redis и сессий в .env.${NC}"
     echo -e "${YELLOW}⚠️  Пожалуйста, укажите токен VK (VK_BOT_TOKEN) в файле .env перед началом работы!${NC}"

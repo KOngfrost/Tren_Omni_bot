@@ -1,0 +1,27 @@
+# Runtime dependencies. Compile a hashed lock with:
+# pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-version=3.11 --only-binary=:all:" --output-file=requirements.txt requirements.in
+python-dotenv==1.1.0
+vkbottle==4.11.0
+aiohttp==3.14.3
+openpyxl==3.1.5
+SQLAlchemy==2.0.36
+asyncpg==0.31.0
+alembic==1.18.5
+tzdata==2024.2
+fastapi==0.115.8
+starlette==0.45.3
+uvicorn[standard]>=0.34.0
+jinja2==3.1.4
+python-multipart>=0.0.20
+httpx>=0.28.1
+itsdangerous==2.2.0
+cryptography>=43.0.0
+argon2-cffi==23.1.0
+aiosmtplib==4.0.0
+redis>=5.0.8
+sentry-sdk[fastapi]>=2.14.0
+prometheus-client>=0.20.0
+prometheus-fastapi-instrumentator==7.0.0
+pydantic-settings>=2.0.0
+aiogram>=3.17.0
+psutil>=6.0.0

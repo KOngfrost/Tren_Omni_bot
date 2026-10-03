@@ -293,6 +293,10 @@ async def logged_in_page(browser, live_server, db_session_maker):
     page = await context.new_page()
     page.set_default_timeout(ACTION_TIMEOUT_MS)
     page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
+    await page.add_init_script(
+        "try { localStorage.setItem('cookie_consent_accepted', 'true'); "
+        "localStorage.setItem('legal_agreements_accepted', 'true'); } catch (e) {}"
+    )
 
     watcher = _ConsoleWatcher(page)
     try:

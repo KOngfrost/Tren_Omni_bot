@@ -6,8 +6,8 @@
 таблиц попыток входа (Ошибка #10).
 
 Запускается через start_rate_limit_cleanup() в планировщиках веб-панели
-(web/main.py) и бота (main.py). Удаляет записи старше RETENTION_HOURS
-(по умолчанию 24 ч) с периодом CLEANUP_INTERVAL_SECONDS (по умолчанию 1 ч).
+(web/main.py) и бота (main.py). Удаляет IP-записи старше LOG_IP_RETENTION_DAYS
+(по умолчанию 30 дней) с периодом CLEANUP_INTERVAL_SECONDS (по умолчанию 1 ч).
 """
 
 import asyncio
@@ -25,9 +25,8 @@ logger = logging.getLogger(__name__)
 # покрывает требование задачи. Переокружить через env.
 CLEANUP_INTERVAL_SECONDS = int(os.environ.get("RATE_LIMIT_CLEANUP_INTERVAL_SECONDS", "3600"))
 
-# Возраст записей (часы), старше которого удаляем — те же 24 ч,
-# что использовались в горячем пути.
-RETENTION_HOURS = 24
+# Срок хранения IP-адресов в rate-limit таблицах (дни).
+LOG_IP_RETENTION_DAYS = int(os.environ.get("LOG_IP_RETENTION_DAYS", "30"))
 
 # DATA-001: Срок хранения записей системного аудита (дней)
 AUDIT_LOG_RETENTION_DAYS = int(os.environ.get("AUDIT_LOG_RETENTION_DAYS", "90"))
@@ -48,7 +47,7 @@ async def purge_stale_attempts(now: datetime | None = None) -> dict[str, int]:
     Возвращает {таблица: число удалённых строк}.
     """
     current_time = now or datetime.now(UTC)
-    cutoff = current_time - timedelta(hours=RETENTION_HOURS)
+    cutoff = current_time - timedelta(days=LOG_IP_RETENTION_DAYS)
     deleted: dict[str, int] = {}
     async with async_session_maker() as session:
         for table, ts_column in _CLEANUP_TABLES:

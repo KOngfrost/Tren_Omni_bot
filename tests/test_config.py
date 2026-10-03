@@ -145,3 +145,30 @@ def test_validate_required_passes_with_full_config(monkeypatch):
     fresh = Settings()
     # Не должно бросать исключение
     fresh.validate_required()
+
+
+def _production_settings(**overrides):
+    from core.config import Settings
+
+    values = {
+        "APP_ENV": "production",
+        "DB_USER": "bot_user",
+        "DB_PASS": "strong_database_password_123",
+        "VK_BOT_TOKEN": "vk_token_value",
+        "VK_CALLBACK_SECRET": "callback_secret_with_at_least_32_chars",
+        "ADMIN_VK_IDS": {123456789},
+        "SESSION_SECRET_KEY": "s" * 48,
+        "CORS_ORIGINS": ["https://admin.example.com"],
+    }
+    values.update(overrides)
+    return Settings(_env_file=None, **values)
+
+
+def test_production_rejects_wildcard_cors():
+    with pytest.raises(RuntimeError, match="CORS_ORIGINS"):
+        _production_settings(CORS_ORIGINS=["https://admin.example.com", "*"]).validate_required()
+
+
+def test_production_requires_vk_callback_secret():
+    with pytest.raises(RuntimeError, match="VK_CALLBACK_SECRET"):
+        _production_settings(VK_CALLBACK_SECRET="").validate_required()

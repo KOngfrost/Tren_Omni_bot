@@ -46,6 +46,7 @@ def _production_settings(**values: str) -> Settings:
     # задаёт VK-параметры явно.
     settings.VK_BOT_TOKEN = values.get("VK_BOT_TOKEN", "production_vk_token")
     settings.ADMIN_VK_IDS = {123456789}
+    settings.VK_CALLBACK_SECRET = values.get("VK_CALLBACK_SECRET", "prod_callback_secret_123")
     return settings
 
 
