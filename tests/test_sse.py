@@ -133,4 +133,3 @@ def test_core_events_dispatch():
     unregister_ticket_change_listener(sample_callback)
     notify_ticket_change()
     assert len(called) == 1
-

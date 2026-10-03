@@ -77,6 +77,9 @@ async def update_partnership_status(
 
             item.status = new_status
             await session.commit()
+            from core.events import notify_ticket_change
+
+            notify_ticket_change()
             request.session["flash_success"] = (
                 f"Статус заявки #{request_id} обновлён на «{ALLOWED_STATUSES[new_status]}»"
             )

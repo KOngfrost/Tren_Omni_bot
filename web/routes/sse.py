@@ -268,6 +268,43 @@ async def fetch_counters_and_dashboard(user: dict) -> dict:
     }
 
 
+_redis_listener_task: asyncio.Task[None] | None = None
+
+
+async def _redis_pubsub_listener() -> None:
+    """Фоновый подписчик на Redis Pub/Sub для мгновенного пробуждения всех SSE соединений."""
+    from core.events import REDIS_TICKET_EVENTS_CHANNEL
+
+    while True:
+        try:
+            from core.redis_client import get_redis_client
+
+            redis = await get_redis_client()
+            if redis is None:
+                await asyncio.sleep(2.0)
+                continue
+
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(REDIS_TICKET_EVENTS_CHANNEL)
+            logger.info("SSE воркер подписан на канал %s", REDIS_TICKET_EVENTS_CHANNEL)
+            async for message in pubsub.listen():
+                if message and message.get("type") == "message":
+                    trigger_sse_update()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.debug("Ошибка в подписчике Redis Pub/Sub для SSE: %s", exc)
+            await asyncio.sleep(2.0)
+
+
+def start_sse_redis_listener() -> asyncio.Task[None]:
+    """Запустить фоновую задачу прослушивания Redis Pub/Sub для SSE."""
+    global _redis_listener_task
+    if _redis_listener_task is None or _redis_listener_task.done():
+        _redis_listener_task = asyncio.create_task(_redis_pubsub_listener())
+    return _redis_listener_task
+
+
 async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, None]:
     event = asyncio.Event()
     _subscribers.add(event)
@@ -284,8 +321,8 @@ async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, Non
                 logger.error("Error fetching SSE data", exc_info=True)
 
             try:
-                # wait for wakeup or 15 seconds
-                await asyncio.wait_for(event.wait(), timeout=15.0)
+                # Мгновенное пробуждение по событию Redis / trigger_sse_update, либо таймаут 3 секунды
+                await asyncio.wait_for(event.wait(), timeout=3.0)
                 event.clear()
             except TimeoutError:
                 pass

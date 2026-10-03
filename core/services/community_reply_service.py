@@ -338,4 +338,7 @@ async def handle_community_message_reply(
             ticket.id,
             ticket.status.value,
         )
+        from core.events import notify_ticket_change
+
+        notify_ticket_change()
         return ticket

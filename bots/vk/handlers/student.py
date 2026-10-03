@@ -646,6 +646,9 @@ async def partnership_proposal_handler(message: Message):
             )
             session.add(req)
             await session.commit()
+            from core.events import notify_ticket_change
+
+            notify_ticket_change()
 
         await message.answer(
             "Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",

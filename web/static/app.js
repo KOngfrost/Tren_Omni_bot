@@ -1220,11 +1220,13 @@
             tableContainer.parentNode.insertBefore(banner, tableContainer);
         }
 
-        function updateTicketsPageFromSSE(data, isNewTicketArrived) {
+        var lastTicketsSignature = null;
+
+        function updateTicketsPageFromSSE(data, isDataChanged, isNewTicketArrived) {
             var table = document.getElementById('tickets-table');
             if (!table) return;
 
-            if (isNewTicketArrived) {
+            if (isDataChanged) {
                 var searchInput = document.getElementById('search');
                 var isSearching = searchInput && searchInput.value && searchInput.value.trim().length > 0;
                 if (isSearching) {
@@ -1433,6 +1435,25 @@
                 if (modalItemsList) modalItemsList.innerHTML = html;
             }
 
+            var dash = data.dashboard || {};
+            var recentSig = '';
+            if (data.recent_tickets && data.recent_tickets.length > 0) {
+                recentSig = data.recent_tickets.map(function(t) { return t.id + ':' + t.status; }).join(',');
+            }
+            var currentSignature = [
+                newTickets,
+                studentReplies,
+                newParts,
+                dash.total_tickets || 0,
+                dash.new_tickets || 0,
+                dash.in_progress || 0,
+                dash.completed_today || 0,
+                dash.unassigned_total || 0,
+                dash.unassigned_new || 0,
+                recentSig
+            ].join('|');
+
+            var isDataChanged = (lastTicketsSignature !== null && lastTicketsSignature !== currentSignature);
             var isNewTicketArrived = false;
             if (lastKnownTicketsCount !== null && newTickets > lastKnownTicketsCount) {
                 isNewTicketArrived = true;
@@ -1448,9 +1469,10 @@
 
             lastKnownTicketsCount = newTickets;
             lastKnownRepliesCount = studentReplies;
+            lastTicketsSignature = currentSignature;
 
             updateDashboardFromSSE(data);
-            updateTicketsPageFromSSE(data, isNewTicketArrived);
+            updateTicketsPageFromSSE(data, isDataChanged, isNewTicketArrived);
         }
 
         function updateCounters() {
@@ -1482,7 +1504,7 @@
             if (typeof EventSource === 'undefined') {
                 updateCounters();
                 if (!counterIntervalId) {
-                    counterIntervalId = setInterval(updateCounters, 15000);
+                    counterIntervalId = setInterval(updateCounters, 3000);
                 }
                 return;
             }
@@ -1513,18 +1535,18 @@
                 }
                 sseFailures++;
 
-                // Fallback to fetch
+                // Fallback to fetch immediately
                 updateCounters();
 
                 if (sseFailures >= 2 && !counterIntervalId) {
-                    counterIntervalId = setInterval(updateCounters, 15000);
+                    counterIntervalId = setInterval(updateCounters, 3000);
                 }
 
                 if (sseReconnectTimeout) clearTimeout(sseReconnectTimeout);
                 sseReconnectTimeout = setTimeout(startSSE, sseReconnectDelay);
 
-                sseReconnectDelay *= 2;
-                if (sseReconnectDelay > 30000) sseReconnectDelay = 30000;
+                sseReconnectDelay *= 1.5;
+                if (sseReconnectDelay > 8000) sseReconnectDelay = 8000;
             });
         }
 
