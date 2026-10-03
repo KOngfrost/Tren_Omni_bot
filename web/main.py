@@ -109,7 +109,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         state_maintenance_task = vk_bot.state_dispenser.start_maintenance()
         logger.info("Периодическая очистка FSM-состояний запущена")
+
+    from core.events import register_ticket_change_listener, unregister_ticket_change_listener
+    from web.routes.sse import trigger_sse_update
+
+    register_ticket_change_listener(trigger_sse_update)
     yield
+
+    unregister_ticket_change_listener(trigger_sse_update)
 
     # Дописываем накопленные события аудита перед остановкой, иначе
     # последние действия не попадут в журнал.

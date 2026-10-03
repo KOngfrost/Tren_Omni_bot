@@ -1093,23 +1093,147 @@
             });
         }
 
-        // Обновление счетчиков при открытии модального окна уведомлений
+        // Обновление счетчиков при клике на колокольчик в боковой панели
         if (sidebarNotifBtn) {
             sidebarNotifBtn.addEventListener('click', function () {
                 updateCounters();
             });
         }
-        if (notifBtn) {
-            notifBtn.addEventListener('click', function () {
-                updateCounters();
+
+        // Выпадающее меню уведомлений в шапке
+        if (notifBtn && dropdown) {
+            notifBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var isOpen = dropdown.classList.contains('active');
+                dropdown.classList.toggle('active', !isOpen);
+                notifBtn.setAttribute('aria-expanded', String(!isOpen));
+                if (!isOpen) {
+                    updateCounters();
+                }
             });
         }
+
+        // Закрытие выпадающего меню при клике вне него
+        document.addEventListener('click', function (e) {
+            if (dropdown && dropdown.classList.contains('active')) {
+                if (!e.target.closest('#notifications-wrapper')) {
+                    dropdown.classList.remove('active');
+                    if (notifBtn) notifBtn.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+
+        // Закрытие выпадающего меню по кнопке Escape
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                if (dropdown && dropdown.classList.contains('active')) {
+                    dropdown.classList.remove('active');
+                    if (notifBtn) notifBtn.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
 
         var counterIntervalId = null;
         var counterAbortController = null;
         var sseSource = null;
         var sseReconnectTimeout = null;
         var sseReconnectDelay = 1000;
+        var sseFailures = 0;
+        var lastKnownTicketsCount = null;
+        var lastKnownRepliesCount = null;
+
+        function playNotificationChime() {
+            try {
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                var ctx = new AudioCtx();
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.04, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.28);
+            } catch (_) {}
+        }
+
+        var isRefreshingTicketsTable = false;
+        function refreshTicketsTable() {
+            if (isRefreshingTicketsTable) return;
+            var table = document.getElementById('tickets-table');
+            if (!table) return;
+
+            isRefreshingTicketsTable = true;
+            var banner = document.getElementById('tickets-live-banner');
+            if (banner) banner.remove();
+
+            fetch(window.location.href, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function (res) {
+                return res.ok ? res.text() : null;
+            })
+            .then(function (html) {
+                if (!html) return;
+                var parser = new DOMParser();
+                var doc = parser.parseFromString(html, 'text/html');
+                var newTbody = doc.querySelector('#tickets-table tbody');
+                var curTbody = document.querySelector('#tickets-table tbody');
+                if (newTbody && curTbody) {
+                    curTbody.innerHTML = newTbody.innerHTML;
+                }
+                var newPag = doc.querySelector('.pagination');
+                var curPag = document.querySelector('.pagination');
+                if (newPag && curPag) {
+                    curPag.innerHTML = newPag.innerHTML;
+                }
+                var newCount = doc.querySelector('.tickets-count');
+                var curCount = document.querySelector('.tickets-count');
+                if (newCount && curCount) {
+                    curCount.innerHTML = newCount.innerHTML;
+                }
+            })
+            .catch(function () {})
+            .finally(function () {
+                isRefreshingTicketsTable = false;
+            });
+        }
+
+        function showTicketsUpdateBanner() {
+            if (document.getElementById('tickets-live-banner')) return;
+            var tableContainer = document.querySelector('.table-container');
+            if (!tableContainer) return;
+            var banner = document.createElement('div');
+            banner.id = 'tickets-live-banner';
+            banner.className = 'alert alert-info tickets-live-banner';
+            banner.style.cursor = 'pointer';
+            banner.style.marginBottom = '12px';
+            banner.innerHTML = '🔔 <strong>Поступили новые обращения.</strong> Нажмите сюда, чтобы обновить список.';
+            banner.onclick = function () {
+                refreshTicketsTable();
+            };
+            tableContainer.parentNode.insertBefore(banner, tableContainer);
+        }
+
+        function updateTicketsPageFromSSE(data, isNewTicketArrived) {
+            var table = document.getElementById('tickets-table');
+            if (!table) return;
+
+            if (isNewTicketArrived) {
+                var searchInput = document.getElementById('search');
+                var isSearching = searchInput && searchInput.value && searchInput.value.trim().length > 0;
+                if (isSearching) {
+                    showTicketsUpdateBanner();
+                } else {
+                    refreshTicketsTable();
+                }
+            }
+        }
 
         function updateDashboardFromSSE(data) {
             var dashMetrics = document.querySelector('.dash-metrics');
@@ -1309,7 +1433,24 @@
                 if (modalItemsList) modalItemsList.innerHTML = html;
             }
 
+            var isNewTicketArrived = false;
+            if (lastKnownTicketsCount !== null && newTickets > lastKnownTicketsCount) {
+                isNewTicketArrived = true;
+                var firstNewItem = (data.items && data.items.length > 0) ? data.items[0] : null;
+                var notifMsg = firstNewItem ? ('Новое обращение #' + firstNewItem.id + ': ' + firstNewItem.title) : 'Поступило новое обращение';
+                showSuccess(notifMsg);
+                playNotificationChime();
+            } else if (lastKnownRepliesCount !== null && studentReplies > lastKnownRepliesCount) {
+                isNewTicketArrived = true;
+                showSuccess('Поступил новый ответ от студента');
+                playNotificationChime();
+            }
+
+            lastKnownTicketsCount = newTickets;
+            lastKnownRepliesCount = studentReplies;
+
             updateDashboardFromSSE(data);
+            updateTicketsPageFromSSE(data, isNewTicketArrived);
         }
 
         function updateCounters() {
@@ -1340,7 +1481,9 @@
         function startSSE() {
             if (typeof EventSource === 'undefined') {
                 updateCounters();
-                counterIntervalId = setInterval(updateCounters, 20000);
+                if (!counterIntervalId) {
+                    counterIntervalId = setInterval(updateCounters, 15000);
+                }
                 return;
             }
 
@@ -1355,19 +1498,31 @@
                     var data = JSON.parse(e.data);
                     processCountersData(data);
                     sseReconnectDelay = 1000; // reset backoff
+                    sseFailures = 0;
+                    if (counterIntervalId) {
+                        clearInterval(counterIntervalId);
+                        counterIntervalId = null;
+                    }
                 } catch (err) {}
             });
 
             sseSource.addEventListener('error', function(e) {
-                sseSource.close();
-                sseSource = null;
-                
-                // Fallback to single fetch
+                if (sseSource) {
+                    sseSource.close();
+                    sseSource = null;
+                }
+                sseFailures++;
+
+                // Fallback to fetch
                 updateCounters();
+
+                if (sseFailures >= 2 && !counterIntervalId) {
+                    counterIntervalId = setInterval(updateCounters, 15000);
+                }
 
                 if (sseReconnectTimeout) clearTimeout(sseReconnectTimeout);
                 sseReconnectTimeout = setTimeout(startSSE, sseReconnectDelay);
-                
+
                 sseReconnectDelay *= 2;
                 if (sseReconnectDelay > 30000) sseReconnectDelay = 30000;
             });
@@ -1378,9 +1533,8 @@
 
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) {
-                if (sseSource && sseSource.readyState !== EventSource.OPEN) {
-                    startSSE();
-                } else if (!sseSource) {
+                updateCounters();
+                if (!sseSource || sseSource.readyState !== EventSource.OPEN) {
                     startSSE();
                 }
             }

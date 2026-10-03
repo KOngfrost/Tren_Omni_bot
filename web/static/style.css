@@ -351,7 +351,7 @@ code {
 }
 
 .sidebar-close-btn {
-    display: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 32px;
@@ -372,12 +372,6 @@ code {
     border-color: var(--primary);
 }
 
-@media (max-width: 900px) {
-    .sidebar-close-btn {
-        display: inline-flex;
-    }
-}
-
 .main-content {
     flex: 1;
     min-width: 0;
@@ -393,9 +387,9 @@ code {
     max-width: 1440px;
 }
 
-/* Верхняя панель навигации (при свернутом меню и на мобильных устройствах) */
+/* Верхняя панель навигации (меню, уведомления, тема, быстрые действия) */
 .top-nav-bar {
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -411,8 +405,10 @@ code {
     box-shadow: var(--shadow-sm);
 }
 
-.container.sidebar-collapsed .top-nav-bar {
-    display: flex;
+@media (min-width: 901px) {
+    .container:not(.sidebar-collapsed) .top-nav-bar .mobile-brand {
+        display: none;
+    }
 }
 
 .top-nav-right {

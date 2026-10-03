@@ -196,7 +196,7 @@
                     {% block top_actions %}{% endblock %}
                     <!-- Центр уведомлений: раздельный просмотр заявок, ответов и партнёрств -->
                     <div class="notifications-wrapper" id="notifications-wrapper">
-                        <button type="button" class="btn-notifications" id="notifications-btn" data-open-modal="notifications-modal" aria-label="Уведомления" title="Открыть окно уведомлений">
+                        <button type="button" class="btn-notifications" id="notifications-btn" aria-haspopup="true" aria-expanded="false" aria-label="Уведомления" title="Уведомления">
                             <span class="notifications-icon" aria-hidden="true">
                                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -209,7 +209,10 @@
                         </button>
                         <div class="notifications-dropdown" id="notifications-dropdown" role="menu" aria-label="Список уведомлений">
                             <div class="notifications-dropdown-header">
-                                <div class="notifications-dropdown-title">Активные уведомления</div>
+                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                    <div class="notifications-dropdown-title">Активные уведомления</div>
+                                    <button type="button" class="btn-notif-modal-link" data-open-modal="notifications-modal" title="Открыть во весь экран" style="background: none; border: none; color: var(--color-primary, #6366f1); font-size: 11px; cursor: pointer; padding: 2px 4px; text-decoration: underline;">Во весь экран ↗</button>
+                                </div>
                                 <div class="notifications-tags" id="notifications-tags">
                                     <span class="notif-tag notif-tag-tickets {% if not request.state.new_tickets_count %}hidden{% endif %}" id="tag-new-tickets">{{ icon('alert', 12) }} {{ request.state.new_tickets_count|default(0) }} новых заявок</span>
                                     <span class="notif-tag notif-tag-replies {% if not request.state.student_replies_count %}hidden{% endif %}" id="tag-student-replies">{{ icon('send', 12) }} {{ request.state.student_replies_count|default(0) }} ответов</span>

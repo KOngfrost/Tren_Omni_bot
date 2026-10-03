@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from core.events import notify_ticket_change
 from core.formatters.ticket_formatter import mask_anonymous_data
 from core.models import Log, MessageAuthorType, Ticket, TicketStatus, User
 from core.outbox import add_outbox_message, fire_outbox_delivery
@@ -107,6 +108,7 @@ async def create_ticket(
 
     if scheduled:
         (delivery_callback or fire_outbox_delivery)()
+    notify_ticket_change()
     return ticket
 
 
@@ -157,4 +159,5 @@ async def add_student_reply(
 
     if scheduled:
         (delivery_callback or fire_outbox_delivery)()
+    notify_ticket_change()
     return ticket

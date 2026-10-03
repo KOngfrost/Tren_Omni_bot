@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -24,10 +25,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 sse_wakeup_event = asyncio.Event()
+_subscribers: set[asyncio.Event] = {sse_wakeup_event}
 
 
-def trigger_sse_update():
-    sse_wakeup_event.set()
+def trigger_sse_update() -> None:
+    """Оповестить все активные SSE-соединения о наличии новых данных."""
+    for event in _subscribers:
+        with contextlib.suppress(Exception):
+            event.set()
 
 
 async def get_dashboard_stats(session, user, is_super, dept_id):
@@ -264,6 +269,8 @@ async def fetch_counters_and_dashboard(user: dict) -> dict:
 
 
 async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, None]:
+    event = asyncio.Event()
+    _subscribers.add(event)
     last_ping = asyncio.get_event_loop().time()
     try:
         while True:
@@ -278,8 +285,8 @@ async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, Non
 
             try:
                 # wait for wakeup or 15 seconds
-                await asyncio.wait_for(sse_wakeup_event.wait(), timeout=15.0)
-                sse_wakeup_event.clear()
+                await asyncio.wait_for(event.wait(), timeout=15.0)
+                event.clear()
             except TimeoutError:
                 pass
 
@@ -292,6 +299,8 @@ async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, Non
         pass
     except Exception:
         logger.error("SSE connection error", exc_info=True)
+    finally:
+        _subscribers.discard(event)
 
 
 @router.get("/stream")

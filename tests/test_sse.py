@@ -111,3 +111,26 @@ def test_sse_stream_unauthorized(web_client):
     """SSE-эндпоинт отвечает 401 при отсутствии авторизации."""
     response = web_client.get("/api/stream")
     assert response.status_code == 401
+
+
+def test_core_events_dispatch():
+    """Тест регистрации и уведомления подписчиков в core/events.py."""
+    from core.events import (
+        notify_ticket_change,
+        register_ticket_change_listener,
+        unregister_ticket_change_listener,
+    )
+
+    called = []
+
+    def sample_callback():
+        called.append(True)
+
+    register_ticket_change_listener(sample_callback)
+    notify_ticket_change()
+    assert len(called) == 1
+
+    unregister_ticket_change_listener(sample_callback)
+    notify_ticket_change()
+    assert len(called) == 1
+
