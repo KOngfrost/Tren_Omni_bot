@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
 from core.models import Log, Ticket, TicketStatus
@@ -49,7 +50,7 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
             stmt = select(Ticket).where(
                 Ticket.status.in_(statuses),
                 Ticket.updated_at < cutoff,
-            )
+            ).options(selectinload(Ticket.messages))
             result = await session.execute(stmt)
             tickets = list(result.scalars().all())
 
@@ -68,6 +69,16 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
                     "response_text": t.response_text,
                     "created_at": t.created_at,
                     "updated_at": t.updated_at,
+                    "messages": [
+                        {
+                            "id": m.id,
+                            "author_type": m.author_type.value if hasattr(m.author_type, "value") else str(m.author_type),
+                            "author_vk_id": m.author_vk_id,
+                            "message": m.message,
+                            "created_at": m.created_at,
+                        }
+                        for m in t.messages
+                    ]
                 }
                 for t in tickets
             ]
@@ -78,6 +89,10 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
 
             with gzip.open(filepath, "wt", encoding="utf-8") as f:
                 json.dump(records, f, default=str, ensure_ascii=False)
+                f.flush()
+
+            if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+                raise RuntimeError(f"Archival failed: File {filepath} not written successfully")
 
             # Удаляем чанками
             ids_to_delete = [r["id"] for r in records]
