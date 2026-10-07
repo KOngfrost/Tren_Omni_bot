@@ -19,7 +19,7 @@
 #
 # Раз в месяц ОБЯЗАТЕЛЬНО проверяйте восстановление на тестовой базе.
 
-set -euo pipefail
+set -eo pipefail
 
 if [[ $# -ne 1 ]]; then
     echo "Использование: $0 <backup.sql.gz>"
@@ -75,7 +75,7 @@ echo "[$(date '+%F %T')] Пересоздаём базу..."
 
 echo "[$(date '+%F %T')] Restore started..."
 gunzip -c "$BACKUP_FILE" | "${COMPOSE[@]}" exec -T -e PGPASSWORD="${POSTGRES_PASSWORD}" db \
-    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -q
 
 echo "[$(date '+%F %T')] Возвращаем PgBouncer в строй..."
 "${COMPOSE[@]}" start pgbouncer
