@@ -109,6 +109,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         state_maintenance_task = vk_bot.state_dispenser.start_maintenance()
         logger.info("Периодическая очистка FSM-состояний запущена")
+        try:
+            from web.routes.vk_callback import process_pending_inbox_events
+
+            await process_pending_inbox_events()
+            logger.info("Обработка отложенных событий vk_inbox выполнена")
+        except Exception as exc:
+            logger.warning("Не удалось обработать отложенные события vk_inbox: %s", exc)
 
     from core.events import register_ticket_change_listener, unregister_ticket_change_listener
     from web.routes.sse import (
