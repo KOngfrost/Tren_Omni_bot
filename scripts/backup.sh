@@ -56,16 +56,29 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+TMP_FILE="${BACKUP_DIR}/oss_bot_${STAMP}.tmp.$$.sql.gz"
+
 # PGPASSWORD задаём явно -- защита от настроек trust/peer в нестандартных окружениях.
 docker compose -f "${SCRIPT_DIR}/../docker-compose.yml" exec -T -e PGPASSWORD="${POSTGRES_PASSWORD}" db \
-    pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists | gzip > "$FILE"
+    pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean --if-exists | gzip > "$TMP_FILE"
 
-# Проверка целостности архива: битый бэкап хуже отсутствующего
-if ! gzip -t "$FILE"; then
-    echo "[$(date '+%F %T')] ERROR: архив повреждён: $FILE" >&2
-    rm -f "$FILE"
+chmod 600 "$TMP_FILE"
+
+# Проверка, что файл существует и не пустой
+if [[ ! -s "$TMP_FILE" ]]; then
+    echo "[$(date '+%F %T')] ERROR: резервная копия пуста или не создана: $TMP_FILE" >&2
+    rm -f "$TMP_FILE"
     exit 1
 fi
+
+# Проверка целостности архива: битый бэкап хуже отсутствующего
+if ! gzip -t "$TMP_FILE"; then
+    echo "[$(date '+%F %T')] ERROR: архив повреждён: $TMP_FILE" >&2
+    rm -f "$TMP_FILE"
+    exit 1
+fi
+
+mv "$TMP_FILE" "$FILE"
 
 echo "[$(date '+%F %T')] Backup done, verified: $(du -h "$FILE" | cut -f1)"
 
