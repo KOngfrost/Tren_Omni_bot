@@ -405,3 +405,131 @@ func TestGetTicketsClampsInvalidLimit(t *testing.T) {
 		}
 	}
 }
+
+// TestRequireSuperadminRejectsUnauthenticated проверяет D03:
+// неаутентифицированный запрос к защищённому эндпоинту получает 401.
+func TestRequireSuperadminRejectsUnauthenticated(t *testing.T) {
+	cfg := &config.Config{SessionSecretKey: "super-secret-key-32-chars-length"}
+	app := fiber.New()
+	app.Post("/api/v1/departments/", RequireSuperadmin(cfg), func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/departments/", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("ожидался статус 401 Unauthorized, получен %d", resp.StatusCode)
+	}
+}
+
+// TestRequireSuperadminAllowsValidToken проверяет D03:
+// запрос с валидным auth-токеном пропускается к обработчику (201).
+func TestRequireSuperadminAllowsValidToken(t *testing.T) {
+	secret := "super-secret-key-32-chars-length"
+	cfg := &config.Config{SessionSecretKey: secret}
+	app := fiber.New()
+	app.Post("/api/v1/departments/", RequireSuperadmin(cfg), func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/departments/", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("ожидался статус 201 Created, получен %d", resp.StatusCode)
+	}
+}
+
+// TestRequireOperatorRejectsUnauthenticated проверяет D03:
+// неаутентифицированный запрос к тикетам получает 401 Unauthorized.
+func TestRequireOperatorRejectsUnauthenticated(t *testing.T) {
+	cfg := &config.Config{SessionSecretKey: "super-secret-key-32-chars-length"}
+	app := fiber.New()
+	app.Get("/api/v1/tickets/", RequireOperator(cfg), func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"tickets": []any{}})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets/", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("ожидался статус 401 Unauthorized, получен %d", resp.StatusCode)
+	}
+}
+
+// TestRequireOperatorAllowsValidToken проверяет D03:
+// запрос к тикетам с валидным auth-токеном пропускается (200).
+func TestRequireOperatorAllowsValidToken(t *testing.T) {
+	secret := "super-secret-key-32-chars-length"
+	cfg := &config.Config{SessionSecretKey: secret}
+	app := fiber.New()
+	app.Get("/api/v1/tickets/", RequireOperator(cfg), func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"tickets": []any{}})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets/", nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ожидался статус 200 OK, получен %d", resp.StatusCode)
+	}
+}
+
+// TestExtractSessionID проверяет очистку session id от подписи itsdangerous.
+func TestExtractSessionID(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"", ""},
+		{"   ", ""},
+		{"abc123session", "abc123session"},
+		{"s_abc123session", "abc123session"},
+		{"s_abc123session.someSignatureHash123", "abc123session"},
+		{"abc123session.someSignatureHash123", "abc123session"},
+	}
+
+	for _, tc := range cases {
+		got := ExtractSessionID(tc.input)
+		if got != tc.expected {
+			t.Errorf("ExtractSessionID(%q) = %q, ожидалось %q", tc.input, got, tc.expected)
+		}
+	}
+}
+
+// TestRoleCheckHelpers проверяет логику определения ролей.
+func TestRoleCheckHelpers(t *testing.T) {
+	if !IsSuperAdminRole("SUPERADMIN") || !IsSuperAdminRole("superadmin") {
+		t.Error("IsSuperAdminRole должен возвращать true для SUPERADMIN")
+	}
+	if IsSuperAdminRole("DEPARTMENT_ADMIN") || IsSuperAdminRole("USER") {
+		t.Error("IsSuperAdminRole должен возвращать false для других ролей")
+	}
+
+	if !IsOperatorOrAdminRole("SUPERADMIN") || !IsOperatorOrAdminRole("DEPARTMENT_ADMIN") ||
+		!IsOperatorOrAdminRole("admin") || !IsOperatorOrAdminRole("operator") {
+		t.Error("IsOperatorOrAdminRole должен возвращать true для административных ролей")
+	}
+	if IsOperatorOrAdminRole("USER") || IsOperatorOrAdminRole("guest") {
+		t.Error("IsOperatorOrAdminRole должен возвращать false для обычных пользователей")
+	}
+}

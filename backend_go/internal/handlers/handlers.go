@@ -223,7 +223,7 @@ func GetStats(cfg *config.Config) fiber.Handler {
 		if err := database.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tickets").Scan(&totalTickets); err != nil {
 			return respondDatabaseError(c, "подсчёт общего числа тикетов", err)
 		}
-		if err := database.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tickets WHERE status IN ('new', 'in_progress')").Scan(&activeTickets); err != nil {
+		if err := database.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tickets WHERE status IN ('NEW', 'IN_PROGRESS')").Scan(&activeTickets); err != nil {
 			return respondDatabaseError(c, "подсчёт активных тикетов", err)
 		}
 
@@ -282,6 +282,15 @@ func GetDepartments(c *fiber.Ctx) error {
 }
 
 func CreateDepartment(c *fiber.Ctx) error {
+	// Если в контексте есть аутентифицированный пользователь, проверяем права суперадминистратора
+	if user, ok := c.Locals("user").(*UserSession); ok && user != nil {
+		if !IsSuperAdminRole(user.Role) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"detail": "Недостаточно прав для выполнения операции",
+			})
+		}
+	}
+
 	var body struct {
 		Name string `json:"name"`
 	}
@@ -324,14 +333,45 @@ func GetTickets(c *fiber.Ctx) error {
 		return nil
 	}
 
-	query := `
-		SELECT t.id, COALESCE(t.topic, ''), COALESCE(t.status, 'new'), t.department_id, d.name, t.created_at
-		FROM tickets t
-		LEFT JOIN departments d ON t.department_id = d.id
-		ORDER BY t.created_at DESC
-		LIMIT $1
-	`
-	rows, err := database.Pool.Query(ctx, query, limit)
+	var query string
+	var args []any
+
+	user, _ := c.Locals("user").(*UserSession)
+	if user != nil && !IsSuperAdminRole(user.Role) {
+		// Ограничение области видимости оператора (operator scope)
+		if user.DepartmentID != nil {
+			query = `
+				SELECT t.id, COALESCE(t.topic, ''), COALESCE(t.status, 'NEW'), t.department_id, d.name, t.created_at
+				FROM tickets t
+				LEFT JOIN departments d ON t.department_id = d.id
+				WHERE (t.department_id = $2 OR t.department_id IS NULL)
+				ORDER BY t.created_at DESC
+				LIMIT $1
+			`
+			args = []any{limit, *user.DepartmentID}
+		} else {
+			query = `
+				SELECT t.id, COALESCE(t.topic, ''), COALESCE(t.status, 'NEW'), t.department_id, d.name, t.created_at
+				FROM tickets t
+				LEFT JOIN departments d ON t.department_id = d.id
+				WHERE t.department_id IS NULL
+				ORDER BY t.created_at DESC
+				LIMIT $1
+			`
+			args = []any{limit}
+		}
+	} else {
+		query = `
+			SELECT t.id, COALESCE(t.topic, ''), COALESCE(t.status, 'NEW'), t.department_id, d.name, t.created_at
+			FROM tickets t
+			LEFT JOIN departments d ON t.department_id = d.id
+			ORDER BY t.created_at DESC
+			LIMIT $1
+		`
+		args = []any{limit}
+	}
+
+	rows, err := database.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return respondDatabaseError(c, "выборка тикетов", err)
 	}
@@ -357,25 +397,147 @@ func GetTickets(c *fiber.Ctx) error {
 	return c.JSON(tickets)
 }
 
-// === Auth Handlers ===
+// === Auth Handlers & RBAC ===
+
+// ExtractSessionID извлекает чистый идентификатор сессии из значения cookie:
+// отсекает подпись itsdangerous (s_<id>.<sig>) и префикс "s_".
+func ExtractSessionID(rawCookie string) string {
+	val := strings.TrimSpace(rawCookie)
+	if val == "" {
+		return ""
+	}
+	if idx := strings.Index(val, "."); idx != -1 {
+		val = val[:idx]
+	}
+	val = strings.TrimPrefix(val, "s_")
+	return val
+}
+
+// GetUserFromSession возвращает данные пользователя из сессии Redis или auth-токена.
+func GetUserFromSession(c *fiber.Ctx, cfg *config.Config) (*UserSession, error) {
+	// 1. Проверяем токен из заголовка Authorization (Bearer/Token) или X-Auth-Token
+	authHeader := c.Get("Authorization")
+	var token string
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	} else if strings.HasPrefix(authHeader, "Token ") {
+		token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Token "))
+	}
+	if token == "" {
+		token = strings.TrimSpace(c.Get("X-Auth-Token"))
+	}
+
+	// Если передан токен и он совпадает с SessionSecretKey (аварийный/сервисный ключ)
+	if token != "" && cfg != nil && cfg.SessionSecretKey != "" &&
+		subtle.ConstantTimeCompare([]byte(token), []byte(cfg.SessionSecretKey)) == 1 {
+		return &UserSession{
+			Username: "system_admin",
+			Role:     "SUPERADMIN",
+		}, nil
+	}
+
+	// 2. Ищем сессию в Redis
+	sessionCookie := c.Cookies("session")
+	candidateIDs := make([]string, 0, 3)
+
+	if token != "" {
+		candidateIDs = append(candidateIDs, token)
+	}
+
+	if sessionCookie != "" {
+		extracted := ExtractSessionID(sessionCookie)
+		if extracted != "" {
+			candidateIDs = append(candidateIDs, extracted)
+		}
+		if sessionCookie != extracted {
+			candidateIDs = append(candidateIDs, sessionCookie)
+		}
+	}
+
+	if len(candidateIDs) == 0 || appRedis.Client == nil {
+		return nil, errors.New("сессия отсутствует")
+	}
+
+	ctx := c.Context()
+	for _, id := range candidateIDs {
+		val, err := appRedis.Client.Get(ctx, "session:"+id).Result()
+		if err != nil || val == "" {
+			continue
+		}
+
+		var sessionData struct {
+			User *UserSession `json:"user"`
+		}
+		if err := json.Unmarshal([]byte(val), &sessionData); err == nil && sessionData.User != nil {
+			return sessionData.User, nil
+		}
+	}
+
+	return nil, errors.New("сессия не найдена или недействительна")
+}
+
+// IsSuperAdminRole проверяет роль суперадминистратора.
+func IsSuperAdminRole(role string) bool {
+	r := strings.ToUpper(strings.TrimSpace(role))
+	return r == "SUPERADMIN"
+}
+
+// IsOperatorOrAdminRole проверяет роль оператора или администратора.
+func IsOperatorOrAdminRole(role string) bool {
+	r := strings.ToUpper(strings.TrimSpace(role))
+	return r == "SUPERADMIN" || r == "DEPARTMENT_ADMIN" || r == "ADMIN" || r == "OPERATOR"
+}
+
+// RequireSuperadmin — middleware проверки прав суперадминистратора (D03).
+// Требует валидную сессию или auth-токен. Возвращает 401 при отсутствии
+// аутентификации и 403 при нехватке прав.
+func RequireSuperadmin(cfg *config.Config) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user, err := GetUserFromSession(c, cfg)
+		if err != nil || user == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"detail": "Не авторизован",
+			})
+		}
+		if !IsSuperAdminRole(user.Role) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"detail": "Недостаточно прав для выполнения операции",
+			})
+		}
+		c.Locals("user", user)
+		return c.Next()
+	}
+}
+
+// RequireOperator — middleware проверки прав оператора/администратора (D03).
+// Требует валидную сессию или auth-токен с ролью SUPERADMIN, DEPARTMENT_ADMIN, ADMIN или OPERATOR.
+// Возвращает 401 при отсутствии аутентификации и 403 при нехватке прав.
+func RequireOperator(cfg *config.Config) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user, err := GetUserFromSession(c, cfg)
+		if err != nil || user == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"detail": "Не авторизован",
+			})
+		}
+		if !IsOperatorOrAdminRole(user.Role) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"detail": "Недостаточно прав для выполнения операции",
+			})
+		}
+		c.Locals("user", user)
+		return c.Next()
+	}
+}
 
 func AuthMe(c *fiber.Ctx) error {
-	sessionID := c.Cookies("session")
-	if sessionID == "" || appRedis.Client == nil {
+	user, err := GetUserFromSession(c, nil)
+	if err != nil || user == nil {
 		return c.JSON(fiber.Map{"authenticated": false, "user": nil, "csrf_token": currentCSRFToken(c)})
 	}
-
-	val, err := appRedis.Client.Get(c.Context(), "session:"+sessionID).Result()
-	if err != nil {
-		return c.JSON(fiber.Map{"authenticated": false, "user": nil, "csrf_token": currentCSRFToken(c)})
-	}
-
-	var sessionData map[string]interface{}
-	_ = json.Unmarshal([]byte(val), &sessionData)
-	user, exists := sessionData["user"]
 
 	return c.JSON(fiber.Map{
-		"authenticated": exists && user != nil,
+		"authenticated": true,
 		"user":          user,
 		"csrf_token":    currentCSRFToken(c),
 	})
