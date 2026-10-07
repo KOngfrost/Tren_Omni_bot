@@ -169,6 +169,7 @@ class Settings(BaseSettings):
     OUTBOX_BATCH_SIZE: int = 50
     OUTBOX_INTERVAL_SECONDS: int = 30
     OUTBOX_CLAIM_TIMEOUT_SECONDS: int = 300
+    OUTBOX_BACKOFF_BASE_SECONDS: int = 5
 
     # Redis
     REDIS_PASSWORD: str = ""

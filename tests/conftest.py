@@ -62,6 +62,7 @@ ALL_MODULE_NAMES = (
     "web.security.login_rate_limiter",
     "web.routes.dept_frame",
     "web.routes.sse",
+    "web.routes.vk_callback",
     "core.archival",
     "core.services.privacy_service",
 )
@@ -96,6 +97,7 @@ async def db_session_maker(monkeypatch):
     if not os.getenv("TEST_REDIS_URL"):
         monkeypatch.setattr(settings, "REDIS_URL", None)
     monkeypatch.setattr(settings, "TWO_FACTOR_ENABLED", False)
+    monkeypatch.setattr(settings, "OUTBOX_BACKOFF_BASE_SECONDS", 0)
 
     test_pg_url = os.getenv("TEST_POSTGRES_URL")
     if test_pg_url:
