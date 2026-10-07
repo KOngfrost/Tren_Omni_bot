@@ -36,12 +36,20 @@ async def _fetch_report_data(
     period_end: datetime,
     *,
     end_inclusive: bool,
+    is_super: bool = True,
+    department_id: int | None = None,
 ) -> dict:
     """Пакетно прочитать заявки и отделы в пределах временного окна."""
     if end_inclusive:
         period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at <= period_end)
     else:
         period_filter = and_(Ticket.created_at >= period_start, Ticket.created_at < period_end)
+    
+    if not is_super:
+        if department_id is not None:
+            period_filter = and_(period_filter, Ticket.department_id == department_id)
+        else:
+            period_filter = and_(period_filter, Ticket.department_id.is_(None))
 
     statement = (
         select(
@@ -76,17 +84,17 @@ async def _fetch_report_data(
     return {"tickets": tickets, "departments": departments}
 
 
-async def get_report_for_date(report_day: date) -> dict:
+async def get_report_for_date(report_day: date, is_super: bool = True, department_id: int | None = None) -> dict:
     """Собрать данные для отчёта за одну дату."""
     from core.reports.daily import get_app_tz
 
     timezone = get_app_tz()
     day_start = datetime.combine(report_day, datetime.min.time(), tzinfo=timezone)
     day_end = day_start + timedelta(days=1)
-    return await _fetch_report_data(day_start, day_end, end_inclusive=False)
+    return await _fetch_report_data(day_start, day_end, end_inclusive=False, is_super=is_super, department_id=department_id)
 
 
-async def get_report_for_period(date_from: date, date_to: date) -> dict:
+async def get_report_for_period(date_from: date, date_to: date, is_super: bool = True, department_id: int | None = None) -> dict:
     """Собрать данные для отчёта за период включительно."""
     if date_from > date_to:
         raise ValueError("Дата начала не может быть позже даты окончания")
@@ -96,7 +104,7 @@ async def get_report_for_period(date_from: date, date_to: date) -> dict:
     timezone = get_app_tz()
     period_start = datetime.combine(date_from, datetime.min.time(), tzinfo=timezone)
     period_end = datetime.combine(date_to, datetime.max.time(), tzinfo=timezone)
-    return await _fetch_report_data(period_start, period_end, end_inclusive=True)
+    return await _fetch_report_data(period_start, period_end, end_inclusive=True, is_super=is_super, department_id=department_id)
 
 
 async def is_report_already_sent(report_day: date) -> bool:
