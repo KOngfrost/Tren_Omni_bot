@@ -20,7 +20,7 @@ from core.archival import (
     archive_and_delete_tickets,
     run_archival,
 )
-from core.models import Log, Ticket, TicketStatus, TicketMessage, MessageAuthorType
+from core.models import Log, MessageAuthorType, Ticket, TicketMessage, TicketStatus
 
 
 @pytest.fixture

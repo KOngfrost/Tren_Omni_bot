@@ -76,7 +76,9 @@ class RedisSessionMiddleware:
         try:
             return json.loads(self.fernet.decrypt(token.encode("utf-8"), ttl=self.max_age))
         except InvalidToken:
-            logger.debug("Не удалось расшифровать cookie-сессию (недействительный токен или истёк TTL)")
+            logger.debug(
+                "Не удалось расшифровать cookie-сессию (недействительный токен или истёк TTL)"
+            )
         except (TypeError, ValueError):
             logger.debug("Некорректный формат расшифрованной cookie-сессии")
         return {}

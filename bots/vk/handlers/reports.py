@@ -75,6 +75,7 @@ async def report_today_handler(message: Message):
     try:
         from core.bot_core import get_admin_scope_for_vk_id
         from core.database import async_session_maker
+
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
@@ -153,6 +154,7 @@ async def report_by_date_input(message: Message):
     try:
         from core.bot_core import get_admin_scope_for_vk_id
         from core.database import async_session_maker
+
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
@@ -253,10 +255,13 @@ async def report_by_period_input(message: Message):
     try:
         from core.bot_core import get_admin_scope_for_vk_id
         from core.database import async_session_maker
+
         async with async_session_maker() as session:
             is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
-        data = await get_report_for_period(date_from, date_to, is_super=is_super, department_id=dept_id)
+        data = await get_report_for_period(
+            date_from, date_to, is_super=is_super, department_id=dept_id
+        )
         report_dt = datetime.combine(date_from, datetime.min.time(), tzinfo=get_app_tz())
         # openpyxl — синхронная ресурсоёмкая библиотека: выносим в фоновый поток,
         # чтобы не блокировать event loop (Ошибка #11).
