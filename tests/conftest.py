@@ -6,10 +6,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Секрет обязателен для импорта web.main
-os.environ.setdefault("SESSION_SECRET_KEY", "test_secret_key_for_tests_1234567890")
+# Базовые переменные окружения для тестов (позволяют запускать pytest без .env)
+_TEST_ENV_DEFAULTS = {
+    "APP_ENV": "test",
+    "POSTGRES_USER": "test",
+    "POSTGRES_PASSWORD": "test",
+    "POSTGRES_DB": "test",
+    "DB_HOST": "localhost",
+    "DB_PORT": "5432",
+    "VK_BOT_TOKEN": "test_token",
+    "ADMIN_VK_IDS": "1,2",
+    "SESSION_SECRET_KEY": "test_secret_key_32_bytes_long_here",
+    "SESSION_HTTPS_ONLY": "false",
+}
+for _env_key, _env_val in _TEST_ENV_DEFAULTS.items():
+    if not os.environ.get(_env_key):
+        os.environ[_env_key] = _env_val
+
 # Тесты не должны зависеть от production-настроек локального .env.
-os.environ["APP_ENV"] = "development"
+os.environ["APP_ENV"] = "test"
 os.environ["SESSION_HTTPS_ONLY"] = "false"
 
 import asyncio

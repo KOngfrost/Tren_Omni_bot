@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Ежедневное резервное копирование базы данных PostgreSQL
 # Скрипт для Windows (PowerShell)
 # ============================================================
@@ -26,23 +26,18 @@
 param(
     [string]$BackupDirOverride = "",
     [int]$DailyKeepOverride = 0,
+    [int]$WeeklyKeepOverride = 0,
+    [int]$MonthlyKeepOverride = 0
+)
 
-# Настройки резервного копирования
-$BACKUP_DIR = if (-not [string]::IsNullOrEmpty($BackupDirOverride)) { $BackupDirOverride } else {
-    [Environment]::GetEnvironmentVariable("BACKUP_DIR", "Process")
-}
-if ([string]::IsNullOrEmpty($BACKUP_DIR)) { $BACKUP_DIR = Join-Path $ProjectRoot "backups" }
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
-$DAILY_KEEP = if ($DailyKeepOverride -gt 0) { $DailyKeepOverride } else {
-    [int]([Environment]::GetEnvironmentVariable("DAILY_KEEP", "Process") ?? "7")
-}
-$WEEKLY_KEEP = if ($WeeklyKeepOverride -gt 0) { $WeeklyKeepOverride } else {
-    [int]([Environment]::GetEnvironmentVariable("WEEKLY_KEEP", "Process") ?? "4")
-}
-$MONTHLY_KEEP = if ($MonthlyKeepOverride -gt 0) { $MonthlyKeepOverride } else {
-    [int]([Environment]::GetEnvironmentVariable("MONTHLY_KEEP", "Process") ?? "3")
-}
-$BACKUP_REMOTE = [Environment]::GetEnvironmentVariable("BACKUP_REMOTE", "Process")
+# Пути
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ProjectRoot = Split-Path -Parent $ScriptDir
+$EnvFile = Join-Path $ProjectRoot ".env"
+$COMPOSE_FILE = Join-Path $ProjectRoot "docker-compose.yml"
 
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
@@ -51,13 +46,86 @@ function Write-Log {
     Write-Host "[$timestamp] [$Level] $Message" -ForegroundColor $color
 }
 
+# Загрузка переменных из .env
+if (Test-Path $EnvFile) {
+    $envContent = Get-Content $EnvFile -Encoding UTF8
+    foreach ($line in $envContent) {
+        if ($line -match "^\s*([^#=]+?)\s*=\s*(.*?)\s*$") {
+            $key = $Matches[1].Trim()
+            $value = $Matches[2].Trim()
+            if ($value -match '^"(.*)"$') { $value = $Matches[1] }
+            if (-not [string]::IsNullOrEmpty($key)) {
+                [Environment]::SetEnvironmentVariable($key, $value, "Process")
+            }
+        }
+    }
+}
+
+# Проверка обязательных переменных
+$requiredVars = @("POSTGRES_USER", "POSTGRES_DB")
+foreach ($var in $requiredVars) {
+    if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($var, "Process"))) {
+        Write-Log "Ошибка: $var не задана" -Level "ERROR"
+        exit 1
+    }
+}
+
+$POSTGRES_USER = [Environment]::GetEnvironmentVariable("POSTGRES_USER", "Process")
+$POSTGRES_DB = [Environment]::GetEnvironmentVariable("POSTGRES_DB", "Process")
+$POSTGRES_PASSWORD = [Environment]::GetEnvironmentVariable("POSTGRES_PASSWORD", "Process")
+if ($null -eq $POSTGRES_PASSWORD) { $POSTGRES_PASSWORD = "" }
+
+# Настройки резервного копирования
+$BACKUP_DIR = if (-not [string]::IsNullOrEmpty($BackupDirOverride)) { $BackupDirOverride } else {
+    [Environment]::GetEnvironmentVariable("BACKUP_DIR", "Process")
+}
+if ([string]::IsNullOrEmpty($BACKUP_DIR)) { $BACKUP_DIR = Join-Path $ProjectRoot "backups" }
+
+$DAILY_KEEP = if ($DailyKeepOverride -gt 0) { $DailyKeepOverride } else {
+    $envDaily = [Environment]::GetEnvironmentVariable("DAILY_KEEP", "Process")
+    if (-not [string]::IsNullOrEmpty($envDaily)) { [int]$envDaily } else { 7 }
+}
+$WEEKLY_KEEP = if ($WeeklyKeepOverride -gt 0) { $WeeklyKeepOverride } else {
+    $envWeekly = [Environment]::GetEnvironmentVariable("WEEKLY_KEEP", "Process")
+    if (-not [string]::IsNullOrEmpty($envWeekly)) { [int]$envWeekly } else { 4 }
+}
+$MONTHLY_KEEP = if ($MonthlyKeepOverride -gt 0) { $MonthlyKeepOverride } else {
+    $envMonthly = [Environment]::GetEnvironmentVariable("MONTHLY_KEEP", "Process")
+    if (-not [string]::IsNullOrEmpty($envMonthly)) { [int]$envMonthly } else { 3 }
+}
+$BACKUP_REMOTE = [Environment]::GetEnvironmentVariable("BACKUP_REMOTE", "Process")
+
+# Проверка docker-compose.yml
+if (-not (Test-Path $COMPOSE_FILE)) {
+    Write-Log "docker-compose.yml не найден: $COMPOSE_FILE" -Level "ERROR"; exit 1
+}
+
+# Проверка Docker
+try { docker --version | Out-Null } catch {
+    Write-Log "Docker не доступен" -Level "ERROR"; exit 1
+}
+try { docker compose version | Out-Null } catch {
+    Write-Log "Docker Compose не доступен" -Level "ERROR"; exit 1
+}
+
 # Создание каталога
 if (-not (Test-Path $BACKUP_DIR)) {
-    try { New-Item -ItemType Directory -Path $BACKUP_DIR -Force | Out-Null } catch {
+    try {
+        New-Item -ItemType Directory -Path $BACKUP_DIR -Force | Out-Null
+    } catch {
         Write-Log "Не удалось создать каталог: $BACKUP_DIR" -Level "ERROR"; exit 1
+    }
+}
+
+$STAMP = Get-Date -Format "yyyy-MM-dd"
+$FILE = Join-Path $BACKUP_DIR "oss_bot_${STAMP}.sql.gz"
+$TMP_FILE = Join-Path $BACKUP_DIR "oss_bot_${STAMP}.tmp.$PID.sql.gz"
+$rawTmp = "$TMP_FILE.raw"
+
+Write-Log "Начало резервного копирования -> $FILE"
+Write-Log "Ожидание готовности БД..."
 
 # Ожидание готовности БД (до 60 сек)
-Write-Log "Ожидание готовности БД..."
 $maxAttempts = 30
 $attempt = 0
 while ($attempt -lt $maxAttempts) {
@@ -72,33 +140,49 @@ if ($attempt -eq $maxAttempts) {
     Write-Log "БД не стала доступной" -Level "ERROR"; exit 1
 }
 
-# Создание резервной копии
+# Создание резервной копии во временный файл
 Write-Log "Создание резервной копии..."
 $env:PGPASSWORD = $POSTGRES_PASSWORD
-$tmpFile = "$FILE.tmp"
 try {
     docker compose -f $COMPOSE_FILE exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db `
-        pg_dump -U $POSTGRES_USER -d $POSTGRES_DB --no-owner --clean --if-exists > $tmpFile
-    
-    if ($LASTEXITCODE -ne 0) { throw "pg_dump завершился с кодом $LASTEXITCODE" }
-    
-    # Сжатие
-    try {
-        gzip -c $tmpFile > $FILE 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "gzip не удалось" }
-    } catch {
-        # Сжатие через .NET если gzip недоступен
-        $inStream = [System.IO.File]::OpenRead($tmpFile)
+        pg_dump -U $POSTGRES_USER -d $POSTGRES_DB --no-owner --clean --if-exists > $rawTmp
 
-# Проверка целостности
-Write-Log "Проверка целостности архива..."
-try {
-    try {
-        gzip -t $FILE 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "gzip -t не прошел" }
-    } catch {
-        # Проверка через .NET
-        $stream = [System.IO.File]::OpenRead($FILE)
+    if ($LASTEXITCODE -ne 0) { throw "pg_dump завершился с кодом $LASTEXITCODE" }
+
+    # Проверка, что дамп существует и не пустой
+    if (-not (Test-Path $rawTmp) -or (Get-Item $rawTmp).Length -eq 0) {
+        throw "Дамп пуст или не был создан"
+    }
+
+    # Сжатие
+    $compressed = $false
+    if (Get-Command gzip -ErrorAction SilentlyContinue) {
+        try {
+            gzip -c $rawTmp > $TMP_FILE 2>$null
+            if ($LASTEXITCODE -eq 0) { $compressed = $true }
+        } catch {}
+    }
+    if (-not $compressed) {
+        # Сжатие через .NET если gzip недоступен
+        $inStream = [System.IO.File]::OpenRead($rawTmp)
+        $outStream = [System.IO.File]::Create($TMP_FILE)
+        $gzipStream = New-Object System.IO.Compression.GzipStream($outStream, [System.IO.Compression.CompressionMode]::Compress)
+        $inStream.CopyTo($gzipStream)
+        $gzipStream.Close(); $outStream.Close(); $inStream.Close()
+    }
+    Remove-Item $rawTmp -Force -ErrorAction SilentlyContinue
+
+    # Проверка целостности архива
+    Write-Log "Проверка целостности архива..."
+    $verified = $false
+    if (Get-Command gzip -ErrorAction SilentlyContinue) {
+        try {
+            gzip -t $TMP_FILE 2>$null
+            if ($LASTEXITCODE -eq 0) { $verified = $true }
+        } catch {}
+    }
+    if (-not $verified) {
+        $stream = [System.IO.File]::OpenRead($TMP_FILE)
         $gzip = New-Object System.IO.Compression.GzipStream($stream, [System.IO.Compression.CompressionMode]::Decompress)
         $buf = New-Object byte[] 1024
         $read = $gzip.Read($buf, 0, 1024)
@@ -106,9 +190,14 @@ try {
         if ($read -eq 0) { throw "Файл поврежден" }
     }
     Write-Log "Архив цел"
+
+    # Атомарное перемещение
+    Move-Item -Path $TMP_FILE -Destination $FILE -Force
+    Write-Log "Резервная копия создана"
 } catch {
-    Write-Log "Архив поврежден: $FILE" -Level "ERROR"
-    if (Test-Path $FILE) { Remove-Item $FILE -Force }
+    Write-Log "Ошибка создания копии: $_" -Level "ERROR"
+    if (Test-Path $rawTmp) { Remove-Item $rawTmp -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $TMP_FILE) { Remove-Item $TMP_FILE -Force -ErrorAction SilentlyContinue }
     exit 1
 }
 
@@ -128,10 +217,10 @@ foreach ($f in Get-ChildItem $BACKUP_DIR -Filter "oss_bot_*.sql.gz") {
         $dow = $d.DayOfWeek
         $dom = $d.Day
         $age = (New-TimeSpan -Start $d -End (Get-Date)).Days
-        
+
         $isWeekly = ($dow -eq [DayOfWeek]::Sunday -and $age -le ($WEEKLY_KEEP * 7))
         $isMonthly = ($dom -eq 1 -and $age -le ($MONTHLY_KEEP * 30))
-        
+
         if ($isWeekly -or $isMonthly) {
             $f.LastWriteTime = (Get-Date)  # Защита от удаления
         } elseif ($f.LastWriteTime -lt $cutoff) {
@@ -156,77 +245,3 @@ if (-not [string]::IsNullOrEmpty($BACKUP_REMOTE)) {
 }
 
 Write-Log "Сценарий завершен"
-
-        $outStream = [System.IO.File]::Create($FILE)
-        $gzipStream = New-Object System.IO.Compression.GzipStream($outStream, [System.IO.Compression.CompressionMode]::Compress)
-        $inStream.CopyTo($gzipStream)
-        $gzipStream.Close(); $outStream.Close(); $inStream.Close()
-    }
-    Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-    Write-Log "Резервная копия создана"
-} catch {
-    Write-Log "Ошибка создания копии: $_" -Level "ERROR"
-    if (Test-Path $FILE) { Remove-Item $FILE -Force }
-    exit 1
-}
-
-    }
-}
-
-$STAMP = Get-Date -Format "yyyy-MM-dd"
-$FILE = Join-Path $BACKUP_DIR "oss_bot_${STAMP}.sql.gz"
-Write-Log "Начало резервного копирования -> $FILE"
-
-# Проверка docker-compose.yml
-if (-not (Test-Path $COMPOSE_FILE)) {
-    Write-Log "docker-compose.yml не найден: $COMPOSE_FILE" -Level "ERROR"; exit 1
-}
-
-# Проверка Docker
-try { $null = docker --version } catch {
-    Write-Log "Docker не доступен" -Level "ERROR"; exit 1
-}
-try { $null = docker compose version } catch {
-    Write-Log "Docker Compose не доступен" -Level "ERROR"; exit 1
-}
-
-    [int]$WeeklyKeepOverride = 0,
-    [int]$MonthlyKeepOverride = 0
-)
-
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
-# Пути
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$ProjectRoot = Split-Path -Parent $ScriptDir
-$EnvFile = Join-Path $ProjectRoot ".env"
-
-# Загрузка переменных из .env
-if (Test-Path $EnvFile) {
-    $envContent = Get-Content $EnvFile -Encoding UTF8
-    foreach ($line in $envContent) {
-        if ($line -match "^\s*([^#=]+?)\s*=\s*(.*?)\s*$") {
-            $key = $Matches[1].Trim()
-            $value = $Matches[2].Trim()
-            if ($value -match '^"(.*)"$') { $value = $Matches[1] }
-            if (-not [string]::IsNullOrEmpty($key)) {
-                [Environment]::SetEnvironmentVariable($key, $value, "Process")
-            }
-        }
-    }
-}
-
-# Проверка обязательных переменных
-$requiredVars = @("POSTGRES_USER", "POSTGRES_DB")
-foreach ($var in $requiredVars) {
-    if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($var, "Process"))) {
-        Write-Host "Ошибка: $var не задана" -ForegroundColor Red
-        exit 1
-    }
-}
-
-$POSTGRES_USER = [Environment]::GetEnvironmentVariable("POSTGRES_USER", "Process")
-$POSTGRES_DB = [Environment]::GetEnvironmentVariable("POSTGRES_DB", "Process")
-$POSTGRES_PASSWORD = [Environment]::GetEnvironmentVariable("POSTGRES_PASSWORD", "Process")
-$COMPOSE_FILE = Join-Path $ProjectRoot "docker-compose.yml"
