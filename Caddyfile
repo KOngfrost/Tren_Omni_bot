@@ -47,6 +47,34 @@
         max_size 15MB
     }
 
+    # Чувствительные административные эндпоинты (создание и изменение отделов, удаление данных,
+    # вход в систему) маршрутизируются в Python FastAPI, где полностью реализован RBAC, аудит,
+    # защита от перебора и двухфакторная аутентификация.
+    @admin_departments {
+        path /api/v1/departments*
+        method POST PUT DELETE
+    }
+    handle @admin_departments {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    @admin_sensitive_api {
+        path /api/v1/auth/login* /api/v1/auth/2fa* /api/v1/users*
+    }
+    handle @admin_sensitive_api {
+        reverse_proxy web-admin:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
     # Проксирование запросов к Go API
     handle /api/v1/* {
         reverse_proxy go-api:8080 {
