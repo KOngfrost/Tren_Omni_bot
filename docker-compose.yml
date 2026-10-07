@@ -204,6 +204,8 @@ services:
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
+    volumes:
+      - archives_data:/app/archives
     networks:
       - frontend_net
       - backend_net
@@ -300,8 +302,8 @@ services:
     environment:
       - CONTAINERS=1
       # Required for pg_dump and temporary .pgpass cleanup in the monitor backup handler.
-      - EXEC=1
-      - POST=1
+      - EXEC=0
+      - POST=0
       - ALLOW_RESTARTS=1
       - ALLOW_START=1
       - ALLOW_STOP=1
@@ -381,6 +383,7 @@ volumes:
   # Отдельный том: userlist.txt пишется одноразовым сервисом
   # pgbouncer-userlist, а читается постоянно работающим pgbouncer.
   pgbouncer_config:
+  archives_data:
 
 networks:
   frontend_net:

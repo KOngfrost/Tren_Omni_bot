@@ -20,7 +20,7 @@ from core.archival import (
     archive_and_delete_tickets,
     run_archival,
 )
-from core.models import Log, Ticket, TicketStatus
+from core.models import Log, Ticket, TicketStatus, TicketMessage, MessageAuthorType
 
 
 @pytest.fixture
@@ -28,16 +28,24 @@ async def _seed_old_tickets(db_session_maker):
     """Создать старые закрытые заявки и свежую открытую для теста."""
     async with db_session_maker() as session:
         old_time = datetime.now(UTC) - timedelta(days=120)
+        ticket = Ticket(
+            id=9001,
+            topic="Old ticket",
+            description="Old closed ticket",
+            status=TicketStatus.COMPLETED,
+            is_anonymous=False,
+            auto_closed=False,
+            created_at=old_time,
+            updated_at=old_time,
+        )
+        session.add(ticket)
         session.add(
-            Ticket(
-                id=9001,
-                topic="Old ticket",
-                description="Old closed ticket",
-                status=TicketStatus.COMPLETED,
-                is_anonymous=False,
-                auto_closed=False,
+            TicketMessage(
+                ticket_id=9001,
+                author_type=MessageAuthorType.USER,
+                author_vk_id=12345,
+                message="Hello from the past",
                 created_at=old_time,
-                updated_at=old_time,
             )
         )
         session.add(
@@ -94,7 +102,11 @@ async def test_archive_tickets(db_session_maker, tmp_path, monkeypatch):
     # Проверяем содержимое архива
     with gzip.open(filepath, "rt", encoding="utf-8") as f:
         records = json.load(f)
-    assert any(r["id"] == 9001 for r in records)
+    archived_ticket = next((r for r in records if r["id"] == 9001), None)
+    assert archived_ticket is not None
+    assert "messages" in archived_ticket
+    assert len(archived_ticket["messages"]) == 1
+    assert archived_ticket["messages"][0]["message"] == "Hello from the past"
 
     # Проверяем что старая заявка удалена из БД
     async with db_session_maker() as session:
