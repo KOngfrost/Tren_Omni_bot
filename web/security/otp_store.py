@@ -79,6 +79,10 @@ def _remaining_ttl(state: dict[str, Any]) -> int:
     return max(1, int(float(state.get("expires_at", 0.0)) - time.time()))
 
 
+_consumed_tokens: set[str] = set()
+_token_attempts: dict[str, int] = {}
+
+
 def _store_in_session(request: Any, state: dict[str, Any], *, full: bool) -> None:
     """Сохранить состояние попытки в сессию.
 
@@ -112,11 +116,15 @@ async def _persist(request: Any, state: dict[str, Any], redis: Any) -> None:
 async def _destroy(request: Any, state: dict[str, Any] | None, redis: Any) -> None:
     """Уничтожить попытку: токен и серверное состояние больше не действуют."""
     request.session.pop(SESSION_KEY, None)
-    if redis is not None and state and state.get("token"):
-        try:
-            await redis.delete(_redis_key(str(state["token"])))
-        except Exception as exc:
-            logger.debug("2FA: не удалось удалить состояние из Redis: %s", exc)
+    if state and state.get("token"):
+        token_str = str(state["token"])
+        _consumed_tokens.add(token_str)
+        _token_attempts.pop(token_str, None)
+        if redis is not None:
+            try:
+                await redis.delete(_redis_key(token_str))
+            except Exception as exc:
+                logger.debug("2FA: не удалось удалить состояние из Redis: %s", exc)
 
 
 async def _load(request: Any) -> tuple[dict[str, Any] | None, Any]:
@@ -139,8 +147,16 @@ async def _load(request: Any) -> tuple[dict[str, Any] | None, Any]:
         except Exception as exc:
             logger.warning("2FA: ошибка чтения из Redis (%s), fallback на сессию", exc)
 
-    # Fallback-режим: не доверяем client-controlled попыткам (защита от replay-атак).
-    # Хранилище Fail-Closed: при сбое Redis состояние теряется.
+    # Fallback-режим: состояние (без открытого кода) лежит в подписанной сессии
+    if "code_hash" in raw and token:
+        if token in _consumed_tokens:
+            await _destroy(request, raw, redis)
+            return None, redis
+        attempts = _token_attempts.get(token, int(raw.get("attempts", 0) or 0))
+        state = dict(raw)
+        state["attempts"] = attempts
+        return state, redis
+
     if token:
         await _destroy(request, {"token": token}, redis)
     return None, redis
@@ -255,6 +271,9 @@ async def verify(request: Any, submitted_code: str) -> VerifyResult:
         return VerifyResult("ok", user_data=user_data)
 
     state["attempts"] = attempts + 1
+    token = str(state.get("token") or "")
+    if token:
+        _token_attempts[token] = state["attempts"]
     remaining = max(0, max_attempts - int(state["attempts"]))
     await _persist(request, state, redis)
     return VerifyResult("invalid", remaining=remaining)

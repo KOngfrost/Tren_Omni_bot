@@ -39,7 +39,11 @@ async def get_dashboard_stats(session, user, is_super, dept_id):
     if is_super:
         scope = []
     else:
-        scope = [Ticket.department_id == dept_id] if dept_id is not None else [Ticket.department_id.is_(None)]
+        scope = (
+            [Ticket.department_id == dept_id]
+            if dept_id is not None
+            else [Ticket.department_id.is_(None)]
+        )
 
     rows = await session.execute(
         select(Ticket.status, func.count(Ticket.id)).where(*scope).group_by(Ticket.status)
@@ -161,7 +165,9 @@ async def fetch_counters_and_dashboard(user: dict) -> dict:
         base_scope = [Ticket.status == TicketStatus.NEW]
         if not is_super:
             if dept_id is not None:
-                base_scope.append(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+                base_scope.append(
+                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                )
             else:
                 base_scope.append(Ticket.department_id.is_(None))
 
@@ -330,8 +336,9 @@ async def stop_sse_redis_listener(task: asyncio.Task[None] | None = None) -> Non
 
 
 async def sse_generator(request: Request) -> AsyncGenerator[str, None]:
-    from web.dependencies import require_auth
     from fastapi import HTTPException
+
+    from web.dependencies import require_auth
 
     event = asyncio.Event()
     _subscribers.add(event)
@@ -377,6 +384,9 @@ async def sse_generator(request: Request) -> AsyncGenerator[str, None]:
 
 @router.get("/stream")
 async def sse_stream(request: Request):
+    from web.dependencies import require_auth
+
+    await require_auth(request)
     return StreamingResponse(
         sse_generator(request),
         media_type="text/event-stream",
@@ -398,23 +408,65 @@ async def _process_ws_incoming_text(websocket: WebSocket, text: str) -> None:
         pass
 
 
+async def _authenticate_ws(websocket: WebSocket):
+    session_data = websocket.scope.get("session", {})
+    user = session_data.get("user")
+    if not user:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+    from core.database import get_session_context
+    from core.models import WebUser
+    from web.routes.auth import bootstrap_session_still_valid
+
+    web_user_id = user.get("web_user_id")
+    if not web_user_id:
+        if bootstrap_session_still_valid(user):
+            return user
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+    try:
+        async with get_session_context() as db_session:
+            web_user = await db_session.get(WebUser, web_user_id)
+            if web_user is None or not web_user.is_active:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return None
+            return {
+                "username": web_user.username,
+                "role": web_user.role.value if web_user.role else "department_admin",
+                "web_user_id": web_user.id,
+                "department_id": web_user.department_id,
+                "admin_id": web_user.admin_id,
+            }
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+
+async def _handle_ws_incoming(websocket: WebSocket, receive_task: asyncio.Task) -> bool:
+    try:
+        msg_text = receive_task.result()
+        if msg_text:
+            await _process_ws_incoming_text(websocket, msg_text)
+        return True
+    except WebSocketDisconnect:
+        return False
+    except Exception:
+        return True
+
+
 @router.websocket("/ws")
 async def websocket_stream(websocket: WebSocket):
     """Двусторонний real-time WebSocket поток обновлений заявок и счётчиков."""
-    from web.dependencies import require_auth
-    from fastapi import HTTPException
+    user = await _authenticate_ws(websocket)
+    if not user:
+        return
 
     await websocket.accept()
     event = asyncio.Event()
     _subscribers.add(event)
     try:
-        try:
-            # We can typecast websocket to Request to satisfy hints since they share API
-            user = await require_auth(websocket) # type: ignore
-        except HTTPException:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-            return
-
         data = await fetch_counters_and_dashboard(user)
         await websocket.send_json({"type": "counters", "data": data})
 
@@ -431,21 +483,12 @@ async def websocket_stream(websocket: WebSocket):
             for task in pending:
                 task.cancel()
 
-            try:
-                user = await require_auth(websocket) # type: ignore
-            except HTTPException:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            user = await _authenticate_ws(websocket)
+            if not user:
                 break
 
-            if receive_task in done:
-                try:
-                    msg_text = receive_task.result()
-                    if msg_text:
-                        await _process_ws_incoming_text(websocket, msg_text)
-                except WebSocketDisconnect:
-                    break
-                except Exception:
-                    pass
+            if receive_task in done and not await _handle_ws_incoming(websocket, receive_task):
+                break
 
             if wait_event_task in done:
                 event.clear()

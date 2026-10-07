@@ -614,9 +614,9 @@ class TestIcons:
     """Эмодзи заменены inline-SVG иконками."""
 
     def test_icon_macro_available(self):
-        assert templates.env.globals.get("icon") is not None, (
-            "макрос icon должен быть зарегистрирован глобально"
-        )
+        assert (
+            templates.env.globals.get("icon") is not None
+        ), "макрос icon должен быть зарегистрирован глобально"
 
     def test_icon_renders_svg(self):
         out = str(templates.env.globals["icon"]("user", 16))
