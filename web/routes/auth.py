@@ -557,6 +557,7 @@ async def login(request: Request):
             return RedirectResponse(url="/auth/2fa", status_code=303)
 
         await _clear_attempts(client_ip)
+        request.scope["session_rotate"] = True
         request.session["user"] = user_data
         # Новый CSRF-токен после привилегированной операции (fixation protection)
         request.session["csrf_token"] = secrets.token_urlsafe(32)
@@ -581,6 +582,7 @@ async def logout(request: Request):
     await otp_store.cancel(request)
     await _log_action("web_logout", f"Выполнен выход пользователя {username}")
 
+    request.scope["session_rotate"] = True
     request.session.clear()
     request.session["csrf_token"] = secrets.token_urlsafe(32)
 

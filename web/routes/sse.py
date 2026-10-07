@@ -36,7 +36,10 @@ def trigger_sse_update() -> None:
 
 
 async def get_dashboard_stats(session, user, is_super, dept_id):
-    scope = [] if is_super else [Ticket.department_id == dept_id]
+    if is_super:
+        scope = []
+    else:
+        scope = [Ticket.department_id == dept_id] if dept_id is not None else [Ticket.department_id.is_(None)]
 
     rows = await session.execute(
         select(Ticket.status, func.count(Ticket.id)).where(*scope).group_by(Ticket.status)
@@ -156,8 +159,11 @@ async def fetch_counters_and_dashboard(user: dict) -> dict:
         is_super, dept_id = await get_admin_scope(session, user)
 
         base_scope = [Ticket.status == TicketStatus.NEW]
-        if not is_super and dept_id:
-            base_scope.append(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+        if not is_super:
+            if dept_id is not None:
+                base_scope.append(or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None)))
+            else:
+                base_scope.append(Ticket.department_id.is_(None))
 
         new_scope = [
             *base_scope,
@@ -323,13 +329,22 @@ async def stop_sse_redis_listener(task: asyncio.Task[None] | None = None) -> Non
         _redis_listener_task = None
 
 
-async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, None]:
+async def sse_generator(request: Request) -> AsyncGenerator[str, None]:
+    from web.dependencies import require_auth
+    from fastapi import HTTPException
+
     event = asyncio.Event()
     _subscribers.add(event)
     last_ping = asyncio.get_event_loop().time()
     try:
         while True:
             if await request.is_disconnected():
+                break
+
+            try:
+                user = await require_auth(request)
+            except HTTPException:
+                yield f"event: error\ndata: {json.dumps({'detail': 'Unauthorized'})}\n\n"
                 break
 
             try:
@@ -362,18 +377,8 @@ async def sse_generator(request: Request, user: dict) -> AsyncGenerator[str, Non
 
 @router.get("/stream")
 async def sse_stream(request: Request):
-    user = request.session.get("user")
-    if not user:
-
-        async def unauthorized_gen():
-            yield f"event: error\ndata: {json.dumps({'detail': 'Unauthorized'})}\n\n"
-
-        return StreamingResponse(
-            unauthorized_gen(), status_code=401, media_type="text/event-stream"
-        )
-
     return StreamingResponse(
-        sse_generator(request, user),
+        sse_generator(request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -396,16 +401,20 @@ async def _process_ws_incoming_text(websocket: WebSocket, text: str) -> None:
 @router.websocket("/ws")
 async def websocket_stream(websocket: WebSocket):
     """Двусторонний real-time WebSocket поток обновлений заявок и счётчиков."""
-    session = websocket.scope.get("session", {})
-    user = session.get("user")
-    if not user:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+    from web.dependencies import require_auth
+    from fastapi import HTTPException
 
     await websocket.accept()
     event = asyncio.Event()
     _subscribers.add(event)
     try:
+        try:
+            # We can typecast websocket to Request to satisfy hints since they share API
+            user = await require_auth(websocket) # type: ignore
+        except HTTPException:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
         data = await fetch_counters_and_dashboard(user)
         await websocket.send_json({"type": "counters", "data": data})
 
@@ -421,6 +430,12 @@ async def websocket_stream(websocket: WebSocket):
 
             for task in pending:
                 task.cancel()
+
+            try:
+                user = await require_auth(websocket) # type: ignore
+            except HTTPException:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                break
 
             if receive_task in done:
                 try:
