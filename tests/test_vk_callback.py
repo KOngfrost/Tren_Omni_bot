@@ -40,7 +40,7 @@ async def test_vk_callback_confirmation_missing_token(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_vk_callback_secret_validation(monkeypatch):
+async def test_vk_callback_secret_validation(monkeypatch, db_session_maker):
     """Проверка секрета сообщества: отклонение неверного и принятие корректного."""
     monkeypatch.setattr(settings, "VK_CALLBACK_SECRET", "super_secret_salt_42")
 
@@ -66,6 +66,101 @@ async def test_vk_callback_secret_validation(monkeypatch):
 
             await asyncio.sleep(0.05)
             assert mock_process.called
+
+
+@pytest.mark.asyncio
+async def test_vk_callback_durable_inbox_deduplication(db_session_maker):
+    """Durable Inbox сохраняет событие в БД и идемпотентно дедуплицирует повторные запросы."""
+    from sqlalchemy import select
+
+    from core.models import VkInbox
+
+    payload = {
+        "type": "message_new",
+        "event_id": "unique_event_abc_123",
+        "group_id": 99999,
+        "object": {"message": {"text": "hello"}},
+    }
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with patch("bots.vk.bot.vk_bot.process_event", new_callable=AsyncMock) as mock_process:
+            # Первый вызов: сохранение в inbox и диспетчеризация
+            resp1 = await client.post("/api/v1/vk/callback", json=payload)
+            assert resp1.status_code == 200
+            assert resp1.text == "ok"
+
+            import asyncio
+
+            await asyncio.sleep(0.05)
+            assert mock_process.call_count == 1
+
+            # Проверяем, что событие сохранено в таблице vk_inbox
+            async with db_session_maker() as session:
+                entry = await session.scalar(
+                    select(VkInbox).where(VkInbox.event_id == "unique_event_abc_123")
+                )
+                assert entry is not None
+                assert entry.event_type == "message_new"
+                assert entry.group_id == 99999
+                assert entry.status == "processed"
+
+            # Второй вызов (повторный replay того же event_id): возвращает 'ok' без повторной диспетчеризации
+            resp2 = await client.post("/api/v1/vk/callback", json=payload)
+            assert resp2.status_code == 200
+            assert resp2.text == "ok"
+
+            await asyncio.sleep(0.05)
+            # Счётчик вызовов обработчика не должен измениться
+            assert mock_process.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_vk_callback_database_error_returns_500(monkeypatch, db_session_maker):
+    """При ошибке записи в хранилище inbox эндпоинт возвращает 500 для повтора со стороны VK."""
+    from unittest.mock import MagicMock
+
+    bad_maker = MagicMock(side_effect=RuntimeError("Database storage is unavailable"))
+    monkeypatch.setattr("web.routes.vk_callback.async_session_maker", bad_maker)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/vk/callback",
+            json={"type": "message_new", "event_id": "fail_evt_999", "object": {}},
+        )
+        assert resp.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_process_pending_inbox_events(db_session_maker):
+    """Обработка зависших событий inbox из БД после перезапуска сервиса."""
+    import json
+
+    from core.models import VkInbox
+    from web.routes.vk_callback import process_pending_inbox_events
+
+    async with db_session_maker() as session:
+        inbox_item = VkInbox(
+            event_id="pending_event_456",
+            event_type="message_new",
+            payload=json.dumps({"type": "message_new", "text": "test_msg"}),
+            status="pending",
+        )
+        session.add(inbox_item)
+        await session.commit()
+        item_id = inbox_item.id
+
+    with patch("bots.vk.bot.vk_bot.process_event", new_callable=AsyncMock) as mock_process:
+        processed_count = await process_pending_inbox_events()
+        assert processed_count == 1
+        assert mock_process.called
+
+    async with db_session_maker() as session:
+        updated = await session.get(VkInbox, item_id)
+        assert updated is not None
+        assert updated.status == "processed"
+        assert updated.processed_at is not None
 
 
 @pytest.mark.asyncio

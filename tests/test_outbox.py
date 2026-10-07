@@ -155,3 +155,149 @@ async def test_outbox_temporary_vk_failure_and_recovery(db_session_maker, monkey
         assert msg.attempts == 2
         assert msg.sent_at is not None
         assert msg.error is None
+
+
+async def test_outbox_stable_deterministic_random_id(db_session_maker, monkeypatch):
+    """Повторные попытки отправки одного и того же outbox-сообщения используют один и тот же random_id."""
+    async with db_session_maker() as session:
+        entry = add_outbox_message(session, vk_id=555, text="Тест random_id")
+        await session.commit()
+        msg_id = entry.id
+
+    captured_random_ids: list[int | None] = []
+
+    async def _mock_send(vk_id, text, random_id=None):
+        captured_random_ids.append(random_id)
+        # Первая попытка терпит неудачу, вторая успешна
+        return len(captured_random_ids) > 1
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _mock_send)
+
+    # Первая попытка
+    delivered1 = await deliver_pending_messages()
+    assert delivered1 == 0
+    assert len(captured_random_ids) == 1
+    assert captured_random_ids[0] is not None
+    assert captured_random_ids[0] > 0
+
+    # Вторая попытка
+    delivered2 = await deliver_pending_messages()
+    assert delivered2 == 1
+    assert len(captured_random_ids) == 2
+    # random_id должен быть СТРОГО идентичен
+    assert captured_random_ids[0] == captured_random_ids[1]
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "sent"
+        assert msg.random_id == captured_random_ids[0]
+
+
+async def test_outbox_lease_timeout_increments_attempts(db_session_maker, monkeypatch):
+    """Истечение таймаута захвата (lease timeout) увеличивает attempts и возвращает в pending."""
+    from datetime import UTC, datetime, timedelta
+
+    from core.outbox import OUTBOX_CLAIM_TIMEOUT_SECONDS
+
+    stale_time = datetime.now(UTC) - timedelta(seconds=OUTBOX_CLAIM_TIMEOUT_SECONDS + 60)
+
+    async with db_session_maker() as session:
+        entry = VkOutbox(
+            vk_id=666,
+            text="Зависший воркер",
+            status="sending",
+            attempts=1,
+            claimed_at=stale_time,
+        )
+        session.add(entry)
+        await session.commit()
+        msg_id = entry.id
+
+    async def _fake_send(vk_id, text, random_id=None):
+        return True
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _fake_send)
+
+    # deliver_pending_messages должен сбросить stale -> pending с attempts=2 и затем доставить
+    delivered = await deliver_pending_messages()
+    assert delivered == 1
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "sent"
+        # attempts: 1 (исходная) + 1 (lease timeout) + 1 (успешная отправка) = 3
+        assert msg.attempts == 3
+
+
+async def test_outbox_lease_timeout_dead_letter(db_session_maker, monkeypatch):
+    """Если при lease timeout исчерпан лимит попыток, запись переходит в failed (Dead Letter)."""
+    from datetime import UTC, datetime, timedelta
+
+    from core.outbox import OUTBOX_CLAIM_TIMEOUT_SECONDS
+
+    stale_time = datetime.now(UTC) - timedelta(seconds=OUTBOX_CLAIM_TIMEOUT_SECONDS + 60)
+
+    async with db_session_maker() as session:
+        entry = VkOutbox(
+            vk_id=777,
+            text="Poison pill",
+            status="sending",
+            attempts=OUTBOX_MAX_ATTEMPTS - 1,
+            claimed_at=stale_time,
+        )
+        session.add(entry)
+        await session.commit()
+        msg_id = entry.id
+
+    await deliver_pending_messages()
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "failed"
+        assert msg.attempts == OUTBOX_MAX_ATTEMPTS
+        assert "lease timeout" in (msg.error or "").lower()
+
+
+async def test_outbox_exponential_backoff(db_session_maker, monkeypatch):
+    """При включённом backoff сообщение после неудачи откладывается на next_retry_at."""
+    from datetime import UTC, datetime
+
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "OUTBOX_BACKOFF_BASE_SECONDS", 10)
+
+    async with db_session_maker() as session:
+        entry = add_outbox_message(session, vk_id=888, text="Backoff тест")
+        await session.commit()
+        msg_id = entry.id
+
+    send_count = 0
+
+    async def _fail_send(vk_id, text, random_id=None):
+        nonlocal send_count
+        send_count += 1
+        return False
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _fail_send)
+
+    # Первая попытка — терпит неудачу
+    await deliver_pending_messages()
+    assert send_count == 1
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "pending"
+        assert msg.attempts == 1
+        assert msg.next_retry_at is not None
+        next_retry = msg.next_retry_at
+        if next_retry.tzinfo is None:
+            next_retry = next_retry.replace(tzinfo=UTC)
+        assert next_retry > datetime.now(UTC)
+
+    # Немедленный второй запуск — должен пропустить сообщение из-за backoff (next_retry_at в будущем)
+    await deliver_pending_messages()
+    assert send_count == 1  # Отправка не вызывалась повторно!

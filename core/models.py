@@ -441,18 +441,50 @@ class VkOutbox(Base):
     """
 
     __tablename__ = "vk_outbox"
-    __table_args__ = (Index("ix_vk_outbox_status_created", "status", "created_at"),)
+    __table_args__ = (
+        Index("ix_vk_outbox_status_created", "status", "created_at"),
+        Index("ix_vk_outbox_status_next_retry", "status", "next_retry_at"),
+    )
 
-    # Статусы: pending (ожидает доставки) | sent | failed (лимит попыток исчерпан)
+    # Статусы: pending (ожидает доставки) | sending | sent | failed (лимит попыток исчерпан)
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
     vk_id = mapped_column(BigInteger, nullable=False)
     text = mapped_column(Text, nullable=False)
     status = mapped_column(String(16), default="pending", nullable=False)
     attempts = mapped_column(Integer, default=0, nullable=False)
+    random_id = mapped_column(BigInteger, nullable=True)
+    next_retry_at = mapped_column(DateTime(timezone=True), nullable=True)
     claimed_at = mapped_column(DateTime(timezone=True), nullable=True)
     error = mapped_column(Text, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     sent_at = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class VkInbox(Base):
+    """Входящие события VK Callback API (паттерн Durable Inbox).
+
+    Событие сохраняется и фиксируется в БД ДО возврата 'ok' серверам VK.
+    Обеспечивает дедупликацию по event_id (идемпотентный replay)
+    и гарантирует надёжность доставки при сбоях сервиса.
+    """
+
+    __tablename__ = "vk_inbox"
+    __table_args__ = (
+        Index("ix_vk_inbox_event_id", "event_id"),
+        Index("ix_vk_inbox_status_created", "status", "created_at"),
+    )
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id = mapped_column(String(128), nullable=True)
+    event_type = mapped_column(String(64), nullable=False)
+    group_id = mapped_column(BigInteger, nullable=True)
+    payload = mapped_column(Text, nullable=False)
+    status = mapped_column(
+        String(16), default="pending", nullable=False
+    )  # pending | processed | failed
+    error = mapped_column(Text, nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    processed_at = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PartnershipRequest(Base):
