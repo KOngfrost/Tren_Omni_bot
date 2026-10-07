@@ -63,7 +63,7 @@ func main() {
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSOrigins,
 		AllowCredentials: true,
-		AllowHeaders:     "Origin, Content-Type, Accept, X-CSRF-Token",
+		AllowHeaders:     "Origin, Content-Type, Accept, X-CSRF-Token, Authorization, X-Auth-Token",
 	}))
 	// Prometheus (этап 5.3). Регистрируется после recover, чтобы паники,
 	// перехваченные recover, тоже попадали в метрики со статусом 500.
@@ -84,10 +84,10 @@ func main() {
 
 	// Отделы
 	api.Get("/departments/", handlers.GetDepartments)
-	api.Post("/departments/", handlers.CreateDepartment)
+	api.Post("/departments/", handlers.RequireSuperadmin(cfg), handlers.CreateDepartment)
 
 	// Тикеты
-	api.Get("/tickets/", handlers.GetTickets)
+	api.Get("/tickets/", handlers.RequireOperator(cfg), handlers.GetTickets)
 
 	// Аутентификация: централизована в FastAPI (Argon2id, 2FA, lockout, logs)
 	api.Get("/auth/me", handlers.AuthMe)
