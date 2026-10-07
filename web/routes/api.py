@@ -375,13 +375,14 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
             is_super, dept_id = await get_admin_scope(session, user)
 
             base_scope = [Ticket.status == TicketStatus.NEW]
-            # Админ отдела видит свои заявки И общие обращения (department_id IS NULL):
-            # у них нет владельца, поэтому скрывать их от админов нельзя — иначе
-            # они останутся необработанными. Заявки других отделов по-прежнему скрыты.
-            if not is_super and dept_id:
-                base_scope.append(
-                    or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
-                )
+            # Админ отдела видит свои заявки И общие обращения (department_id IS NULL).
+            if not is_super:
+                if dept_id is not None:
+                    base_scope.append(
+                        or_(Ticket.department_id == dept_id, Ticket.department_id.is_(None))
+                    )
+                else:
+                    base_scope.append(Ticket.department_id.is_(None))
 
             new_scope = [
                 *base_scope,
