@@ -139,10 +139,8 @@ async def _load(request: Any) -> tuple[dict[str, Any] | None, Any]:
         except Exception as exc:
             logger.warning("2FA: ошибка чтения из Redis (%s), fallback на сессию", exc)
 
-    # Fallback-режим: состояние (без открытого кода) лежит в подписанной сессии
-    if "code_hash" in raw and raw.get("token"):
-        return dict(raw), redis
-
+    # Fallback-режим: не доверяем client-controlled попыткам (защита от replay-атак).
+    # Хранилище Fail-Closed: при сбое Redis состояние теряется.
     if token:
         await _destroy(request, {"token": token}, redis)
     return None, redis
@@ -242,6 +240,14 @@ async def verify(request: Any, submitted_code: str) -> VerifyResult:
 
     expected_hash = str(state.get("code_hash", ""))
     if submitted_code and verify_password(submitted_code, expected_hash):
+        if redis is not None:
+            token = state.get("token")
+            if token:
+                deleted = await redis.delete(_redis_key(token))
+                if not deleted:
+                    await _destroy(request, state, redis)
+                    return VerifyResult("invalid", remaining=0)
+
         user_data = dict(state.get("user_data") or {})
         await _destroy(request, state, redis)
         if not user_data:
