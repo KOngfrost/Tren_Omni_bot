@@ -3,6 +3,33 @@
 Все ключевые изменения проекта документируются в этом файле.  
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/), проект придерживается [семантического версионирования (SemVer)](https://semver.org/).
 
+## [0.9.1] — 2026-10-15
+
+### 🚀 Релиз 0.9.1: Комплексное укрепление безопасности, повышение надёжности API, строгая типизация и готовность к Production
+
+- **Устранение критических уязвимостей безопасности**:
+  - **Go Backend API**: Удалён несанкционированный доступ по Bearer-токену, равному сессионному ключу. Сервисная аутентификация переведена на выделенный `SERVICE_API_KEY`.
+  - **Криптографическая проверка HMAC cookie**: В `backend_go` внедрена симметричная верификация цифровой подписи itsdangerous (`s_<id>.<sig>`) через `subtle.ConstantTimeCompare`, исключающая подделку cookie сессий.
+  - **Защита от Replay-атак Telegram WebApp (TMA)**: В `web/routes/api_v1.py` добавлена валидация свежести `auth_date <= 86400` сек (24 часа), согласующаяся с Go-модулем.
+  - **Устранение обхода 2FA**: В `web/routes/auth.py` и `web/routes/two_factor.py` заблокирован обход 2FA по тестовым префиксам `test_`/`temp_` в боевом окружении (`APP_ENV=production`).
+- **Повышение надёжности и масштабируемости Go API**:
+  - **Rate Limiting**: Внедрён middleware ограничения частоты запросов `fiber/v2/middleware/limiter` (120 req/min) на роуты `/api/v1` для защиты от DoS и спам-флуда.
+  - **Readiness Probe**: Эндпоинт `/api/v1/health` теперь проверяет доступность пула PostgreSQL и клиента Redis, возвращая HTTP 503 при деградации зависимостей.
+  - **Сквозные сессии Telegram WebApp**: В `TelegramWebAppAuth` реализована генерация сессии в Redis и выставление подписанной cookie `session=s_<id>.<sig>` для бесшовной интеграции с веб-клиентом.
+  - **Graceful Shutdown**: Гарантировано закрытие соединений пула `database.Pool` и клиента `appRedis.Client` при остановке процесса.
+- **Инфраструктура, мониторинг и Docker**:
+  - **Prometheus & Redis Exporter**: В `docker-compose.yml` и `monitoring/prometheus/prometheus.yml` добавлен `redis-exporter`, активирующий алерт `RedisMemoryHigh`.
+  - **Multi-stage сборка Telegram-мониторинга**: Образ `Dockerfile.monitor` переведён на multi-stage шаблон с pinned sha256 и запуском под непривилегированным пользователем `appuser` (без pip в runtime).
+  - **Healthchecks и постоянные тома**: Добавлены healthcheck-пробы для `caddy` и `docker-socket-proxy`, а также том `bot_logs:/app/logs` для сохранения логов между перезапусками.
+  - **Корректный Graceful Shutdown в `run_tg_monitor.py`**: Перехват сигналов SIGINT/SIGTERM теперь штатно останавливает `dp.stop_polling()`.
+  - **Аварийное восстановление**: В `scripts/restore.sh` и руководства эксплуатации добавлен сервис `go-api` в процедуру остановки и запуска контейнеров.
+- **Качество кода, типизация и CI/CD**:
+  - **Строгий режим MyPy**: В `mypy.ini` активирован `check_untyped_defs = True` и сняты подавления для 5 категорий ошибок. Устранены скрытые баги типизации в `core/database.py`, `core/cache.py`, `core/i18n.py`, `core/config.py`, `web/routes/api_v1.py`.
+  - **Порог покрытия тестами**: В `pyproject.toml` добавлен обязательный порог `--cov-fail-under=80`.
+  - **Динамический LOG_LEVEL**: В `core/logging_config.py` поддержано чтение переменной окружения `LOG_LEVEL` (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+  - **Блокирующий SAST в CI**: В `.github/workflows/ci.yml` сняты флаги `continue-on-error: true` со сканеров Bandit и Semgrep.
+  - **Пакетирование**: Создан модуль `core/formatters/__init__.py`.
+
 ## [0.8.9.1] — 2026-10-04
 
 ### 🚀 Релиз 0.8.9.1: Защита ответов сообщества от служебных сообщений бота, адаптивность выпадающих окон и сброс кэша статики

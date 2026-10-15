@@ -11,6 +11,7 @@ type Config struct {
 	DatabaseURL       string
 	RedisURL          string
 	SessionSecretKey  string
+	ServiceAPIKey     string
 	TelegramBotToken  string
 	TelegramAdminID   int64
 	TwoFactorEnabled  bool
@@ -43,24 +44,30 @@ func LoadConfig() *Config {
 	appEnv := getEnv("APP_ENV", "development")
 
 	sessionSecret := getEnv("SESSION_SECRET_KEY", "")
+	if sessionSecret == "" {
+		sessionSecret = getEnv("SECRET_KEY", "")
+	}
 	if appEnv == "production" {
 		if sessionSecret == "" || sessionSecret == "change_me_super_secret_key_32_chars" || len(sessionSecret) < 32 {
-			log.Fatal("CRITICAL: SESSION_SECRET_KEY не задан, является плейсхолдером или короче 32 символов в production")
+			log.Fatal("CRITICAL: SESSION_SECRET_KEY (или SECRET_KEY) не задан, является плейсхолдером или короче 32 символов в production")
 		}
 	} else if sessionSecret == "" {
 		sessionSecret = "dev_fallback_secret_key_minimum_32_chars_local"
 	}
+
+	serviceAPIKey := getEnv("SERVICE_API_KEY", "")
 
 	return &Config{
 		Port:             port,
 		DatabaseURL:      dbURL,
 		RedisURL:         redisURL,
 		SessionSecretKey: sessionSecret,
+		ServiceAPIKey:    serviceAPIKey,
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramAdminID:  tgAdminID,
 		TwoFactorEnabled: twoFactorEnabled,
 		CORSOrigins:      corsOrigins,
-		AppVersion:       getEnv("APP_VERSION", "0.8.9.1"),
+		AppVersion:       getEnv("APP_VERSION", "0.9.1"),
 		AppEnv:           appEnv,
 	}
 }

@@ -243,10 +243,10 @@ func TestLoginRequiresDatabasePoolWithoutLeakingDetails(t *testing.T) {
 	}
 }
 
-// TestHealthCheckIsAlwaysAvailable проверяет, что healthcheck-эндпоинт
-// отвечает 200 без БД и Redis: иначе docker-compose перезапускал бы
-// контейнер go-api при временной недоступности зависимостей (5.2).
-func TestHealthCheckIsAlwaysAvailable(t *testing.T) {
+// TestHealthCheckReadinessProbe проверяет, что healthcheck выполняет роль
+// readiness probe: при отсутствии подключения к БД и Redis отвечает 503 Service Unavailable,
+// сигнализируя оркестратору о неготовности контейнера принимать боевой трафик.
+func TestHealthCheckReadinessProbe(t *testing.T) {
 	app := fiber.New()
 	app.Get("/api/v1/health", HealthCheck)
 
@@ -258,19 +258,24 @@ func TestHealthCheckIsAlwaysAvailable(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != fiber.StatusOK {
-		t.Fatalf("ожидался статус 200, получен %d", resp.StatusCode)
+	if resp.StatusCode != fiber.StatusServiceUnavailable {
+		t.Fatalf("ожидался статус 503 при отсутствии БД и Redis, получен %d", resp.StatusCode)
 	}
 
 	var payload struct {
 		Status    string `json:"status"`
+		Database  string `json:"database"`
+		Redis     string `json:"redis"`
 		Timestamp string `json:"timestamp"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("ответ должен быть корректным JSON: %v", err)
 	}
-	if payload.Status != "healthy" {
-		t.Fatalf("ожидался status=healthy, получен %q", payload.Status)
+	if payload.Status != "unhealthy" {
+		t.Fatalf("ожидался status=unhealthy, получен %q", payload.Status)
+	}
+	if payload.Database == "" || payload.Redis == "" {
+		t.Fatal("ответ должен содержать диагностику database и redis")
 	}
 	if payload.Timestamp == "" {
 		t.Fatal("ответ должен содержать timestamp")
@@ -427,11 +432,40 @@ func TestRequireSuperadminRejectsUnauthenticated(t *testing.T) {
 	}
 }
 
-// TestRequireSuperadminAllowsValidToken проверяет D03:
-// запрос с валидным auth-токеном пропускается к обработчику (201).
+// TestRequireSuperadminAllowsValidToken проверяет:
+// запрос с валидным ServiceAPIKey пропускается к обработчику (201).
 func TestRequireSuperadminAllowsValidToken(t *testing.T) {
+	serviceKey := "super-service-key-32-chars-length"
+	cfg := &config.Config{
+		SessionSecretKey: "different-session-secret-key-32ch",
+		ServiceAPIKey:    serviceKey,
+	}
+	app := fiber.New()
+	app.Post("/api/v1/departments/", RequireSuperadmin(cfg), func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/departments/", nil)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("ожидался статус 201 Created, получен %d", resp.StatusCode)
+	}
+}
+
+// TestRequireSuperadminRejectsSessionSecretBearer проверяет устранение бэкдора:
+// передача SessionSecretKey в Authorization Bearer не даёт прав суперпользователя (401).
+func TestRequireSuperadminRejectsSessionSecretBearer(t *testing.T) {
 	secret := "super-secret-key-32-chars-length"
-	cfg := &config.Config{SessionSecretKey: secret}
+	cfg := &config.Config{
+		SessionSecretKey: secret,
+		ServiceAPIKey:    "",
+	}
 	app := fiber.New()
 	app.Post("/api/v1/departments/", RequireSuperadmin(cfg), func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"ok": true})
@@ -445,8 +479,8 @@ func TestRequireSuperadminAllowsValidToken(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("ожидался статус 201 Created, получен %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("ожидался статус 401 Unauthorized для SessionSecretKey в Bearer токене, получен %d", resp.StatusCode)
 	}
 }
 
@@ -471,11 +505,40 @@ func TestRequireOperatorRejectsUnauthenticated(t *testing.T) {
 	}
 }
 
-// TestRequireOperatorAllowsValidToken проверяет D03:
-// запрос к тикетам с валидным auth-токеном пропускается (200).
+// TestRequireOperatorAllowsValidToken проверяет:
+// запрос к тикетам с валидным ServiceAPIKey пропускается (200).
 func TestRequireOperatorAllowsValidToken(t *testing.T) {
+	serviceKey := "super-service-key-32-chars-length"
+	cfg := &config.Config{
+		SessionSecretKey: "different-session-secret-key-32ch",
+		ServiceAPIKey:    serviceKey,
+	}
+	app := fiber.New()
+	app.Get("/api/v1/tickets/", RequireOperator(cfg), func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"tickets": []any{}})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets/", nil)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("ошибка выполнения запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ожидался статус 200 OK, получен %d", resp.StatusCode)
+	}
+}
+
+// TestRequireOperatorRejectsSessionSecretBearer проверяет устранение бэкдора:
+// передача SessionSecretKey в Authorization Bearer отклоняется (401).
+func TestRequireOperatorRejectsSessionSecretBearer(t *testing.T) {
 	secret := "super-secret-key-32-chars-length"
-	cfg := &config.Config{SessionSecretKey: secret}
+	cfg := &config.Config{
+		SessionSecretKey: secret,
+		ServiceAPIKey:    "",
+	}
 	app := fiber.New()
 	app.Get("/api/v1/tickets/", RequireOperator(cfg), func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"tickets": []any{}})
@@ -489,30 +552,42 @@ func TestRequireOperatorAllowsValidToken(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("ожидался статус 200 OK, получен %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("ожидался статус 401 Unauthorized для SessionSecretKey в Bearer токене, получен %d", resp.StatusCode)
 	}
 }
 
-// TestExtractSessionID проверяет очистку session id от подписи itsdangerous.
+// TestExtractSessionID проверяет верификацию HMAC-подписи itsdangerous в cookie.
 func TestExtractSessionID(t *testing.T) {
+	secret := "test-secret-key-32-chars-length"
+	wrongSecret := "wrong-secret-key-32-chars-length"
+
 	cases := []struct {
+		name     string
 		input    string
+		key      string
 		expected string
 	}{
-		{"", ""},
-		{"   ", ""},
-		{"abc123session", "abc123session"},
-		{"s_abc123session", "abc123session"},
-		{"s_abc123session.someSignatureHash123", "abc123session"},
-		{"abc123session.someSignatureHash123", "abc123session"},
+		{"empty input", "", secret, ""},
+		{"whitespace input", "   ", secret, ""},
+		{"empty secret", "s_valid_session_123.PcLOXspLx7ss5O91TC_U-Y-tT08", "", ""},
+		{"valid default itsdangerous sha1 signature", "s_valid_session_123.PcLOXspLx7ss5O91TC_U-Y-tT08", secret, "valid_session_123"},
+		{"valid salt=signer sha1 signature", "s_valid_session_123._57RV_TAry7ygmIhNze_NLqYqWs", secret, "valid_session_123"},
+		{"valid sha256 signature", "s_valid_session_123.9PL7Qd-fNGnI3wAXZvk5VwFtcAa6mEAJS0iNOHKDYDQ", secret, "valid_session_123"},
+		{"tampered signature rejected", "s_valid_session_123.fakeSignatureHash123", secret, ""},
+		{"wrong secret rejected", "s_valid_session_123.PcLOXspLx7ss5O91TC_U-Y-tT08", wrongSecret, ""},
+		{"unsigned raw session rejected", "s_valid_session_123", secret, ""},
+		{"unsigned session without prefix rejected", "abc123session", secret, ""},
+		{"missing s_ prefix rejected", "valid_session_123.PcLOXspLx7ss5O91TC_U-Y-tT08", secret, ""},
 	}
 
 	for _, tc := range cases {
-		got := ExtractSessionID(tc.input)
-		if got != tc.expected {
-			t.Errorf("ExtractSessionID(%q) = %q, ожидалось %q", tc.input, got, tc.expected)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractSessionID(tc.input, tc.key)
+			if got != tc.expected {
+				t.Errorf("ExtractSessionID(%q, %q) = %q, ожидалось %q", tc.input, tc.key, got, tc.expected)
+			}
+		})
 	}
 }
 

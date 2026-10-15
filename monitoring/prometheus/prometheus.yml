@@ -30,3 +30,11 @@ scrape_configs:
           app: "student_bot"
           role: "go-api"
 
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          app: "student_bot"
+          role: "redis"
+
+

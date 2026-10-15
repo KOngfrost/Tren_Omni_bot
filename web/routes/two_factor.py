@@ -15,6 +15,7 @@ from core.models import WebRole, WebUser
 from core.two_factor import is_two_factor_enabled
 from web.routes.auth import (
     _bootstrap_2fa_channel,
+    _is_temporary_web_user,
     _log_action,
     _mask_vk_id,
     _send_otp_to_vk,
@@ -49,9 +50,7 @@ async def _verified_user_data(
 
         vk_admin_id = web_user.admin.user.vk_id if web_user.admin and web_user.admin.user else None
         two_factor_on = await is_two_factor_enabled()
-        is_qa_user = web_user.username.startswith(("qa_", "test_")) or (
-            web_user.admin is None and "qa" in web_user.username.lower()
-        )
+        is_qa_user = _is_temporary_web_user(web_user)
         if two_factor_on and not vk_admin_id and not is_qa_user:
             await otp_store.cancel(request)
             request.session["flash_error"] = "Привязка VK-аккаунта снята — вход с 2FA невозможен."

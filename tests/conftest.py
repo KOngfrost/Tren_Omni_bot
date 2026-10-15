@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Базовые переменные окружения для тестов (позволяют запускать pytest без .env)
 _TEST_ENV_DEFAULTS = {
     "APP_ENV": "test",
+    "TESTING": "true",
     "POSTGRES_USER": "test",
     "POSTGRES_PASSWORD": "test",
     "POSTGRES_DB": "test",
@@ -25,6 +26,7 @@ for _env_key, _env_val in _TEST_ENV_DEFAULTS.items():
 
 # Тесты не должны зависеть от production-настроек локального .env.
 os.environ["APP_ENV"] = "test"
+os.environ["TESTING"] = "true"
 os.environ["SESSION_HTTPS_ONLY"] = "false"
 
 import asyncio

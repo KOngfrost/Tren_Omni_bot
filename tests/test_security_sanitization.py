@@ -102,3 +102,32 @@ def test_sentry_scrub_pii_headers_and_body():
 
     assert "ip_address" not in scrubbed["user"]
     assert "email" not in scrubbed["user"]
+
+
+def test_setup_logging_dynamic_log_level(tmp_path, monkeypatch):
+    import logging
+
+    from core.logging_config import setup_logging
+
+    log_dir = str(tmp_path / "logs")
+
+    # 1. Custom valid uppercase LOG_LEVEL
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    setup_logging(log_dir=log_dir)
+    assert logging.getLogger().level == logging.DEBUG
+
+    # 2. Case-insensitive and trimmed LOG_LEVEL
+    monkeypatch.setenv("LOG_LEVEL", "  warning  ")
+    setup_logging(log_dir=log_dir)
+    assert logging.getLogger().level == logging.WARNING
+
+    # 3. Invalid LOG_LEVEL falls back to passed default level
+    monkeypatch.setenv("LOG_LEVEL", "NON_EXISTENT_LEVEL")
+    setup_logging(log_dir=log_dir, level=logging.ERROR)
+    assert logging.getLogger().level == logging.ERROR
+
+    # 4. Empty LOG_LEVEL falls back to passed default level
+    monkeypatch.setenv("LOG_LEVEL", "")
+    setup_logging(log_dir=log_dir, level=logging.INFO)
+    assert logging.getLogger().level == logging.INFO
+

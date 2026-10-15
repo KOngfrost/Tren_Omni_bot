@@ -145,9 +145,11 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.9.1}
+      - APP_VERSION=${APP_VERSION:-0.9.1}
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
+    volumes:
+      - bot_logs:/app/logs
     networks:
       - backend_net
     command: python main.py
@@ -184,6 +186,22 @@ services:
       timeout: 5s
       retries: 5
 
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0-alpine
+    container_name: oss_bot_redis_exporter
+    restart: unless-stopped
+    logging: *default-logging
+    mem_limit: 64m
+    memswap_limit: 64m
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - backend_net
+    depends_on:
+      redis:
+        condition: service_healthy
+
   web-admin:
     build:
       context: .
@@ -199,13 +217,14 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.8.9.1}
+      - APP_VERSION=${APP_VERSION:-0.9.1}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     volumes:
       - archives_data:/app/archives
+      - bot_logs:/app/logs
     networks:
       - frontend_net
       - backend_net
@@ -291,6 +310,8 @@ services:
       # иначе первые скрейпы дают ложные алерты GoApiInstanceDown.
       go-api:
         condition: service_healthy
+      redis-exporter:
+        condition: service_started
 
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:0.2.0
@@ -311,10 +332,17 @@ services:
       - NETWORKS=0
       - VOLUMES=0
       - DELETE=0
+      - PING=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - socket_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q OK || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   tg-monitor:
     build:
@@ -329,14 +357,15 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.8.9.1}
+      - APP_VERSION=${APP_VERSION:-0.9.1}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
       # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
     volumes:
       - /var/backups/oss_bot:/var/backups/oss_bot
     depends_on:
-      - docker-socket-proxy
+      docker-socket-proxy:
+        condition: service_healthy
     networks:
       - backend_net
       - socket_net
@@ -369,9 +398,15 @@ services:
       - caddy_config:/config
     networks:
       - frontend_net
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       web-admin:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   postgres_data:
@@ -384,6 +419,7 @@ volumes:
   # pgbouncer-userlist, а читается постоянно работающим pgbouncer.
   pgbouncer_config:
   archives_data:
+  bot_logs:
 
 networks:
   frontend_net:

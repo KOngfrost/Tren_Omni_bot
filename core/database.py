@@ -3,6 +3,7 @@ import re
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 from sqlalchemy import pool
@@ -27,7 +28,7 @@ from core.config import settings
 #   DB_POOL_PRE_PING — проверка соединения перед выдачей (по умолчанию true)
 engine: AsyncEngine | None
 if settings.database_url:
-    connect_args = {}
+    connect_args: dict[str, Any] = {}
     if "asyncpg" in settings.database_url:
         connect_args["command_timeout"] = 30.0
         if settings.DB_USE_PGBOUNCER or settings.DB_STATEMENT_CACHE_SIZE == 0:

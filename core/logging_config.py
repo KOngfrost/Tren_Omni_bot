@@ -110,6 +110,10 @@ def setup_logging(
         log_dir: Директория для логов (создаётся автоматически).
         level: Уровень логирования по умолчанию.
     """
+    env_level = os.getenv("LOG_LEVEL", "").strip().upper()
+    if env_level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        level = getattr(logging, env_level)
+
     # Создаём директорию для логов
     os.makedirs(log_dir, exist_ok=True)
 

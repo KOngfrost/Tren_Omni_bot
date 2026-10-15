@@ -1,10 +1,10 @@
-# OSS Bot v0.8.9.1 🎓
+# OSS Bot v0.9.1 🎓
 
 [![CI](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml/badge.svg)](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Go 1.23](https://img.shields.io/badge/go-1.23-00ADD8.svg)](https://golang.org/)
-[![Tests](https://img.shields.io/badge/tests-449%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-615%20passed-brightgreen.svg)](tests/)
 [![Security Audited](https://img.shields.io/badge/security-SEC--01..12%20passed-success.svg)](SECURITY.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -211,5 +211,5 @@ pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-versi
 Исходный код распространяется под свободной и открытой лицензией **[MIT](LICENSE)**.  
 Вы можете свободно использовать, модифицировать и разворачивать систему в своём вузе или организации.
 
-*Проект поддерживается объединённой командой Студенческого совета университета. Версия 0.8.9.1.*
+*Проект поддерживается объединённой командой Студенческого совета университета. Версия 0.9.1.*
 

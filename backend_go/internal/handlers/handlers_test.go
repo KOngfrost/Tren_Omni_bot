@@ -19,6 +19,7 @@ import (
 	"student_bot/backend_go/internal/config"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 )
 
 const (
@@ -286,5 +287,108 @@ func TestNewCSRFTokenIsRandomAndStrong(t *testing.T) {
 	}
 	if first == second {
 		t.Fatal("два сгенерированных токена не должны совпадать")
+	}
+}
+
+// TestSignItsdangerousAndExtractSessionID проверяет симметричность формирования
+// и валидации подписи сессионной cookie itsdangerous.
+func TestSignItsdangerousAndExtractSessionID(t *testing.T) {
+	secret := "test-secret-key-32-chars-length"
+	sessionID := "0123456789abcdef0123456789abcdef"
+
+	signed := SignItsdangerous(sessionID, secret)
+	if !strings.HasPrefix(signed, "s_"+sessionID+".") {
+		t.Fatalf("подписанный cookie должен начинаться с prefix 's_%s.', получено: %q", sessionID, signed)
+	}
+
+	extracted := ExtractSessionID(signed, secret)
+	if extracted != sessionID {
+		t.Fatalf("ExtractSessionID(%q) = %q, ожидалось %q", signed, extracted, sessionID)
+	}
+
+	// Неверный ключ должен приводить к отклонению
+	wrongSecret := "wrong-secret-key-32-chars-length"
+	if extractedWrong := ExtractSessionID(signed, wrongSecret); extractedWrong != "" {
+		t.Fatalf("ExtractSessionID с неверным секретом должен возвращать '', получено %q", extractedWrong)
+	}
+
+	// Пустой ключ не должен подписывать
+	if emptySigned := SignItsdangerous(sessionID, ""); emptySigned != "" {
+		t.Fatalf("SignItsdangerous с пустым ключом должен возвращать '', получено %q", emptySigned)
+	}
+}
+
+// TestHealthCheckReadinessProbeReturns503WhenDependenciesDown проверяет контракт readiness probe:
+// при недоступных БД и Redis возвращается 503 Service Unavailable с диагностикой.
+func TestHealthCheckReadinessProbeReturns503WhenDependenciesDown(t *testing.T) {
+	app := fiber.New()
+	app.Get("/health", HealthCheck)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("не удалось выполнить запрос: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusServiceUnavailable {
+		t.Fatalf("ожидался статус 503, получен %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("ошибка декодирования ответа: %v", err)
+	}
+
+	if body["status"] != "unhealthy" {
+		t.Fatalf("ожидался status=unhealthy, получено %v", body["status"])
+	}
+	if body["database"] != "unavailable" {
+		t.Fatalf("ожидался database=unavailable, получено %v", body["database"])
+	}
+	if body["redis"] != "unavailable" {
+		t.Fatalf("ожидался redis=unavailable, получено %v", body["redis"])
+	}
+}
+
+// TestRateLimiterMiddleware проверяет ограничение частоты запросов.
+func TestRateLimiterMiddleware(t *testing.T) {
+	app := fiber.New()
+	api := app.Group("/api/v1")
+	api.Use(limiter.New(limiter.Config{
+		Max:        2,
+		Expiration: 1 * time.Minute,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"detail": "Превышен лимит запросов. Пожалуйста, повторите позже.",
+			})
+		},
+	}))
+	api.Get("/tickets", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"tickets": []string{}})
+	})
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets", nil)
+		resp, err := app.Test(req, 5000)
+		if err != nil {
+			t.Fatalf("запрос %d завершился ошибкой: %v", i+1, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("запрос %d: ожидался статус 200, получен %d", i+1, resp.StatusCode)
+		}
+	}
+
+	// 3-й запрос должен превысить лимит и вернуть 429
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("запрос 3 завершился ошибкой: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("запрос 3: ожидался статус 429 Too Many Requests, получен %d", resp.StatusCode)
 	}
 }

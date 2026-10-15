@@ -5,15 +5,15 @@
 #   ./scripts/restore.sh /var/backups/oss_bot/oss_bot_2026-08-31.sql.gz
 #
 # Что делает:
-#   1. Останавливает bot и web-admin (чтобы не было записи во время restore).
+#   1. Останавливает bot, web-admin и go-api (чтобы не было записи во время restore).
 #   2. Принудительно завершает все сессии к базе (pg_terminate_backend)
 #      и останавливает PgBouncer, чтобы пулер не держал/не плодил
 #      соединения во время пересоздания базы.
 #   3. Пересоздаёт базу (dropdb + createdb).
 #   4. Восстанавливает данные из дампа.
-#   5. Возвращает PgBouncer в строй; bot и web-admin остаются
+#   5. Возвращает PgBouncer в строй; bot, web-admin и go-api остаются
 #      остановленными — запустите их вручную командой
-#      docker compose start bot web-admin.
+#      docker compose start bot web-admin go-api.
 #
 # Подтверждение вручную обязательно: операция полностью перезаписывает базу.
 #
@@ -52,8 +52,8 @@ if ! gzip -t "$BACKUP_FILE"; then
     exit 1
 fi
 
-echo "[$(date '+%F %T')] Останавливаем bot и web-admin..."
-"${COMPOSE[@]}" stop bot web-admin || true
+echo "[$(date '+%F %T')] Останавливаем bot, web-admin и go-api..."
+"${COMPOSE[@]}" stop bot web-admin go-api || true
 
 echo "[$(date '+%F %T')] Останавливаем PgBouncer (пауза пулера)..."
 "${COMPOSE[@]}" stop pgbouncer || true
@@ -84,4 +84,4 @@ echo "[$(date '+%F %T')] Restore finished. Проверьте данные:"
 echo "  docker compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB -c 'SELECT count(*) FROM tickets;'"
 echo ""
 echo "PgBouncer уже работает. Запуск сервисов:"
-echo "  docker compose start bot web-admin"
+echo "  docker compose start bot web-admin go-api"
