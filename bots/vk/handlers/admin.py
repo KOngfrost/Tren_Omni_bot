@@ -33,7 +33,9 @@ from bots.vk.keyboards import (
     build_admin_reply_cancel_keyboard,
     build_admin_ticket_actions_keyboard,
     build_admin_tickets_list_keyboard,
+    build_broadcast_comment_choice_keyboard,
     build_broadcast_confirm_keyboard,
+    build_broadcast_exclude_keyboard,
     build_cancel_keyboard,
     build_main_keyboard,
 )
@@ -57,7 +59,12 @@ from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import MessageAuthorType, Ticket, TicketStatus
 from core.reporting import get_app_tz
-from core.services.broadcast_service import enqueue_broadcast, get_total_users_count
+from core.services.broadcast_service import (
+    enqueue_broadcast,
+    get_recent_users,
+    get_total_users_count,
+    parse_vk_post_reference,
+)
 from core.ticket_service import (
     COMPLETED_STATUSES,
     StatusTransitionError,
@@ -579,7 +586,7 @@ async def broadcast_start_handler(message: Message):
 
     await vk_bot.state_dispenser.set(message.from_id, BroadcastStates.WAITING_COUNT)
     await message.answer(
-        "📢 Массовая рассылка сообщений\n\n"
+        "Массовая рассылка сообщений\n\n"
         f"Всего пользователей в системе: {total}\n\n"
         "Укажите число пользователей (N), которым нужно отправить сообщение:\n"
         "(например: 10, 25, 50)\n\n"
@@ -587,6 +594,137 @@ async def broadcast_start_handler(message: Message):
         "Для отмены нажмите «Отмена».",
         keyboard=build_cancel_keyboard(),
     )
+
+
+def _parse_single_attachment(att: Any) -> str | None:
+    """Извлечь wall- или photo-вложение из отдельного объекта вложения."""
+    if att is None:
+        return None
+    att_type = getattr(att, "type", None) or (att.get("type") if isinstance(att, dict) else None)
+    att_type_str = str(getattr(att_type, "value", att_type)).lower() if att_type else ""
+
+    if att_type_str == "wall":
+        wall_obj = getattr(att, "wall", None) or (
+            att.get("wall") if isinstance(att, dict) else None
+        )
+        if wall_obj is None:
+            wall_obj = att
+        owner_id = (
+            getattr(wall_obj, "owner_id", None)
+            or getattr(wall_obj, "to_id", None)
+            or (wall_obj.get("owner_id") if isinstance(wall_obj, dict) else None)
+            or (wall_obj.get("to_id") if isinstance(wall_obj, dict) else None)
+        )
+        post_id = getattr(wall_obj, "id", None) or (
+            wall_obj.get("id") if isinstance(wall_obj, dict) else None
+        )
+        if owner_id is not None and post_id is not None:
+            return f"wall{owner_id}_{post_id}"
+
+    elif att_type_str == "photo":
+        photo_obj = getattr(att, "photo", None) or (
+            att.get("photo") if isinstance(att, dict) else None
+        )
+        if photo_obj is None:
+            photo_obj = att
+        owner_id = getattr(photo_obj, "owner_id", None) or (
+            photo_obj.get("owner_id") if isinstance(photo_obj, dict) else None
+        )
+        photo_id = getattr(photo_obj, "id", None) or (
+            photo_obj.get("id") if isinstance(photo_obj, dict) else None
+        )
+        access_key = getattr(photo_obj, "access_key", None) or (
+            photo_obj.get("access_key") if isinstance(photo_obj, dict) else None
+        )
+        if owner_id is not None and photo_id is not None:
+            if access_key:
+                return f"photo{owner_id}_{photo_id}_{access_key}"
+            return f"photo{owner_id}_{photo_id}"
+
+    return None
+
+
+def _extract_from_attachment_list(attachments: Any) -> str | None:
+    """Извлечь первое подходящее вложение из списка вложений."""
+    if attachments and isinstance(attachments, list):
+        for att in attachments:
+            parsed = _parse_single_attachment(att)
+            if parsed:
+                return parsed
+    return None
+
+
+def _extract_from_submessage(submsg: Any) -> str | None:
+    """Извлечь wall- или photo-вложение из пересланного или цитируемого сообщения."""
+    if not submsg:
+        return None
+    atts = getattr(submsg, "attachments", None) or (
+        submsg.get("attachments") if isinstance(submsg, dict) else None
+    )
+    from_atts = _extract_from_attachment_list(atts)
+    if from_atts:
+        return from_atts
+
+    sub_text = getattr(submsg, "text", None) or (
+        submsg.get("text") if isinstance(submsg, dict) else None
+    )
+    if sub_text:
+        return parse_vk_post_reference(sub_text)
+    return None
+
+
+def _extract_wall_attachment(message: Message | Any) -> str | None:
+    """Извлечь идентификатор вложения (wall или photo) из сообщения, пересланных сообщений или текста."""
+    # 1. Прямые вложения сообщения
+    from_direct = _extract_from_attachment_list(getattr(message, "attachments", None))
+    if from_direct:
+        return from_direct
+
+    # 2. Пересланные сообщения (fwd_messages)
+    fwd_messages = getattr(message, "fwd_messages", None)
+    if fwd_messages and isinstance(fwd_messages, list):
+        for fwd in fwd_messages:
+            parsed = _extract_from_submessage(fwd)
+            if parsed:
+                return parsed
+
+    # 3. Ответ на сообщение (reply_message)
+    from_reply = _extract_from_submessage(getattr(message, "reply_message", None))
+    if from_reply:
+        return from_reply
+
+    # 4. Текст самого сообщения (ссылка на стену)
+    text = getattr(message, "text", None)
+    if text:
+        return parse_vk_post_reference(text)
+
+    return None
+
+
+def _format_confirm_message(
+    effective_count: int,
+    excluded_count: int,
+    attachment: str | None,
+    text: str,
+) -> str:
+    """Сформировать текст карточки подтверждения рассылки строго без эмодзи."""
+    lines = ["Подтверждение рассылки\n"]
+    if excluded_count > 0:
+        lines.append(f"Получателей: {effective_count} (исключено: {excluded_count})")
+    else:
+        lines.append(f"Получателей: {effective_count} пользователей")
+
+    if attachment:
+        lines.append(f"Прикрепленный пост: {attachment}")
+        lines.append(f"Текст: {text if text else 'без комментария'}")
+    else:
+        lines.append(f"Текст:\n«{text}»")
+
+    lines.append("")
+    lines.append("Сообщения будут добавлены в защищённую очередь Outbox и доставлены студентам.")
+    lines.append("")
+    lines.append("Подтвердить отправку?")
+    return "\n".join(lines)
 
 
 @admin_labeler.private_message(RegexRule(BROADCAST_DIRECT_PATTERN))
@@ -630,13 +768,16 @@ async def broadcast_direct_handler(message: Message):
         BroadcastStates.WAITING_CONFIRM,
         count=count,
         text=text,
+        excluded_ids=[],
+    )
+    confirm_msg = _format_confirm_message(
+        effective_count=count,
+        excluded_count=0,
+        attachment=None,
+        text=text,
     )
     await message.answer(
-        f"📢 Подтверждение рассылки\n\n"
-        f"👥 Получателей: {count} последних пользователей\n"
-        f"📝 Текст:\n«{text}»\n\n"
-        "Сообщения будут добавлены в защищённую очередь Outbox и доставлены студентам.\n\n"
-        "Подтвердить отправку?",
+        confirm_msg,
         keyboard=build_broadcast_confirm_keyboard(),
     )
 
@@ -668,22 +809,69 @@ async def broadcast_count_handler(message: Message):
         )
         return
 
-    await vk_bot.state_dispenser.set(
-        message.from_id,
-        BroadcastStates.WAITING_TEXT,
-        count=count,
-    )
-    await message.answer(
-        f"Выбрано {count} последних пользователей.\n\n"
-        "Теперь введите текст сообщения для рассылки:\n\n"
-        "Для отмены нажмите «Отмена».",
-        keyboard=build_cancel_keyboard(),
-    )
+    async with async_session_maker() as session:
+        users = await get_recent_users(session, limit=count)
+
+    if not users:
+        await message.answer(
+            "В системе пока нет пользователей для отправки сообщений.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        await vk_bot.state_dispenser.delete(message.from_id)
+        return
+
+    recipients = [
+        {
+            "id": u.id,
+            "vk_id": u.vk_id,
+            "name": u.full_name or f"id{u.vk_id}",
+        }
+        for u in users
+    ]
+
+    if count <= 10:
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_EXCLUDE,
+            count=count,
+            recipients=recipients,
+            excluded_ids=[],
+        )
+        lines = [
+            f"Выбрано пользователей: {len(recipients)}",
+        ]
+        for idx, r in enumerate(recipients, 1):
+            lines.append(f"{idx}. {r['name']} (id{r['vk_id']})")
+        lines.extend(
+            [
+                "",
+                "Чтобы исключить пользователя, нажмите кнопку ниже или введите его номер.",
+                "Для продолжения нажмите «Продолжить».",
+            ]
+        )
+        await message.answer(
+            "\n".join(lines),
+            keyboard=build_broadcast_exclude_keyboard(len(recipients), set()),
+        )
+    else:
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_TEXT,
+            count=count,
+            recipients=recipients,
+            excluded_ids=[],
+        )
+        await message.answer(
+            f"Выбрано {count} последних пользователей.\n\n"
+            "Введите текст сообщения для рассылки или перешлите пост из сообщества:\n\n"
+            "Для отмены нажмите «Отмена».",
+            keyboard=build_cancel_keyboard(),
+        )
 
 
-@admin_labeler.private_message(state=BroadcastStates.WAITING_TEXT)
-async def broadcast_text_handler(message: Message):
-    """Обработка ввода текста рассылки."""
+@admin_labeler.private_message(state=BroadcastStates.WAITING_EXCLUDE)
+async def broadcast_exclude_handler(message: Message):
+    """Обработка исключения получателей из списка рассылки."""
     touch_heartbeat()
     text = (message.text or "").strip()
     from bots.vk.bot import vk_bot
@@ -696,30 +884,258 @@ async def broadcast_text_handler(message: Message):
         )
         return
 
-    if not text:
+    state_peer = await vk_bot.state_dispenser.get(message.from_id)
+    payload = state_peer.payload if state_peer else {}
+    recipients: list[dict[str, Any]] = list(payload.get("recipients", []))
+    excluded_ids: list[int] = list(payload.get("excluded_ids", []))
+    count = int(payload.get("count", len(recipients)))
+
+    if text.lower() == "продолжить":
+        effective = [r for r in recipients if r["id"] not in excluded_ids]
+        if not effective:
+            await message.answer(
+                "Все получатели исключены. Некому отправлять рассылку. "
+                "Восстановите хотя бы одного пользователя или нажмите «Отмена».",
+                keyboard=build_broadcast_exclude_keyboard(
+                    len(recipients),
+                    {i for i, r in enumerate(recipients, 1) if r["id"] in excluded_ids},
+                ),
+            )
+            return
+
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_TEXT,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+        )
         await message.answer(
-            "Текст сообщения не может быть пустым. Введите текст или нажмите «Отмена»:",
+            "Введите текст сообщения для рассылки или перешлите пост из сообщества:\n\n"
+            "Для отмены нажмите «Отмена».",
             keyboard=build_cancel_keyboard(),
+        )
+        return
+
+    match = re.match(r"^(?:исключить|вернуть)?\s*#?(\d+)$", text, re.IGNORECASE)
+    if match:
+        idx = int(match.group(1))
+        if 1 <= idx <= len(recipients):
+            target = recipients[idx - 1]
+            target_id = target["id"]
+            if target_id in excluded_ids:
+                excluded_ids.remove(target_id)
+                prefix_msg = f"Пользователь #{idx} ({target['name']}) возвращен в список рассылки."
+            else:
+                excluded_ids.append(target_id)
+                prefix_msg = f"Пользователь #{idx} ({target['name']}) исключен из рассылки."
+
+            await vk_bot.state_dispenser.set(
+                message.from_id,
+                BroadcastStates.WAITING_EXCLUDE,
+                count=count,
+                recipients=recipients,
+                excluded_ids=excluded_ids,
+            )
+
+            excluded_indices = {i for i, r in enumerate(recipients, 1) if r["id"] in excluded_ids}
+            lines = [
+                prefix_msg,
+                "",
+                f"Выбрано пользователей: {len(recipients)} (исключено: {len(excluded_ids)})",
+            ]
+            for i, r in enumerate(recipients, 1):
+                status_str = " [Исключен]" if r["id"] in excluded_ids else ""
+                lines.append(f"{i}. {r['name']} (id{r['vk_id']}){status_str}")
+            lines.extend(
+                [
+                    "",
+                    "Чтобы исключить пользователя, нажмите кнопку ниже или введите его номер.",
+                    "Для продолжения нажмите «Продолжить».",
+                ]
+            )
+            await message.answer(
+                "\n".join(lines),
+                keyboard=build_broadcast_exclude_keyboard(len(recipients), excluded_indices),
+            )
+            return
+
+    excluded_indices = {i for i, r in enumerate(recipients, 1) if r["id"] in excluded_ids}
+    await message.answer(
+        "Пожалуйста, выберите пользователя для исключения или нажмите «Продолжить»:",
+        keyboard=build_broadcast_exclude_keyboard(len(recipients), excluded_indices),
+    )
+
+
+@admin_labeler.private_message(state=BroadcastStates.WAITING_TEXT)
+async def broadcast_text_handler(message: Message):
+    """Обработка ввода текста рассылки или пересылки поста/фото."""
+    touch_heartbeat()
+    text = (message.text or "").strip()
+    from bots.vk.bot import vk_bot
+
+    if text in COMMANDS_CANCEL:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Рассылка отменена.",
+            keyboard=build_admin_keyboard(is_super=True),
         )
         return
 
     state_peer = await vk_bot.state_dispenser.get(message.from_id)
     payload = state_peer.payload if state_peer else {}
     count = int(payload.get("count", 1))
+    recipients = list(payload.get("recipients", []))
+    excluded_ids = list(payload.get("excluded_ids", []))
+    adding_comment = bool(payload.get("adding_comment", False))
 
-    await vk_bot.state_dispenser.set(
-        message.from_id,
-        BroadcastStates.WAITING_CONFIRM,
-        count=count,
-        text=text,
-    )
+    if adding_comment:
+        if not text:
+            await message.answer(
+                "Текст комментария не может быть пустым. Введите текст комментария или нажмите «Отмена»:",
+                keyboard=build_cancel_keyboard(),
+            )
+            return
+
+        attachment = payload.get("attachment")
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_CONFIRM,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+            attachment=attachment,
+            text=text,
+        )
+        effective_count = (
+            len([r for r in recipients if r["id"] not in excluded_ids]) if recipients else count
+        )
+        msg_text = _format_confirm_message(
+            effective_count=effective_count,
+            excluded_count=len(excluded_ids),
+            attachment=attachment,
+            text=text,
+        )
+        await message.answer(
+            msg_text,
+            keyboard=build_broadcast_confirm_keyboard(),
+        )
+        return
+
+    attachment = _extract_wall_attachment(message)
+    if attachment:
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_COMMENT_CHOICE,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+            attachment=attachment,
+        )
+        await message.answer(
+            f"Прикреплен пост: {attachment}\n\nХотите добавить свой комментарий к рассылке?",
+            keyboard=build_broadcast_comment_choice_keyboard(),
+        )
+        return
+
+    if text:
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_CONFIRM,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+            attachment=None,
+            text=text,
+        )
+        effective_count = (
+            len([r for r in recipients if r["id"] not in excluded_ids]) if recipients else count
+        )
+        msg_text = _format_confirm_message(
+            effective_count=effective_count,
+            excluded_count=len(excluded_ids),
+            attachment=None,
+            text=text,
+        )
+        await message.answer(
+            msg_text,
+            keyboard=build_broadcast_confirm_keyboard(),
+        )
+        return
+
     await message.answer(
-        f"📢 Подтверждение рассылки\n\n"
-        f"👥 Получателей: {count} последних пользователей\n"
-        f"📝 Текст:\n«{text}»\n\n"
-        "Сообщения будут добавлены в защищённую очередь Outbox и доставлены студентам.\n\n"
-        "Подтвердить отправку?",
-        keyboard=build_broadcast_confirm_keyboard(),
+        "Текст сообщения не может быть пустым. Введите текст, перешлите пост или нажмите «Отмена»:",
+        keyboard=build_cancel_keyboard(),
+    )
+
+
+@admin_labeler.private_message(state=BroadcastStates.WAITING_COMMENT_CHOICE)
+async def broadcast_comment_choice_handler(message: Message):
+    """Обработка выбора добавления комментария к прикрепленному посту/фото."""
+    touch_heartbeat()
+    text = (message.text or "").strip()
+    from bots.vk.bot import vk_bot
+
+    if text in COMMANDS_CANCEL:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Рассылка отменена.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        return
+
+    state_peer = await vk_bot.state_dispenser.get(message.from_id)
+    payload = state_peer.payload if state_peer else {}
+    count = int(payload.get("count", 1))
+    recipients = list(payload.get("recipients", []))
+    excluded_ids = list(payload.get("excluded_ids", []))
+    attachment = payload.get("attachment")
+
+    normalized = text.lower()
+    if normalized == "отправить без комментария":
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_CONFIRM,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+            attachment=attachment,
+            text="",
+        )
+        effective_count = (
+            len([r for r in recipients if r["id"] not in excluded_ids]) if recipients else count
+        )
+        msg_text = _format_confirm_message(
+            effective_count=effective_count,
+            excluded_count=len(excluded_ids),
+            attachment=attachment,
+            text="",
+        )
+        await message.answer(
+            msg_text,
+            keyboard=build_broadcast_confirm_keyboard(),
+        )
+        return
+
+    if normalized == "добавить комментарий":
+        await vk_bot.state_dispenser.set(
+            message.from_id,
+            BroadcastStates.WAITING_TEXT,
+            count=count,
+            recipients=recipients,
+            excluded_ids=excluded_ids,
+            attachment=attachment,
+            adding_comment=True,
+        )
+        await message.answer(
+            "Введите текст комментария к посту:\n\nДля отмены нажмите «Отмена».",
+            keyboard=build_cancel_keyboard(),
+        )
+        return
+
+    await message.answer(
+        "Пожалуйста, выберите действие кнопками ниже или нажмите «Отмена»:",
+        keyboard=build_broadcast_comment_choice_keyboard(),
     )
 
 
@@ -749,6 +1165,8 @@ async def broadcast_confirm_handler(message: Message):
     payload = state_peer.payload if state_peer else {}
     count = int(payload.get("count", 1))
     broadcast_text = str(payload.get("text", ""))
+    attachment = payload.get("attachment")
+    excluded_ids = list(payload.get("excluded_ids", []))
 
     await vk_bot.state_dispenser.delete(message.from_id)
 
@@ -757,20 +1175,22 @@ async def broadcast_confirm_handler(message: Message):
             session=session,
             text=broadcast_text,
             count=count,
+            excluded_user_ids=excluded_ids if excluded_ids else None,
+            attachment=attachment,
             author_name=f"vk_admin_{message.from_id}",
             actor_type="bot",
         )
 
     if result.status == "success":
         await message.answer(
-            f"✅ Рассылка успешно запущена!\n\n"
+            f"Рассылка успешно запущена.\n\n"
             f"Поставлено в очередь отправки: {result.recipients_count} пользователей.\n"
             f"Сообщения доставляются адресатам через фоновый воркер.",
             keyboard=build_admin_keyboard(is_super=True),
         )
     else:
         await message.answer(
-            f"❌ Ошибка при отправке рассылки: {result.error}",
+            f"Ошибка при отправке рассылки: {result.error}",
             keyboard=build_admin_keyboard(is_super=True),
         )
 

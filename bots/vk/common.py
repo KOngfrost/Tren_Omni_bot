@@ -47,7 +47,9 @@ class BroadcastStates(BaseStateGroup):
     """FSM StateGroup для рассылки сообщений суперадминистратором."""
 
     WAITING_COUNT = "broadcast_waiting_count"
+    WAITING_EXCLUDE = "broadcast_waiting_exclude"
     WAITING_TEXT = "broadcast_waiting_text"
+    WAITING_COMMENT_CHOICE = "broadcast_waiting_comment_choice"
     WAITING_CONFIRM = "broadcast_waiting_confirm"
 
 

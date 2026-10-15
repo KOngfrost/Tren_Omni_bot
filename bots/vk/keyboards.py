@@ -86,6 +86,43 @@ def build_admin_keyboard(is_super: bool = False) -> str:
     return _format_keyboard(rows, one_time=False)
 
 
+def build_broadcast_exclude_keyboard(
+    candidates_count: int,
+    excluded_indices: set[int] | list[int] | None = None,
+) -> str:
+    """Клавиатура исключения получателей перед рассылкой.
+
+    Кнопки: [Исключить #N] (или [Вернуть #N]), [Продолжить], [Отмена].
+    Все кнопки строго без эмодзи.
+    """
+    excluded_set = set(excluded_indices or [])
+    buttons: list[tuple[str, str]] = []
+    for i in range(1, candidates_count + 1):
+        if i in excluded_set or (i - 1) in excluded_set:
+            buttons.append((f"Вернуть #{i}", "secondary"))
+        else:
+            buttons.append((f"Исключить #{i}", "secondary"))
+    chunk_size = 3 if candidates_count > 4 else 2
+    rows = _chunk_buttons(buttons, chunk_size)
+    rows.append([("Продолжить", "positive")])
+    rows.append([("Отмена", "negative")])
+    return _format_keyboard(rows, one_time=True)
+
+
+def build_broadcast_comment_choice_keyboard() -> str:
+    """Клавиатура выбора добавления комментария к прикрепленному посту/фото.
+
+    Кнопки: [Добавить комментарий], [Отправить без комментария], [Отмена].
+    Все кнопки строго без эмодзи.
+    """
+    rows: list[list[tuple[str, str]]] = [
+        [("Добавить комментарий", "secondary")],
+        [("Отправить без комментария", "secondary")],
+        [("Отмена", "negative")],
+    ]
+    return _format_keyboard(rows, one_time=True)
+
+
 def build_broadcast_confirm_keyboard() -> str:
     """Клавиатура подтверждения отправки рассылки."""
     rows: list[list[tuple[str, str]]] = [

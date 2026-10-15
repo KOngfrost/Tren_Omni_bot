@@ -56,14 +56,23 @@ def fire_outbox_delivery() -> None:
     task.add_done_callback(_delivery_tasks.discard)
 
 
-def add_outbox_message(session, vk_id: int, text: str, random_id: int | None = None) -> VkOutbox:
+def add_outbox_message(
+    session,
+    vk_id: int,
+    text: str,
+    random_id: int | None = None,
+    attachment: str | None = None,
+    forward: str | None = None,
+) -> VkOutbox:
     """Добавить сообщение в outbox в текущей транзакции (без commit)."""
     entry = VkOutbox(
         vk_id=vk_id,
-        text=text,
+        text=text or "",
         status="pending",
         attempts=0,
         random_id=random_id,
+        attachment=attachment,
+        forward=forward,
     )
     session.add(entry)
     return entry
@@ -142,16 +151,33 @@ def _handle_single_result(
 
 
 async def _send_batch_messages(
-    to_send: list[tuple[int, int, str, int]],
+    to_send: (
+        list[tuple[int, int, str, int, str | None, str | None]] | list[tuple[int, int, str, int]]
+    ),
 ) -> list[tuple[int, int, bool, str | None]]:
     """Выполнить отправку сообщений пачки через VK API."""
     results: list[tuple[int, int, bool, str | None]] = []
-    for msg_id, vk_id, text, stable_random_id in to_send:
+    for item in to_send:
+        if len(item) >= 6:
+            msg_id, vk_id, text, stable_random_id, attachment, forward = item[:6]
+        else:
+            msg_id, vk_id, text, stable_random_id = item[:4]
+            attachment, forward = None, None
+
         try:
             try:
-                ok = await send_vk_message(vk_id, text, random_id=stable_random_id)
+                ok = await send_vk_message(
+                    vk_id,
+                    text,
+                    random_id=stable_random_id,
+                    attachment=attachment,
+                    forward=forward,
+                )
             except TypeError:
-                ok = await send_vk_message(vk_id, text)
+                try:
+                    ok = await send_vk_message(vk_id, text, random_id=stable_random_id)
+                except TypeError:
+                    ok = await send_vk_message(vk_id, text)
             err = None if ok else "VK API вернул статус неуспешной отправки"
         except Exception as e:
             logger.exception(
@@ -200,15 +226,24 @@ async def deliver_pending_messages(
         )
         pending = (await session.scalars(pending_query)).all()
 
-        to_send: list[tuple[int, int, str, int]] = []
+        to_send: list[tuple[int, int, str, int, str | None, str | None]] = []
         for message in pending:
-            if message.id is not None and message.vk_id is not None and message.text is not None:
+            if message.id is not None and message.vk_id is not None:
                 message.status = "sending"
                 message.claimed_at = now
                 stable_random_id = message.random_id or ((int(message.id) & 0x7FFFFFFF) or 1)
                 if message.random_id is None:
                     message.random_id = stable_random_id
-                to_send.append((message.id, message.vk_id, message.text, stable_random_id))
+                to_send.append(
+                    (
+                        message.id,
+                        message.vk_id,
+                        message.text or "",
+                        stable_random_id,
+                        message.attachment,
+                        message.forward,
+                    )
+                )
         await session.commit()
 
     if not to_send:

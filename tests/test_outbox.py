@@ -301,3 +301,114 @@ async def test_outbox_exponential_backoff(db_session_maker, monkeypatch):
     # Немедленный второй запуск — должен пропустить сообщение из-за backoff (next_retry_at в будущем)
     await deliver_pending_messages()
     assert send_count == 1  # Отправка не вызывалась повторно!
+
+
+async def test_deliver_with_attachment_and_forward(db_session_maker, monkeypatch):
+    """Доставка сообщения с прикрепленным постом/фотографией и forward-данными."""
+    async with db_session_maker() as session:
+        entry = add_outbox_message(
+            session,
+            vk_id=999,
+            text="Смотрите запись сообщества",
+            attachment="wall-207038317_555",
+            forward='{"peer_id": 100, "conversation_message_ids": [1]}',
+        )
+        await session.commit()
+        msg_id = entry.id
+
+    captured = {}
+
+    async def _mock_send(vk_id, text="", random_id=None, attachment=None, forward=None):
+        captured["vk_id"] = vk_id
+        captured["text"] = text
+        captured["random_id"] = random_id
+        captured["attachment"] = attachment
+        captured["forward"] = forward
+        return True
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _mock_send)
+
+    delivered = await deliver_pending_messages()
+    assert delivered == 1
+    assert captured["vk_id"] == 999
+    assert captured["text"] == "Смотрите запись сообщества"
+    assert captured["attachment"] == "wall-207038317_555"
+    assert captured["forward"] == '{"peer_id": 100, "conversation_message_ids": [1]}'
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "sent"
+        assert msg.attachment == "wall-207038317_555"
+        assert msg.forward == '{"peer_id": 100, "conversation_message_ids": [1]}'
+
+
+async def test_deliver_attachment_only_no_text(db_session_maker, monkeypatch):
+    """Доставка сообщения, содержащего только вложение без текста."""
+    async with db_session_maker() as session:
+        entry = add_outbox_message(
+            session,
+            vk_id=1001,
+            text="",
+            attachment="photo-207038317_99999",
+        )
+        await session.commit()
+        msg_id = entry.id
+
+    called = []
+
+    async def _mock_send(vk_id, text="", random_id=None, attachment=None, forward=None):
+        called.append((vk_id, text, attachment))
+        return True
+
+    monkeypatch.setattr("core.outbox.send_vk_message", _mock_send)
+
+    delivered = await deliver_pending_messages()
+    assert delivered == 1
+    assert len(called) == 1
+    assert called[0] == (1001, "", "photo-207038317_99999")
+
+    async with db_session_maker() as session:
+        msg = await session.get(VkOutbox, msg_id)
+        assert msg is not None
+        assert msg.status == "sent"
+
+
+async def test_send_vk_message_payload(monkeypatch):
+    """Проверка формирования payload в send_vk_message."""
+    from core.config import settings
+    from core.vk_client import send_vk_message
+
+    monkeypatch.setattr(settings, "VK_BOT_TOKEN", "valid_token")
+
+    # 1. Если все поля пусты — отправка отклоняется
+    ok_empty = await send_vk_message(vk_id=123, text="", attachment=None, forward=None)
+    assert ok_empty is False
+
+    # 2. Успешная отправка только вложения
+    posted_payload = {}
+
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"response": 12345}
+
+    class MockClient:
+        async def post(self, url, data=None, **kwargs):
+            nonlocal posted_payload
+            posted_payload = data or {}
+            return MockResponse()
+
+    monkeypatch.setattr("core.vk_client.get_vk_client", lambda: MockClient())
+
+    ok_attach = await send_vk_message(
+        vk_id=456,
+        text="",
+        attachment="wall-123_456",
+    )
+    assert ok_attach is True
+    assert posted_payload.get("attachment") == "wall-123_456"
+    assert "message" not in posted_payload
+    assert posted_payload.get("peer_id") == 456
