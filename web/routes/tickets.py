@@ -249,7 +249,9 @@ async def tickets_page(
     )
 
 
-async def _load_ticket_for_user(ticket_id: int, user: dict) -> Ticket:
+async def _load_ticket_for_user(
+    ticket_id: int, user: dict, request: Request | None = None
+) -> Ticket:
     """Загрузить заявку с проверкой IDOR-прав (404/403)."""
     async with async_session_maker() as session:
         is_super, dept_id = await get_admin_scope(session, user)
@@ -266,6 +268,38 @@ async def _load_ticket_for_user(ticket_id: int, user: dict) -> Ticket:
         and ticket.department_id is not None
         and (dept_id is None or ticket.department_id != dept_id)
     ):
+        ip = "unknown"
+        if request:
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                ip = forwarded.split(",")[0].strip()
+            elif request.client:
+                ip = request.client.host
+
+        username = user.get("username", "unknown")
+        logger.warning(
+            "IDOR ACCESS DENIED: user=%s (dept=%s) requested ticket #%s (dept=%s) from IP %s",
+            username,
+            dept_id,
+            ticket.id,
+            ticket.department_id,
+            ip,
+        )
+        from core.security_alerts import send_security_alert
+
+        await send_security_alert(
+            event_type="idor_attempt",
+            title="Попытка доступа к чужой заявке (IDOR)",
+            details={
+                "ip": ip,
+                "username": username,
+                "path": f"/tickets/{ticket_id}",
+                "reason": (
+                    f"Администратор (отдел id={dept_id}) запросил заявку #{ticket.id} "
+                    f"другого отдела (id={ticket.department_id})"
+                ),
+            },
+        )
         raise HTTPException(status_code=403, detail="Нет прав для работы с этой заявкой")
     return ticket
 
@@ -280,9 +314,9 @@ async def _get_ticket(ticket_id: int) -> Ticket | None:
 
 
 @router.get("/{ticket_id}")
-async def get_ticket(ticket_id: int, user: dict = Depends(require_auth)):
+async def get_ticket(ticket_id: int, request: Request, user: dict = Depends(require_auth)):
     """Данные заявки для модального окна (JSON) с проверкой прав + история."""
-    ticket = await _load_ticket_for_user(ticket_id, user)
+    ticket = await _load_ticket_for_user(ticket_id, user, request=request)
 
     try:
         messages: list = await get_ticket_messages(ticket_id)
@@ -373,7 +407,7 @@ async def reply_ticket(ticket_id: int, request: Request, user: dict = Depends(re
     if not message:
         raise HTTPException(status_code=400, detail="Текст ответа не может быть пустым")
 
-    await _load_ticket_for_user(ticket_id, user)
+    await _load_ticket_for_user(ticket_id, user, request=request)
 
     admin_username = user.get("username", "unknown")
     ticket, vk_sent = await reply_to_ticket(
@@ -435,7 +469,7 @@ async def set_ticket_status(
     if new_status is None:
         raise HTTPException(status_code=400, detail="Неизвестный статус")
 
-    await _load_ticket_for_user(ticket_id, user)
+    await _load_ticket_for_user(ticket_id, user, request=request)
 
     try:
         ticket = await change_ticket_status(
@@ -473,7 +507,7 @@ async def assign_ticket(
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Некорректный отдел") from None
 
-    await _load_ticket_for_user(ticket_id, user)
+    await _load_ticket_for_user(ticket_id, user, request=request)
 
     ticket = await assign_ticket_department(
         ticket_id=ticket_id,

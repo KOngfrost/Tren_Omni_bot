@@ -13,11 +13,28 @@
     }
 }
 
+# Перманентный бан выявленных атакующих сканеров (PHPUnit RCE и GCP credential scraper)
+(banned_ips) {
+    @banned_remote_ips {
+        client_ip 159.89.160.109 35.219.250.1
+    }
+    abort @banned_remote_ips
+}
+
+# Дроп запросов без валидного доменного имени (прямой доступ по IP-адресу)
+(enforce_host) {
+    @invalid_host {
+        not host {$DOMAIN:localhost}
+    }
+    abort @invalid_host
+}
+
 # Web Application Firewall (WAF) правила фильтрации вредоносных запросов
 (waf_filter) {
-    # 1. Блокировка попыток зондирования служебных файлов и панелей управления
+    # 1. Блокировка попыток зондирования служебных файлов, RCE и панелей управления
     @blocked_probes {
-        path /.git* /.env* /.aws* /.svn* /.htaccess* /wp-admin* /wp-login* /phpmyadmin* /actuator* /boaform* /shell* /admin.php* /config*
+        path /.git* /.env* /.aws* /.svn* /.htaccess* /wp-admin* /wp-login* /phpmyadmin* /actuator* /boaform* /shell* /admin.php* /config* /vendor/phpunit* /eval* /phpinfo* /debug* /webroot* /firebase* /gcp* /credentials*
+        path_regexp "(?i)(\.php|\.env|\.git|\.svn|eval-stdin|laravel-filemanager)"
     }
     respond @blocked_probes 404
 
@@ -99,6 +116,8 @@
 # Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом)
 {$DOMAIN:localhost} {
     import security_headers
+    import banned_ips
+    import enforce_host
     import waf_filter
     import common_proxy
 }

@@ -14,6 +14,27 @@ logger = logging.getLogger(__name__)
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_WINDOW_SECONDS = 15 * 60
 
+# Минутный лимит частоты запросов к форме входа (не более 5 в минуту с одного IP)
+LOGIN_VELOCITY_MAX_ATTEMPTS = 5
+LOGIN_VELOCITY_WINDOW_SECONDS = 60
+
+
+async def record_login_request_velocity(ip: str) -> int:
+    """Зафиксировать обращение к форме входа в минутом окне."""
+    try:
+        from core.redis_client import get_redis_client
+
+        redis = await get_redis_client()
+        if redis:
+            key = f"login_vel:{ip}"
+            val = await redis.incr(key)
+            if val == 1:
+                await redis.expire(key, LOGIN_VELOCITY_WINDOW_SECONDS)
+            return int(val)
+    except Exception:
+        pass
+    return 1
+
 
 async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
     """Подсчитать неудачные попытки в БД с Redis fallback при ошибке."""
@@ -45,19 +66,38 @@ async def _db_recent_failed_count(session: AsyncSession, ip: str) -> int:
 
 
 async def is_rate_limited(session: AsyncSession, ip: str) -> bool:
-    """Проверить, превышен ли лимит неудачных попыток для IP."""
+    """Проверить, превышен ли лимит неудачных попыток для IP (15 минут) или минутный флуд."""
+    # 1. Проверяем минутный всплеск (скорость обращений)
+    try:
+        from core.redis_client import get_redis_client
+
+        redis = await get_redis_client()
+        if redis:
+            vel = await redis.get(f"login_vel:{ip}")
+            if vel and int(vel) > LOGIN_VELOCITY_MAX_ATTEMPTS:
+                return True
+    except Exception:
+        pass
+
+    # 2. Проверяем блокировку по неудачным попыткам
     return await _db_recent_failed_count(session, ip) >= LOGIN_MAX_ATTEMPTS
 
 
-async def record_failed_attempt(ip: str) -> None:
-    """Записать неудачную попытку в Redis и БД."""
+async def get_failed_attempts_count(session: AsyncSession, ip: str) -> int:
+    """Получить количество недавних неудачных попыток для IP."""
+    return await _db_recent_failed_count(session, ip)
+
+
+async def record_failed_attempt(ip: str) -> int:
+    """Записать неудачную попытку в Redis и БД. Возвращает текущее число неудач."""
+    current_count = 1
     try:
         from core.redis_client import get_redis_client
 
         redis = await get_redis_client()
         if redis:
             key = f"failed_login_count:{ip}"
-            await redis.incr(key)
+            current_count = int(await redis.incr(key))
             await redis.expire(key, LOGIN_WINDOW_SECONDS)
     except Exception:
         pass
@@ -69,6 +109,8 @@ async def record_failed_attempt(ip: str) -> None:
     except Exception:
         logger.warning("Rate-limit: не удалось записать попытку входа в БД")
 
+    return current_count
+
 
 async def clear_attempts(ip: str) -> None:
     """Сбросить лимит после успешного входа."""
@@ -78,6 +120,7 @@ async def clear_attempts(ip: str) -> None:
         redis = await get_redis_client()
         if redis:
             await redis.delete(f"failed_login_count:{ip}")
+            await redis.delete(f"login_vel:{ip}")
     except Exception:
         pass
 
