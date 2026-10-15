@@ -149,7 +149,7 @@ def load_catalog(locale: str) -> gettext_module.NullTranslations:
             domain=domain,
             languages=[code],
             localedir=str(translations_dir()),
-            fallback=None,
+            fallback=False,
         )
     except (OSError, Exception) as exc:
         logger.warning("Не удалось загрузить каталог локализации для '%s': %s", code, exc)

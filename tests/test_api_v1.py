@@ -147,3 +147,56 @@ async def test_prometheus_metrics_endpoint():
         assert (
             "http_requests" in res.text or "process_cpu" in res.text or "python_info" in res.text
         )
+
+
+def _build_telegram_init_data(bot_token: str, auth_date: int, user_json: str) -> str:
+    import hashlib
+    import hmac
+    from urllib.parse import quote
+
+    vals = {
+        "auth_date": str(auth_date),
+        "user": user_json,
+    }
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(vals.items()))
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return f"auth_date={auth_date}&user={quote(user_json)}&hash={computed_hash}"
+
+
+def test_telegram_init_data_replay_attack_rejected():
+    """Telegram initData старше 24 часов должно отклоняться с 401 'Init data expired'."""
+    import time
+
+    from fastapi import HTTPException
+
+    from web.routes.api_v1 import _validate_telegram_init_data
+
+    bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    # auth_date 2 дня назад (> 86400 секунд)
+    expired_time = int(time.time()) - 100000
+    expired_init_data = _build_telegram_init_data(
+        bot_token, expired_time, '{"id": 999, "first_name": "Test"}'
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_telegram_init_data(expired_init_data, bot_token)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Init data expired"
+
+
+def test_telegram_init_data_fresh_accepted():
+    """Свежие Telegram initData должны успешно проходить валидацию."""
+    import time
+
+    from web.routes.api_v1 import _validate_telegram_init_data
+
+    bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    fresh_time = int(time.time()) - 30
+    fresh_init_data = _build_telegram_init_data(
+        bot_token, fresh_time, '{"id": 999, "first_name": "Test"}'
+    )
+
+    validated = _validate_telegram_init_data(fresh_init_data, bot_token)
+    assert validated is not None
+    assert int(validated["auth_date"]) == fresh_time

@@ -17,6 +17,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
@@ -76,6 +77,16 @@ func main() {
 
 	// Маршруты API v1
 	api := app.Group("/api/v1")
+	// Ограничение частоты запросов для защиты от DoS и спама (120 запросов в минуту)
+	api.Use(limiter.New(limiter.Config{
+		Max:        120,
+		Expiration: 1 * time.Minute,
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"detail": "Превышен лимит запросов. Пожалуйста, повторите позже.",
+			})
+		},
+	}))
 	// SEC-02: проверка X-CSRF-Token на всех POST/PUT/DELETE/PATCH
 	// эндпоинтах (double-submit cookie), генерация токена на безопасных методах.
 	api.Use(handlers.CSRFProtect())
@@ -108,11 +119,27 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Println("Получен сигнал завершения работы, мягкая остановка Go Fiber...")
-		_ = app.ShutdownWithTimeout(5 * time.Second)
+		if err := app.ShutdownWithTimeout(5 * time.Second); err != nil {
+			log.Printf("Ошибка при мягкой остановке Fiber: %v", err)
+		}
 	}()
 
 	log.Printf("🚀 Высокоскоростной Go Fiber сервер запущен на порту %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {
-		log.Fatalf("Ошибка работы сервера: %v", err)
+		log.Printf("Сервер Go Fiber остановлен: %v", err)
 	}
+
+	log.Println("Освобождение системных ресурсов...")
+	if database.Pool != nil {
+		database.Pool.Close()
+		log.Println("Пул соединений PostgreSQL (database.Pool) успешно закрыт.")
+	}
+	if appRedis.Client != nil {
+		if err := appRedis.Client.Close(); err != nil {
+			log.Printf("Ошибка при закрытии клиента Redis: %v", err)
+		} else {
+			log.Println("Клиент Redis (appRedis.Client) успешно закрыт.")
+		}
+	}
+	log.Println("Go Fiber сервер полностью завершил работу.")
 }

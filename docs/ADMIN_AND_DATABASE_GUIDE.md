@@ -1,4 +1,4 @@
-# 🛠️ Руководство администратора БД и системной безопасности (v0.8.9.1)
+# 🛠️ Руководство администратора БД и системной безопасности (v0.9.1)
 
 > **Для кого:** Системные администраторы, DevOps и инженеры баз данных.  
 > **Окружение:** PostgreSQL 16, PgBouncer (6432), Redis 7, Caddy 2 WAF/TLS.
@@ -134,8 +134,8 @@ docker compose exec bot python -m alembic revision --autogenerate -m "add_new_co
 # Восстановление из выбранного архива
 ./scripts/restore.sh /var/backups/oss_bot/oss_bot_2026-09-26.sql.gz
 
-# Перезапуск сервисов после восстановления
-docker compose restart bot web-admin
+# Запуск сервисов после восстановления
+docker compose start bot web-admin go-api
 ```
 
 ---

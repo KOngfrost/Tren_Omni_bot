@@ -1,4 +1,4 @@
-# 🚀 Руководство по установке и эксплуатации OSS Bot (v0.8.9.1)
+# 🚀 Руководство по установке и эксплуатации OSS Bot (v0.9.1)
 
 > **Для кого этот документ:** Системные администраторы, DevOps-инженеры и разработчики.  
 > **Цель:** Развернуть проект с нуля на чистом сервере Linux за 10–15 минут и обеспечить надёжную эксплуатацию.
@@ -91,13 +91,16 @@ chmod 600 .env
 | `APP_ENV` | Окружение | `production` |
 | `DOMAIN` | Ваш публичный домен | `your-domain.duckdns.org` |
 | `VK_BOT_TOKEN` | Токен доступа сообщества ВК | Строка вида `vk1.a.XXXX...` |
-| `VK_GROUP_ID` | ID сообщества ВКонтакте | Цифровой ID группы |
+| `VK_GROUP_URL` | Ссылка на сообщество ВКонтакте | `https://vk.com/your_community` |
+| `POSTGRES_USER` | Пользователь базы данных | `oss_bot` (уникальное имя) |
 | `POSTGRES_PASSWORD` | Пароль базы данных | Сгенерируйте надёжный пароль (от 16 символов) |
-| `SECRET_KEY` | Секретный ключ подписи сессий | Сгенерируйте командой: `openssl rand -hex 32` |
+| `POSTGRES_DB` | Имя базы данных | `oss_bot` |
+| `SECRET_KEY` (или `SESSION_SECRET_KEY`) | Секретный ключ подписи сессий | Сгенерируйте: `openssl rand -hex 32` |
+| `WEB_ADMIN_USERNAME` | Логин начального суперадмина | Например, `admin` |
 | `WEB_ADMIN_PASSWORD` | Пароль начального суперадмина | Минимум 12 символов, без шаблонных слов |
 | `TWO_FACTOR_ENABLED` | Двухфакторная авторизация | `true` (рекомендуется) |
-| `TG_MONITOR_BOT_TOKEN` | Токен Telegram-бота инженера | Получите у `@BotFather` |
-| `TG_MONITOR_CHAT_ID` | Telegram ID инженера для алертов | Ваш цифровой ID Telegram |
+| `TG_MONITOR_BOT_TOKEN` (или `TELEGRAM_BOT_TOKEN`) | Токен Telegram-бота инженера | Получите у `@BotFather` |
+| `TG_MONITOR_CHAT_ID` (или `TELEGRAM_ADMIN_ID`) | Telegram ID инженера для алертов | Ваш цифровой ID Telegram |
 
 > [!IMPORTANT]
 > **Startup Guard**: если `APP_ENV=production`, приложение откажется запускаться с дефолтными паролями (`admin123`, `changeme`, `secret` и т.д.) или паролями короче 12 символов.
@@ -126,13 +129,14 @@ docker compose ps
 - `oss_bot_caddy` — обратный прокси и TLS-шлюз;
 - `oss_bot_web` — веб-панель управления на FastAPI;
 - `oss_bot_app` — бот ВКонтакте;
-- `oss_bot_go_api` — высоконагруженный API на Go;
+- `oss_bot_go_api` — высокопроизводительный REST API на Go;
 - `oss_bot_db` — СУБД PostgreSQL 16 (изолирована в приватной сети `data_net`);
 - `oss_bot_pgbouncer` — пул соединений (мост между `backend_net` и `data_net`);
 - `oss_bot_redis` — кэш, распределённые сессии, замки и 2FA (`backend_net`);
+- `oss_bot_redis_exporter` — экспортёр метрик Redis для Prometheus (`backend_net`);
 - `oss_bot_docker_proxy` — безопасный read-only прокси Docker Socket (`socket_net`);
 - `oss_bot_tg_monitor` — бот мониторинга состояния (`backend_net` + `socket_net`);
-- `oss_bot_go_api` — высокоскоростной API-шлюз для запросов (`frontend_net` + `backend_net`).
+- `oss_bot_prometheus` — мониторинг метрик и алерты (`backend_net`).
 
 > [!NOTE]
 > **Сетевая сегментация (INFRA-001)**: Внешний шлюз Caddy физически не имеет доступа к базам данных (Postgres, Redis) или сокету Docker Engine. Все сервисы разнесены по четырём изолированным подсетям.
@@ -180,12 +184,14 @@ docker compose exec bot python scripts/init_superadmin.py \
 | Просмотр состояния контейнеров | `docker compose ps` |
 | Просмотр логов веб-панели | `docker compose logs -f --tail=100 web-admin` |
 | Просмотр логов VK-бота | `docker compose logs -f --tail=100 bot` |
+| Просмотр логов Go API | `docker compose logs -f --tail=100 go-api` |
 | Просмотр логов сетевого шлюза Caddy | `docker compose logs -f --tail=50 caddy` |
+| Просмотр логов мониторинга | `docker compose logs -f --tail=50 tg-monitor` |
 | Перезапуск одного сервиса | `docker compose restart web-admin` |
 | Полная остановка системы | `docker compose down` |
 | Запуск после остановки | `docker compose up -d` |
 | Проверка связи с Redis | `docker compose exec redis redis-cli ping` (ответ `PONG`) |
-| Подключение к консоли PostgreSQL | `docker compose exec db psql -U student_user -d student_db` |
+| Подключение к консоли PostgreSQL | `docker compose exec db psql -U ${POSTGRES_USER:-oss_bot} -d ${POSTGRES_DB:-oss_bot}` |
 
 ---
 
@@ -207,7 +213,7 @@ chmod +x scripts/backup.sh
 ### Восстановление из бэкапа
 ```bash
 ./scripts/restore.sh /var/backups/oss_bot/oss_bot_2026-09-26.sql.gz
-docker compose restart bot web-admin
+docker compose start bot web-admin go-api
 ```
 
 ---
@@ -244,7 +250,7 @@ curl -s http://127.0.0.1:8000/health
 - **Причина**: Сработал `DBRateLimiter` после 5 неверных попыток ввода пароля с вашего IP.
 - **Решение**: Подождите 15 минут или очистите историю попыток в базе:
   ```bash
-  docker compose exec db psql -U student_user -d student_db -c "DELETE FROM login_attempts;"
+  docker compose exec db psql -U ${POSTGRES_USER:-oss_bot} -d ${POSTGRES_DB:-oss_bot} -c "DELETE FROM login_attempts;"
   ```
 
 ### 3. Не приходит код 2FA в личные сообщения ВК

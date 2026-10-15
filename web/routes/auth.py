@@ -335,16 +335,24 @@ async def _authenticate_bootstrap(
 
 
 def _is_temporary_web_user(web_user: WebUser) -> bool:
-    """Временная / QA-учётная запись, для которой 2FA неприменима.
+    """Временная / QA-учётная запись, для которой 2FA неприменима в тестовом окружении.
 
-    Такие записи создаются из панели без привязки к VK-администратору
-    (см. ``web/routes/admin_panel.py``): код подтверждения доставлять некуда.
-    Отличаем их по ограниченному сроку жизни либо по служебному префиксу
-    логина (``qa_`` / ``test_`` / ``temp_``).
+    В production (settings.APP_ENV == "production" или когда not settings.TESTING)
+    2FA НИКОГДА не обходится исключительно по префиксу логина или expires_at!
+    Байпас разрешён только в тестовом режиме (settings.TESTING или APP_ENV != "production"),
+    при этом в production байпас категорически запрещён.
     """
+    if settings.APP_ENV == "production" or not getattr(settings, "TESTING", False):
+        return False
+    if not (getattr(settings, "TESTING", False) or settings.APP_ENV != "production"):
+        return False
+
     if web_user.expires_at is not None:
         return True
-    return web_user.username.lower().startswith(("qa_", "test_", "temp_"))
+    username = web_user.username.lower()
+    return username.startswith(("qa_", "test_", "temp_")) or (
+        web_user.admin is None and "qa" in username
+    )
 
 
 async def _authenticate(

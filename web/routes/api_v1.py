@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import secrets
+import time
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -74,22 +75,31 @@ class TelegramAuthRequest(BaseModel):
 
 
 def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, str] | None:
-    """Проверить HMAC-SHA256 подпись Telegram WebApp initData."""
+    """Проверить HMAC-SHA256 подпись Telegram WebApp initData и срок действия (защита от replay-атак)."""
     try:
-        parsed = dict(parse_qsl(init_data, strict_parsing=True))
-        if "hash" not in parsed:
+        vals = dict(parse_qsl(init_data, strict_parsing=True))
+        if "hash" not in vals:
             return None
-        received_hash = parsed.pop("hash")
-        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
+        received_hash = vals.pop("hash")
+        data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(vals.items()))
         secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
         computed_hash = hmac.new(
             secret_key, data_check_string.encode(), hashlib.sha256
         ).hexdigest()
         if not secrets.compare_digest(received_hash, computed_hash):
             return None
-        return parsed
     except Exception:
         return None
+
+    try:
+        auth_date = int(vals.get("auth_date", 0))
+    except (ValueError, TypeError):
+        auth_date = 0
+
+    if time.time() - auth_date > 86400:
+        raise HTTPException(status_code=401, detail="Init data expired")
+
+    return vals
 
 
 # === Аутентификация API ===
@@ -571,7 +581,7 @@ async def v1_get_stats(user=Depends(require_auth)) -> SystemStatsResponse:
         return SystemStatsResponse(**cached)
 
     async with async_session_maker() as session:
-        ticket_filter = []
+        ticket_filter: list[Any] = []
         if not is_super:
             if dept_id is None:
                 ticket_filter = [Ticket.department_id.is_(None)]

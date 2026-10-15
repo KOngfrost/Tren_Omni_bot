@@ -173,3 +173,23 @@ def test_production_rejects_wildcard_cors():
 def test_production_requires_vk_callback_secret():
     with pytest.raises(RuntimeError, match="VK_CALLBACK_SECRET"):
         _production_settings(VK_CALLBACK_SECRET="").validate_required()
+
+
+def test_config_aliases_secret_key_and_tg_monitor(monkeypatch):
+    from core.config import Settings
+
+    monkeypatch.delenv("SESSION_SECRET_KEY", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_ADMIN_ID", raising=False)
+
+    monkeypatch.setenv("SECRET_KEY", "super_secret_session_key_32_bytes_long_123")
+    monkeypatch.setenv("TG_MONITOR_BOT_TOKEN", "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11")
+    monkeypatch.setenv("TG_MONITOR_CHAT_ID", "987654321")
+
+    fresh = Settings(_env_file=None)
+    assert fresh.SESSION_SECRET_KEY == "super_secret_session_key_32_bytes_long_123"
+    assert fresh.SECRET_KEY == "super_secret_session_key_32_bytes_long_123"
+    assert fresh.TELEGRAM_BOT_TOKEN == "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    assert fresh.TG_MONITOR_BOT_TOKEN == "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    assert fresh.TELEGRAM_ADMIN_ID == 987654321
+    assert fresh.TG_MONITOR_CHAT_ID == 987654321

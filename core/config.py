@@ -77,6 +77,7 @@ class Settings(BaseSettings):
 
     # === Окружение ===
     APP_ENV: str = "development"
+    TESTING: bool = False
     dev_environments: set[str] = {"", "development", "dev", "test", "testing", "local"}
 
     @property
@@ -148,7 +149,14 @@ class Settings(BaseSettings):
         return "https://vk.com"
 
     # Security & Web Admin
-    SESSION_SECRET_KEY: str = ""
+    SESSION_SECRET_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("SESSION_SECRET_KEY", "SECRET_KEY"),
+    )
+
+    @property
+    def SECRET_KEY(self) -> str:
+        return self.SESSION_SECRET_KEY
 
     @property
     def session_secret_key(self) -> str:
@@ -231,8 +239,23 @@ class Settings(BaseSettings):
     ACME_EMAIL: str = ""
 
     # Telegram Monitoring Bot (для оповещения и управления главным администратором)
-    TELEGRAM_BOT_TOKEN: str = ""
-    TELEGRAM_ADMIN_ID: int = 0
+    TELEGRAM_BOT_TOKEN: str = Field(
+        default="",
+        validation_alias=AliasChoices("TELEGRAM_BOT_TOKEN", "TG_MONITOR_BOT_TOKEN"),
+    )
+    TELEGRAM_ADMIN_ID: int = Field(
+        default=0,
+        validation_alias=AliasChoices("TELEGRAM_ADMIN_ID", "TG_MONITOR_CHAT_ID"),
+    )
+
+    @property
+    def TG_MONITOR_BOT_TOKEN(self) -> str:
+        return self.TELEGRAM_BOT_TOKEN
+
+    @property
+    def TG_MONITOR_CHAT_ID(self) -> int:
+        return self.TELEGRAM_ADMIN_ID
+
     TELEGRAM_ALERTS_ENABLED: bool = True
     TELEGRAM_CHECK_INTERVAL_SECONDS: int = 30
     TELEGRAM_WEBAPP_URL: str = ""
@@ -251,6 +274,8 @@ class Settings(BaseSettings):
     def _resolve_webapp_url(self) -> Self:
         if not self.TELEGRAM_WEBAPP_URL and self.DOMAIN and self.DOMAIN != "localhost":
             self.TELEGRAM_WEBAPP_URL = f"https://{self.DOMAIN}"
+        if not self.TESTING and self.APP_ENV in ("test", "testing"):
+            self.TESTING = True
         return self
 
     model_config = SettingsConfigDict(
@@ -378,7 +403,7 @@ class Settings(BaseSettings):
             if field.default is not PydanticUndefined:
                 return field.default
             if field.default_factory is not None:
-                return field.default_factory()
+                return field.default_factory()  # type: ignore[call-arg]
         # mypy: pydantic v2 определяет BaseModel.__getattr__ условно (в
         # рантайме он есть), статически mypy его не видит — игнорируем [misc].
         return super().__getattr__(name)  # type: ignore[misc]

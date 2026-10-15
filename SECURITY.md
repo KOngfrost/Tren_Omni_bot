@@ -1,6 +1,6 @@
 # 🛡️ Политика безопасности и модель угроз (Security Policy)
 
-> **Версия документа:** 0.8.9.1  
+> **Версия документа:** 0.9.1  
 > **Статус аудита:** Внутренний аудит ИБ (SEC-01 — SEC-16 пройден, автоматический CI/CD аудит активен).
 
 Настоящий документ описывает архитектуру информационной безопасности платформы **OSS Bot**, реализованные защитные механизмы, модель угроз и процедуру ответственного сообщения об уязвимостях.
@@ -11,10 +11,10 @@
 
 | Механизм защиты | Реализация в кодовой базе | Статус проверки |
 |---|---|---|
-| **Двухфакторная аутентификация (2FA)** | `core/services/two_factor.py`, хеширование временных OTP-кодов алгоритмом **Argon2id** (time_cost=3, memory_cost=65536). | ✅ Подтверждено тестами `test_two_factor_and_bootstrap.py`, `test_security.py` |
-| **Шифрование сессий (HKDF)** | `web/security/session_store.py`: деривация ключа через **HKDF-SHA256 (RFC 5869)** с солью, шифрование cookies симметричным шифром **Fernet (AES-128-CBC + HMAC)** с флагом `SameSite=Strict`. | ✅ Подтверждено тестами `test_redis_cache_and_sessions.py` |
+| **Двухфакторная аутентификация (2FA)** | `core/services/two_factor.py`, хеширование временных OTP-кодов алгоритмом **Argon2id** (time_cost=3, memory_cost=65536). Полная изоляция и запрет обхода в production. | ✅ Подтверждено тестами `test_two_factor_and_bootstrap.py`, `test_security.py` |
+| **Шифрование сессий (HKDF) и HMAC** | `web/security/session_store.py` и `backend_go`: деривация ключа через **HKDF-SHA256 (RFC 5869)** с солью, HMAC-проверка подписи сессий itsdangerous в Go API, шифрование cookies с флагом `SameSite=Strict`. | ✅ Подтверждено тестами `test_redis_cache_and_sessions.py`, `security_test.go` |
 | **Сетевая изоляция и сегментация** | `docker-compose.yml`: разделение на 4 независимых Docker-сети (`frontend_net`, `backend_net`, `data_net`, `socket_net`). Прямой доступ к PostgreSQL и сокету Docker изолирован. | ✅ Проверено `docker compose config` |
-| **Защита от Replay-атак TMA** | `backend_go/internal/handlers/handlers.go`: проверка свежести `auth_date` (допуск 24 ч, защита от дат из будущего), HMAC-SHA256 подпись через бот-токен. | ✅ Подтверждено тестами `handlers_test.go` |
+| **Защита от Replay-атак TMA** | `web/routes/api_v1.py` и `backend_go/internal/handlers/handlers.go`: проверка свежести `auth_date` (допуск 24 ч, защита от дат из будущего), HMAC-SHA256 подпись через бот-токен. | ✅ Подтверждено тестами `test_api_v1.py`, `handlers_test.go` |
 | **Распределённый Rate Limiting** | Скользящее окно в Redis и таблицах PostgreSQL (`login_attempts`, `crud_attempts`) с составным индексом по `(ip, success, attempted_at)`. | ✅ Подтверждено тестами `test_ticket_rate_limit.py` |
 | **WAF и сетевой периметр** | `Caddyfile`: блокировка Path Traversal (`../`), сканеров, закрытие внешнего доступа к `/metrics*` (403), принудительный HSTS, TLS 1.3, CSP со `script_nonce`. | ✅ Подтверждено Playwright E2E-тестами `test_ui_buttons_browser.py` |
 | **PgBouncer и разделение БД** | Зафиксированный образ `edoburu/pgbouncer:v1.23.1-p0`, SCRAM-SHA-256 аутентификация через `pgbouncer_get_auth`, база данных вынесена в приватный контур `data_net`. | ✅ Проверено в CI (`pgbouncer-config` job) |

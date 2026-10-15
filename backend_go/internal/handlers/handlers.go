@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -201,14 +203,48 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode
 }
 
-// === Handlers ===
-
+// HealthCheck выполняет проверку готовности (readiness probe):
+// проверяет статус базы данных (database.Pool) и Redis (appRedis.Client).
+// Если любая из зависимостей недоступна, возвращает 503 Service Unavailable с диагностикой.
+// Если обе зависимости исправны, возвращает 200 OK.
 func HealthCheck(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{
+	ctx, cancel := context.WithTimeout(c.Context(), 2*time.Second)
+	defer cancel()
+
+	dbStatus := "ok"
+	if database.Pool == nil {
+		dbStatus = "unavailable"
+	} else if err := database.Pool.Ping(ctx); err != nil {
+		dbStatus = "error: " + err.Error()
+	}
+
+	redisStatus := "ok"
+	if appRedis.Client == nil {
+		redisStatus = "unavailable"
+	} else if err := appRedis.Client.Ping(ctx).Err(); err != nil {
+		redisStatus = "error: " + err.Error()
+	}
+
+	if dbStatus != "ok" || redisStatus != "ok" {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"status":    "unhealthy",
+			"database":  dbStatus,
+			"redis":     redisStatus,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":    "healthy",
-		"framework": "Fiber v2 (Go)",
+		"database":  "ok",
+		"redis":     "ok",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// HealthCheckHandler возвращает fiber.Handler для эндпоинта healthcheck.
+func HealthCheckHandler(cfg *config.Config) fiber.Handler {
+	return HealthCheck
 }
 
 func GetStats(cfg *config.Config) fiber.Handler {
@@ -399,23 +435,160 @@ func GetTickets(c *fiber.Ctx) error {
 
 // === Auth Handlers & RBAC ===
 
-// ExtractSessionID извлекает чистый идентификатор сессии из значения cookie:
-// отсекает подпись itsdangerous (s_<id>.<sig>) и префикс "s_".
-func ExtractSessionID(rawCookie string) string {
-	val := strings.TrimSpace(rawCookie)
-	if val == "" {
-		return ""
+// verifyItsdangerousSignature проверяет криптографическую HMAC-подпись значения value против переданной подписи sig.
+// Реализует совместимость с itsdangerous / FastAPI Starlette SessionMiddleware:
+// 1) itsdangerous по умолчанию: salt="itsdangerous.Signer", key_derivation="django-concat", digest=SHA1
+// 2) itsdangerous с salt="signer", key_derivation="django-concat", digest=SHA1
+// 3) itsdangerous с digest=SHA256 (default salt)
+// 4) itsdangerous с salt="signer", digest=SHA256
+// 5) прямой HMAC-SHA256 (без KDF)
+// 6) прямой HMAC-SHA1 (без KDF)
+func verifyItsdangerousSignature(value, sig, secretKey string) bool {
+	if secretKey == "" || sig == "" {
+		return false
 	}
-	if idx := strings.Index(val, "."); idx != -1 {
-		val = val[:idx]
+
+	sigBytes := []byte(sig)
+
+	// 1. itsdangerous default: salt="itsdangerous.Signer", key_derivation="django-concat", digest=SHA1
+	{
+		h := sha1.New()
+		h.Write([]byte("itsdangerous.Signersigner"))
+		h.Write([]byte(secretKey))
+		derivedKey := h.Sum(nil)
+
+		mac := hmac.New(sha1.New, derivedKey)
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
 	}
-	val = strings.TrimPrefix(val, "s_")
-	return val
+
+	// 2. itsdangerous с salt="signer", key_derivation="django-concat", digest=SHA1
+	{
+		h := sha1.New()
+		h.Write([]byte("signersigner"))
+		h.Write([]byte(secretKey))
+		derivedKey := h.Sum(nil)
+
+		mac := hmac.New(sha1.New, derivedKey)
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
+	}
+
+	// 3. itsdangerous с digest=SHA256 (default salt)
+	{
+		h := sha256.New()
+		h.Write([]byte("itsdangerous.Signersigner"))
+		h.Write([]byte(secretKey))
+		derivedKey := h.Sum(nil)
+
+		mac := hmac.New(sha256.New, derivedKey)
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
+	}
+
+	// 4. itsdangerous с salt="signer", digest=SHA256
+	{
+		h := sha256.New()
+		h.Write([]byte("signersigner"))
+		h.Write([]byte(secretKey))
+		derivedKey := h.Sum(nil)
+
+		mac := hmac.New(sha256.New, derivedKey)
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
+	}
+
+	// 5. Прямой HMAC-SHA256 (без KDF)
+	{
+		mac := hmac.New(sha256.New, []byte(secretKey))
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
+	}
+
+	// 6. Прямой HMAC-SHA1 (без KDF)
+	{
+		mac := hmac.New(sha1.New, []byte(secretKey))
+		mac.Write([]byte(value))
+		expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(expectedSig), sigBytes) == 1 {
+			return true
+		}
+	}
+
+	return false
 }
 
-// GetUserFromSession возвращает данные пользователя из сессии Redis или auth-токена.
+// signItsdangerous вычисляет HMAC-SHA1 подпись в формате itsdangerous (совместимо со Starlette SessionMiddleware).
+// Возвращает строку формата "s_<session_id>.<signature>".
+func signItsdangerous(sessionID, secretKey string) string {
+	if secretKey == "" {
+		return ""
+	}
+	value := sessionID
+	if !strings.HasPrefix(value, "s_") {
+		value = "s_" + sessionID
+	}
+	h := sha1.New()
+	h.Write([]byte("itsdangerous.Signersigner"))
+	h.Write([]byte(secretKey))
+	derivedKey := h.Sum(nil)
+
+	mac := hmac.New(sha1.New, derivedKey)
+	mac.Write([]byte(value))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return value + "." + sig
+}
+
+// SignItsdangerous экспортирует signItsdangerous для тестов и внешнего использования.
+func SignItsdangerous(sessionID, secretKey string) string {
+	return signItsdangerous(sessionID, secretKey)
+}
+
+// ExtractSessionID проверяет HMAC-подпись cookie itsdangerous (s_<id>.<sig>) с помощью secretKey
+// и извлекает чистый идентификатор сессии.
+// Если подпись не совпадает или cookie повреждён/не подписан, возвращается пустая строка.
+func ExtractSessionID(rawCookie string, secretKey string) string {
+	val := strings.TrimSpace(rawCookie)
+	if val == "" || secretKey == "" {
+		return ""
+	}
+
+	idx := strings.LastIndex(val, ".")
+	if idx == -1 {
+		return ""
+	}
+
+	value := val[:idx]
+	sig := val[idx+1:]
+	if sig == "" || !strings.HasPrefix(value, "s_") {
+		return ""
+	}
+
+	if !verifyItsdangerousSignature(value, sig, secretKey) {
+		return ""
+	}
+
+	return strings.TrimPrefix(value, "s_")
+}
+
+// GetUserFromSession возвращает данные пользователя из сессии Redis или валидного сервисного токена.
 func GetUserFromSession(c *fiber.Ctx, cfg *config.Config) (*UserSession, error) {
-	// 1. Проверяем токен из заголовка Authorization (Bearer/Token) или X-Auth-Token
+	// 1. Проверяем сервисный токен из заголовка Authorization (Bearer/Token) или X-Auth-Token
 	authHeader := c.Get("Authorization")
 	var token string
 	if strings.HasPrefix(authHeader, "Bearer ") {
@@ -427,30 +600,24 @@ func GetUserFromSession(c *fiber.Ctx, cfg *config.Config) (*UserSession, error) 
 		token = strings.TrimSpace(c.Get("X-Auth-Token"))
 	}
 
-	// Если передан токен и он совпадает с SessionSecretKey (аварийный/сервисный ключ)
-	if token != "" && cfg != nil && cfg.SessionSecretKey != "" &&
-		subtle.ConstantTimeCompare([]byte(token), []byte(cfg.SessionSecretKey)) == 1 {
+	// Бэкдор удалён: SessionSecretKey в Bearer токене больше НЕ даёт прав суперпользователя.
+	// Сервисный доступ разрешён ТОЛЬКО через явно заданный отдельный SERVICE_API_KEY.
+	if token != "" && cfg != nil && cfg.ServiceAPIKey != "" &&
+		subtle.ConstantTimeCompare([]byte(token), []byte(cfg.ServiceAPIKey)) == 1 {
 		return &UserSession{
-			Username: "system_admin",
+			Username: "system_service",
 			Role:     "SUPERADMIN",
 		}, nil
 	}
 
 	// 2. Ищем сессию в Redis
 	sessionCookie := c.Cookies("session")
-	candidateIDs := make([]string, 0, 3)
+	var candidateIDs []string
 
-	if token != "" {
-		candidateIDs = append(candidateIDs, token)
-	}
-
-	if sessionCookie != "" {
-		extracted := ExtractSessionID(sessionCookie)
+	if sessionCookie != "" && cfg != nil && cfg.SessionSecretKey != "" {
+		extracted := ExtractSessionID(sessionCookie, cfg.SessionSecretKey)
 		if extracted != "" {
 			candidateIDs = append(candidateIDs, extracted)
-		}
-		if sessionCookie != extracted {
-			candidateIDs = append(candidateIDs, sessionCookie)
 		}
 	}
 
@@ -630,6 +797,32 @@ func TelegramWebAppAuth(cfg *config.Config) fiber.Handler {
 			Role:       "SUPERADMIN",
 			TelegramID: userMap.ID,
 			Bootstrap:  true,
+		}
+
+		if appRedis.Client != nil {
+			sessionBytes := make([]byte, 16)
+			if _, err := rand.Read(sessionBytes); err == nil {
+				sessionID := hex.EncodeToString(sessionBytes)
+				sessionPayload := map[string]any{
+					"user":       userData,
+					"created_at": time.Now().UTC().Format(time.RFC3339),
+				}
+				if sessionData, err := json.Marshal(sessionPayload); err == nil {
+					if err := appRedis.Client.Set(c.Context(), "session:"+sessionID, string(sessionData), 7*24*time.Hour).Err(); err != nil {
+						log.Printf("Не удалось сохранить сессию Telegram WebApp в Redis: %v", err)
+					} else if cfg != nil && cfg.SessionSecretKey != "" {
+						signedCookie := signItsdangerous(sessionID, cfg.SessionSecretKey)
+						c.Cookie(&fiber.Cookie{
+							Name:     "session",
+							Value:    signedCookie,
+							Path:     "/",
+							HTTPOnly: true,
+							SameSite: "Lax",
+							MaxAge:   7 * 24 * 3600,
+						})
+					}
+				}
+			}
 		}
 
 		return c.JSON(fiber.Map{

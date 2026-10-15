@@ -179,7 +179,7 @@ async def cache_delete(key: str) -> bool:
 
 async def cache_delete_pattern(pattern: str) -> int:
     """Удалить все ключи по маске (например, 'dept_stats:*')."""
-    deleted_keys = set()
+    deleted_keys: set[str] = set()
     redis = await get_redis_client()
     if redis is not None:
         try:
