@@ -223,6 +223,7 @@ from web.routes import (
     api,
     api_v1,
     auth,
+    broadcast,
     dashboard,
     departments,
     dept_frame,
@@ -242,6 +243,7 @@ from web.routes import settings as settings_route
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(legal.router, prefix="/legal", tags=["legal"])
 app.include_router(admin_panel.router, prefix="/admin/admins", tags=["admin"])
+app.include_router(broadcast.router, prefix="/broadcast", tags=["broadcast"])
 app.include_router(tickets.router, prefix="/tickets", tags=["tickets"])
 app.include_router(knowledge_base.router, prefix="/knowledge", tags=["knowledge_base"])
 app.include_router(faq.router, prefix="/faq", tags=["faq"])

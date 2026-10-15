@@ -159,6 +159,17 @@
                 <span class="badge badge-info" title="Срок действия до {{ presence.expires_label }} МСК">{{ icon('clock', 13) }} До {{ presence.expires_label }}</span>
                 {% endif %}
                 <span class="admin-dept">{{ admin.department.name if admin.department else 'Без отдела' }}</span>
+                {% if admin.web_user %}
+                    {% if admin.web_user.can_access_partnerships %}
+                    <span class="badge badge-info" title="Доступ к разделу «Партнёрство»">{{ icon('handshake', 12) }} Партнёрство</span>
+                    {% endif %}
+                    {% if admin.web_user.can_access_broadcast %}
+                    <span class="badge badge-info" title="Доступ к разделу «Рассылка»">{{ icon('send', 12) }} Рассылка</span>
+                    {% endif %}
+                    {% if admin.web_user.can_access_logs %}
+                    <span class="badge badge-info" title="Доступ к разделу «Журнал»">{{ icon('book-open', 12) }} Журнал</span>
+                    {% endif %}
+                {% endif %}
             </div>
             <div class="admin-card-footer">
                 {% if admin.web_user %}
@@ -166,6 +177,9 @@
                 <span class="admin-last-seen">Был в сети: {{ presence.last_seen }}</span>
                 {% endif %}
                 <div class="admin-card-actions">
+                    {% if admin.web_user and not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] %}
+                    <button type="button" class="btn btn-secondary btn-small" data-open-modal="modal-permissions-{{ admin.web_user.id }}" title="Настроить доступ к вкладкам панели">Права</button>
+                    {% endif %}
                     {% if admin.web_user and not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and admin.web_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ admin.web_user.id }}/delete"
                           data-confirm="Отозвать доступ к веб-панели для пользователя {{ admin.web_user.username }}?">
@@ -226,11 +240,25 @@
                     <span class="badge badge-secondary">Бессрочно</span>
                 {% endif %}
                 <span class="admin-dept">{{ qa_user.department.name if qa_user.department else ('Полный доступ' if qa_user.role.value == 'superadmin' else 'Без отдела') }}</span>
+                {% if qa_user.role.value != 'superadmin' %}
+                    {% if qa_user.can_access_partnerships %}
+                    <span class="badge badge-info" title="Доступ к разделу «Партнёрство»">{{ icon('handshake', 12) }} Партнёрство</span>
+                    {% endif %}
+                    {% if qa_user.can_access_broadcast %}
+                    <span class="badge badge-info" title="Доступ к разделу «Рассылка»">{{ icon('send', 12) }} Рассылка</span>
+                    {% endif %}
+                    {% if qa_user.can_access_logs %}
+                    <span class="badge badge-info" title="Доступ к разделу «Журнал»">{{ icon('book-open', 12) }} Журнал</span>
+                    {% endif %}
+                {% endif %}
             </div>
             <div class="admin-card-footer">
                 <span class="admin-login">Роль: {{ 'Суперадмин' if qa_user.role.value == 'superadmin' else 'Админ отдела' }}</span>
                 <span class="admin-last-seen">Был в сети: {{ presence.last_seen }}</span>
                 <div class="admin-card-actions">
+                    {% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and qa_user.role.value != 'superadmin' %}
+                    <button type="button" class="btn btn-secondary btn-small" data-open-modal="modal-permissions-{{ qa_user.id }}" title="Настроить доступ к вкладкам панели">Права</button>
+                    {% endif %}
                     {% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] and qa_user.id != user.get('web_user_id') %}
                     <form method="post" action="/admin/admins/web-users/{{ qa_user.id }}/delete"
                           data-confirm="Удалить временного/QA-администратора {{ qa_user.username }}?">
@@ -324,10 +352,117 @@
                     {% if user.role in ['SUPERADMIN', 'superadmin'] %}<option value="superadmin">Суперадмин</option>{% endif %}
                 </select>
             </div>
+            {% if user.role in ['SUPERADMIN', 'superadmin'] %}
+            <div class="form-group" id="permissions_block" style="border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--bg-hover);">
+                <label style="margin-bottom: 8px; font-weight: 600; display: block;">Доступ к разделам (для обычных админов):</label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                        <input type="checkbox" name="can_access_partnerships" value="1">
+                        <span>Заявки на партнёрство</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                        <input type="checkbox" name="can_access_broadcast" value="1">
+                        <span>Массовая рассылка</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer;">
+                        <input type="checkbox" name="can_access_logs" value="1">
+                        <span>Журнал аудита (логи)</span>
+                    </label>
+                </div>
+            </div>
+            {% endif %}
             <button type="submit" class="btn btn-success btn-full">Создать администратора</button>
         </form>
     </div>
 </div>
+
+<!-- Modals: Permissions configuration for existing admins -->
+{% if not viewer_is_temporary and user.role in ['SUPERADMIN', 'superadmin'] %}
+{% for admin in dept_admins %}
+{% if admin.web_user %}
+<div id="modal-permissions-{{ admin.web_user.id }}" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Права доступа: {{ admin.web_user.username }}</h3>
+            <button class="close-btn" data-close-modal="modal-permissions-{{ admin.web_user.id }}">&times;</button>
+        </div>
+        <form method="POST" action="/admin/admins/web-users/{{ admin.web_user.id }}/permissions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p class="muted" style="margin-bottom: 1rem; font-size: 13px;">
+                Назначьте доступ к дополнительным разделам веб-панели для администратора отдела:
+            </p>
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem;">
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_partnerships" value="1" {% if admin.web_user.can_access_partnerships %}checked{% endif %}>
+                    <div>
+                        <strong>Заявки на партнёрство</strong>
+                        <div class="muted" style="font-size: 12px;">Просмотр и изменение статусов партнёрских заявок</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_broadcast" value="1" {% if admin.web_user.can_access_broadcast %}checked{% endif %}>
+                    <div>
+                        <strong>Массовая рассылка</strong>
+                        <div class="muted" style="font-size: 12px;">Отправка сообщений пользователям бота</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_logs" value="1" {% if admin.web_user.can_access_logs %}checked{% endif %}>
+                    <div>
+                        <strong>Журнал аудита</strong>
+                        <div class="muted" style="font-size: 12px;">Просмотр и экспорт журнала действий системы</div>
+                    </div>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-success btn-full">Сохранить права</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+{% for qa_user in qa_users %}
+{% if qa_user.role.value != 'superadmin' %}
+<div id="modal-permissions-{{ qa_user.id }}" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Права доступа: {{ qa_user.username }}</h3>
+            <button class="close-btn" data-close-modal="modal-permissions-{{ qa_user.id }}">&times;</button>
+        </div>
+        <form method="POST" action="/admin/admins/web-users/{{ qa_user.id }}/permissions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <p class="muted" style="margin-bottom: 1rem; font-size: 13px;">
+                Назначьте доступ к дополнительным разделам веб-панели для администратора:
+            </p>
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.5rem;">
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_partnerships" value="1" {% if qa_user.can_access_partnerships %}checked{% endif %}>
+                    <div>
+                        <strong>Заявки на партнёрство</strong>
+                        <div class="muted" style="font-size: 12px;">Просмотр и изменение статусов партнёрских заявок</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_broadcast" value="1" {% if qa_user.can_access_broadcast %}checked{% endif %}>
+                    <div>
+                        <strong>Массовая рассылка</strong>
+                        <div class="muted" style="font-size: 12px;">Отправка сообщений пользователям бота</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" name="can_access_logs" value="1" {% if qa_user.can_access_logs %}checked{% endif %}>
+                    <div>
+                        <strong>Журнал аудита</strong>
+                        <div class="muted" style="font-size: 12px;">Просмотр и экспорт журнала действий системы</div>
+                    </div>
+                </label>
+            </div>
+            <button type="submit" class="btn btn-success btn-full">Сохранить права</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endif %}
 
 <script nonce="{{ csp_nonce('script') }}">
 document.addEventListener('DOMContentLoaded', function () {

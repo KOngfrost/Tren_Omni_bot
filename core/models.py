@@ -71,12 +71,16 @@ class Department(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_last_seen_at", "last_seen_at"),)
 
     id = mapped_column(Integer, primary_key=True)
     vk_id = mapped_column(BigInteger, unique=True, nullable=False)
     full_name = mapped_column(String, nullable=True)
     dormitory = mapped_column(String, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True
+    )
 
     tickets: Mapped[list["Ticket"]] = relationship("Ticket", back_populates="user")
     subscriptions: Mapped[list["Subscription"]] = relationship(
@@ -191,6 +195,16 @@ class WebUser(Base):
     # для них подтверждение некуда доставлять.
     two_factor_enabled = mapped_column(
         Boolean, default=True, server_default=true(), nullable=False
+    )
+    # Гранулярные права доступа к разделам веб-панели для обычных администраторов
+    can_access_partnerships: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    can_access_broadcast: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    can_access_logs: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
     )
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at = mapped_column(DateTime(timezone=True), nullable=True)

@@ -46,7 +46,7 @@ def test_validate_transition_raises():
 
 def test_validate_transition_same_status_ok():
     # Тот же статус — не ошибка (повторное сохранение)
-    validate_transition(TicketStatus.IN_PROGRESS, TicketStatus.IN_PROGRESS)
+    assert validate_transition(TicketStatus.IN_PROGRESS, TicketStatus.IN_PROGRESS) is None
 
 
 def test_format_ticket_list_empty():

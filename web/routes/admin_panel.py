@@ -309,6 +309,10 @@ async def add_admin(request: Request, user=Depends(require_auth)):
         request.session["flash_error"] = expiry_error
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
+    can_partnerships = bool(form.get("can_access_partnerships"))
+    can_broadcast = bool(form.get("can_access_broadcast"))
+    can_logs = bool(form.get("can_access_logs"))
+
     try:
         async with async_session_maker() as session:
             if admin_type == "temp":
@@ -320,6 +324,9 @@ async def add_admin(request: Request, user=Depends(require_auth)):
                     web_role=web_role,
                     dept_id=dept_id,
                     expires_at=expires_at,
+                    can_access_partnerships=can_partnerships,
+                    can_access_broadcast=can_broadcast,
+                    can_access_logs=can_logs,
                 )
             return await _create_permanent_admin(
                 request,
@@ -330,6 +337,9 @@ async def add_admin(request: Request, user=Depends(require_auth)):
                 username=username,
                 password=password,
                 user=user,
+                can_access_partnerships=can_partnerships,
+                can_access_broadcast=can_broadcast,
+                can_access_logs=can_logs,
             )
     except ValueError as e:
         request.session["flash_error"] = str(e)
@@ -349,6 +359,9 @@ async def _create_temp_admin(
     web_role: WebRole,
     dept_id: int | None,
     expires_at,
+    can_access_partnerships: bool = False,
+    can_access_broadcast: bool = False,
+    can_access_logs: bool = False,
 ) -> RedirectResponse:
     """Создать временного / QA-администратора (без привязки к VK Admin)."""
     if not username:
@@ -370,6 +383,9 @@ async def _create_temp_admin(
             admin_id=None,
             is_active=True,
             expires_at=expires_at,
+            can_access_partnerships=can_access_partnerships,
+            can_access_broadcast=can_access_broadcast,
+            can_access_logs=can_access_logs,
         )
     )
     await session.commit()
@@ -401,6 +417,9 @@ async def _create_permanent_admin(
     username: str,
     password: str,
     user: dict,
+    can_access_partnerships: bool = False,
+    can_access_broadcast: bool = False,
+    can_access_logs: bool = False,
 ) -> RedirectResponse:
     """Создать постоянного администратора, привязанного к VK ID."""
     vk_id = _parse_vk_id(form)
@@ -426,6 +445,9 @@ async def _create_permanent_admin(
         role=role_str,
         username=username,
         password_hash=hash_password(password),
+        can_access_partnerships=can_access_partnerships,
+        can_access_broadcast=can_access_broadcast,
+        can_access_logs=can_access_logs,
     )
     request.session["flash_success"] = "Администратор успешно добавлен"
     request.session["created_credentials"] = {
@@ -466,6 +488,9 @@ async def _create_admin_records(
     role: str,
     username: str,
     password_hash: str,
+    can_access_partnerships: bool = False,
+    can_access_broadcast: bool = False,
+    can_access_logs: bool = False,
 ) -> None:
     """Создаёт записи Admin и WebUser в БД."""
     # Определяем отдел в зависимости от прав вызывающего пользователя
@@ -509,6 +534,9 @@ async def _create_admin_records(
             role=web_role,
             admin_id=admin.id,
             department_id=selected_department_id,
+            can_access_partnerships=can_access_partnerships,
+            can_access_broadcast=can_access_broadcast,
+            can_access_logs=can_access_logs,
         )
     )
 
@@ -640,4 +668,66 @@ async def delete_web_user(request: Request, web_user_id: int, user=Depends(requi
         return RedirectResponse(url="/admin/admins/", status_code=302)
 
     request.session["flash_success"] = "Веб-пользователь удалён"
+    return RedirectResponse(url="/admin/admins/", status_code=302)
+
+
+@router.post("/web-users/{web_user_id}/permissions")
+async def update_web_user_permissions(
+    request: Request,
+    web_user_id: int,
+    user=Depends(require_auth),
+):
+    """Обновление прав доступа администратора к разделам панели (только для суперадминистратора)."""
+    denied = _deny_temporary_admin(request, user)
+    if denied is not None:
+        return denied
+
+    await require_crud_rate_limit(request)
+    if not is_superadmin(user):
+        request.session["flash_error"] = "Только суперадмин может изменять права доступа"
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    form = await request.form()
+    can_partnerships = bool(form.get("can_access_partnerships"))
+    can_broadcast = bool(form.get("can_access_broadcast"))
+    can_logs = bool(form.get("can_access_logs"))
+
+    try:
+        async with async_session_maker() as session:
+            target_user = await session.get(WebUser, web_user_id)
+            if not target_user:
+                request.session["flash_error"] = "Администратор не найден"
+                return RedirectResponse(url="/admin/admins/", status_code=302)
+
+            target_user.can_access_partnerships = can_partnerships
+            target_user.can_access_broadcast = can_broadcast
+            target_user.can_access_logs = can_logs
+
+            audit_log = Log(
+                user_id=None,
+                action="permissions_updated",
+                details=(
+                    f"Обновлены права доступа веб-пользователя '{target_user.username}' (id={web_user_id}): "
+                    f"partnerships={can_partnerships}, broadcast={can_broadcast}, logs={can_logs}"
+                ),
+            )
+            session.add(audit_log)
+            await session.commit()
+
+            logger.info(
+                "Обновлены права администратора id=%s (%s): partnerships=%s, broadcast=%s, logs=%s",
+                web_user_id,
+                target_user.username,
+                can_partnerships,
+                can_broadcast,
+                can_logs,
+            )
+    except Exception:
+        logger.exception("Не удалось обновить права администратора")
+        request.session["flash_error"] = "Не удалось обновить права. Попробуйте позже."
+        return RedirectResponse(url="/admin/admins/", status_code=302)
+
+    request.session["flash_success"] = (
+        f"Права доступа для администратора '{target_user.username}' успешно сохранены"
+    )
     return RedirectResponse(url="/admin/admins/", status_code=302)

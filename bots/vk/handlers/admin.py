@@ -12,6 +12,7 @@ from vkbottle.dispatch.rules.base import RegexRule
 
 from bots.vk.common import (
     AdminTicketStates,
+    BroadcastStates,
     _get_department_names,
     _main_keyboard_for,
     _main_reply_text,
@@ -32,6 +33,8 @@ from bots.vk.keyboards import (
     build_admin_reply_cancel_keyboard,
     build_admin_ticket_actions_keyboard,
     build_admin_tickets_list_keyboard,
+    build_broadcast_confirm_keyboard,
+    build_cancel_keyboard,
     build_main_keyboard,
 )
 from core.bot_core import BotCore, get_admin_scope_for_vk_id
@@ -42,14 +45,19 @@ from core.commands import (
     ADMIN_REPLY_START_PATTERN,
     ADMIN_STATUS_PATTERN,
     ADMIN_TICKET_VIEW_PATTERN,
+    BROADCAST_DIRECT_PATTERN,
     COMMANDS_ADMIN,
     COMMANDS_ADMIN_TICKETS,
+    COMMANDS_BROADCAST,
+    COMMANDS_CANCEL,
+    COMMANDS_CONFIRM_BROADCAST,
     COMMANDS_REGULAR_MENU,
 )
 from core.database import async_session_maker
 from core.heartbeat import touch_heartbeat
 from core.models import MessageAuthorType, Ticket, TicketStatus
 from core.reporting import get_app_tz
+from core.services.broadcast_service import enqueue_broadcast, get_total_users_count
 from core.ticket_service import (
     COMPLETED_STATUSES,
     StatusTransitionError,
@@ -76,13 +84,24 @@ async def admin_panel(message: Message):
         return
 
     await BotCore.log_action(user, "admin_panel", "Открыта админ-панель")
+    async with async_session_maker() as session:
+        is_super, _ = await get_admin_scope_for_vk_id(session, message.from_id)
+    if BotCore.is_admin_vk_id(message.from_id):
+        is_super = True
+
+    desc_lines = [
+        "Админ-панель\n",
+        "Доступные функции:",
+        "• Просмотр и решение заявок студентов за сегодняшний день",
+        "• Формирование оперативных отчётов",
+    ]
+    if is_super:
+        desc_lines.append("• Массовая рассылка сообщений последним пользователям")
+    desc_lines.append("\nНажмите «Заявки администратора» для работы с обращениями.")
+
     await message.answer(
-        "Админ-панель\n\n"
-        "Доступные функции:\n"
-        "• Просмотр и решение заявок студентов за сегодняшний день\n"
-        "• Формирование оперативных отчётов\n\n"
-        "Нажмите «Заявки администратора» для работы с обращениями.",
-        keyboard=build_admin_keyboard(),
+        "\n".join(desc_lines),
+        keyboard=build_admin_keyboard(is_super=is_super),
     )
 
 
@@ -527,6 +546,233 @@ async def admin_status_handler(message: Message):
         else "Заявка не найдена.",
         keyboard=build_admin_keyboard(),
     )
+
+
+# --- Массовая рассылка сообщений (SUPERADMIN) ---
+
+
+@admin_labeler.private_message(text=COMMANDS_BROADCAST)
+async def broadcast_start_handler(message: Message):
+    """Начало сценария рассылки: запрос числа получателей N."""
+    touch_heartbeat()
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    if not await BotCore.is_admin(user):
+        await message.answer(
+            "У вас нет доступа к этой команде.",
+            keyboard=await _main_keyboard_for(message.from_id),
+        )
+        return
+
+    async with async_session_maker() as session:
+        is_super, _ = await get_admin_scope_for_vk_id(session, message.from_id)
+    if not is_super and not BotCore.is_admin_vk_id(message.from_id):
+        await message.answer(
+            "Рассылка сообщений доступна только суперадминистраторам.",
+            keyboard=build_admin_keyboard(),
+        )
+        return
+
+    from bots.vk.bot import vk_bot
+
+    async with async_session_maker() as session:
+        total = await get_total_users_count(session)
+
+    await vk_bot.state_dispenser.set(message.from_id, BroadcastStates.WAITING_COUNT)
+    await message.answer(
+        "📢 Массовая рассылка сообщений\n\n"
+        f"Всего пользователей в системе: {total}\n\n"
+        "Укажите число пользователей (N), которым нужно отправить сообщение:\n"
+        "(например: 10, 25, 50)\n\n"
+        "Сообщение будет отправлено N последним активным студентам.\n"
+        "Для отмены нажмите «Отмена».",
+        keyboard=build_cancel_keyboard(),
+    )
+
+
+@admin_labeler.private_message(RegexRule(BROADCAST_DIRECT_PATTERN))
+async def broadcast_direct_handler(message: Message):
+    """Быстрая команда рассылки: Рассылка <N> <текст>."""
+    touch_heartbeat()
+    user = await BotCore.get_or_create_user(vk_id=message.from_id)
+    if not await BotCore.is_admin(user):
+        return
+
+    async with async_session_maker() as session:
+        is_super, _ = await get_admin_scope_for_vk_id(session, message.from_id)
+    if not is_super and not BotCore.is_admin_vk_id(message.from_id):
+        await message.answer(
+            "Рассылка сообщений доступна только суперадминистраторам.",
+            keyboard=build_admin_keyboard(),
+        )
+        return
+
+    match = re.match(BROADCAST_DIRECT_PATTERN, message.text or "", re.DOTALL)
+    if not match:
+        return
+
+    try:
+        count = int(match.group(1))
+    except (ValueError, TypeError):
+        count = 0
+    text = match.group(2).strip()
+
+    if count <= 0 or not text:
+        await message.answer(
+            "Некорректные параметры команды. Формат: Рассылка <число N> <текст сообщения>",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        return
+
+    from bots.vk.bot import vk_bot
+
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        BroadcastStates.WAITING_CONFIRM,
+        count=count,
+        text=text,
+    )
+    await message.answer(
+        f"📢 Подтверждение рассылки\n\n"
+        f"👥 Получателей: {count} последних пользователей\n"
+        f"📝 Текст:\n«{text}»\n\n"
+        "Сообщения будут добавлены в защищённую очередь Outbox и доставлены студентам.\n\n"
+        "Подтвердить отправку?",
+        keyboard=build_broadcast_confirm_keyboard(),
+    )
+
+
+@admin_labeler.private_message(state=BroadcastStates.WAITING_COUNT)
+async def broadcast_count_handler(message: Message):
+    """Обработка ввода числа получателей N."""
+    touch_heartbeat()
+    text = (message.text or "").strip()
+    from bots.vk.bot import vk_bot
+
+    if text in COMMANDS_CANCEL:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Рассылка отменена.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        return
+
+    try:
+        count = int(text)
+        if count <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer(
+            "Пожалуйста, введите положительное целое число получателей (например, 10 или 50) "
+            "или нажмите «Отмена»:",
+            keyboard=build_cancel_keyboard(),
+        )
+        return
+
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        BroadcastStates.WAITING_TEXT,
+        count=count,
+    )
+    await message.answer(
+        f"Выбрано {count} последних пользователей.\n\n"
+        "Теперь введите текст сообщения для рассылки:\n\n"
+        "Для отмены нажмите «Отмена».",
+        keyboard=build_cancel_keyboard(),
+    )
+
+
+@admin_labeler.private_message(state=BroadcastStates.WAITING_TEXT)
+async def broadcast_text_handler(message: Message):
+    """Обработка ввода текста рассылки."""
+    touch_heartbeat()
+    text = (message.text or "").strip()
+    from bots.vk.bot import vk_bot
+
+    if text in COMMANDS_CANCEL:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Рассылка отменена.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        return
+
+    if not text:
+        await message.answer(
+            "Текст сообщения не может быть пустым. Введите текст или нажмите «Отмена»:",
+            keyboard=build_cancel_keyboard(),
+        )
+        return
+
+    state_peer = await vk_bot.state_dispenser.get(message.from_id)
+    payload = state_peer.payload if state_peer else {}
+    count = int(payload.get("count", 1))
+
+    await vk_bot.state_dispenser.set(
+        message.from_id,
+        BroadcastStates.WAITING_CONFIRM,
+        count=count,
+        text=text,
+    )
+    await message.answer(
+        f"📢 Подтверждение рассылки\n\n"
+        f"👥 Получателей: {count} последних пользователей\n"
+        f"📝 Текст:\n«{text}»\n\n"
+        "Сообщения будут добавлены в защищённую очередь Outbox и доставлены студентам.\n\n"
+        "Подтвердить отправку?",
+        keyboard=build_broadcast_confirm_keyboard(),
+    )
+
+
+@admin_labeler.private_message(state=BroadcastStates.WAITING_CONFIRM)
+async def broadcast_confirm_handler(message: Message):
+    """Подтверждение и отправка рассылки."""
+    touch_heartbeat()
+    text_input = (message.text or "").strip()
+    from bots.vk.bot import vk_bot
+
+    if text_input in COMMANDS_CANCEL:
+        await vk_bot.state_dispenser.delete(message.from_id)
+        await message.answer(
+            "Рассылка отменена.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+        return
+
+    if text_input not in COMMANDS_CONFIRM_BROADCAST:
+        await message.answer(
+            "Пожалуйста, нажмите «Подтвердить рассылку» для отправки или «Отмена» для возврата:",
+            keyboard=build_broadcast_confirm_keyboard(),
+        )
+        return
+
+    state_peer = await vk_bot.state_dispenser.get(message.from_id)
+    payload = state_peer.payload if state_peer else {}
+    count = int(payload.get("count", 1))
+    broadcast_text = str(payload.get("text", ""))
+
+    await vk_bot.state_dispenser.delete(message.from_id)
+
+    async with async_session_maker() as session:
+        result = await enqueue_broadcast(
+            session=session,
+            text=broadcast_text,
+            count=count,
+            author_name=f"vk_admin_{message.from_id}",
+            actor_type="bot",
+        )
+
+    if result.status == "success":
+        await message.answer(
+            f"✅ Рассылка успешно запущена!\n\n"
+            f"Поставлено в очередь отправки: {result.recipients_count} пользователей.\n"
+            f"Сообщения доставляются адресатам через фоновый воркер.",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
+    else:
+        await message.answer(
+            f"❌ Ошибка при отправке рассылки: {result.error}",
+            keyboard=build_admin_keyboard(is_super=True),
+        )
 
 
 # Рендерер пагинации списка заявок администратора (ЭТАП 4.1 / B4)

@@ -401,7 +401,7 @@ async def api_get_counters(request: Request, user=Depends(require_auth)):
                 await session.scalar(select(func.count(Ticket.id)).where(*reply_scope))
             ) or 0
 
-            if is_super:
+            if is_super or user.get("can_access_partnerships"):
                 new_partnerships_count = (
                     await session.scalar(
                         select(func.count(PartnershipRequest.id)).where(

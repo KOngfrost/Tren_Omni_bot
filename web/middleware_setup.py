@@ -104,7 +104,7 @@ async def _populate_notification_counts(
                 await count_session.scalar(select(func.count(Ticket.id)).where(*reply_scope))
             ) or 0
 
-            if is_super_count:
+            if is_super_count or user.get("can_access_partnerships"):
                 request.state.new_partnerships_count = (
                     await count_session.scalar(
                         select(func.count(PartnershipRequest.id)).where(

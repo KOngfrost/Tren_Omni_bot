@@ -43,6 +43,14 @@ class AdminTicketStates(BaseStateGroup):
     WAITING_REPLY_TEXT = "admin_waiting_reply_text"
 
 
+class BroadcastStates(BaseStateGroup):
+    """FSM StateGroup для рассылки сообщений суперадминистратором."""
+
+    WAITING_COUNT = "broadcast_waiting_count"
+    WAITING_TEXT = "broadcast_waiting_text"
+    WAITING_CONFIRM = "broadcast_waiting_confirm"
+
+
 def _main_reply_text(departments: list[str] | None = None) -> str:
     lines = [
         "Привет! Я бот-помощник Объединённого студсовета общежитий.\n",

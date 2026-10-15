@@ -36,7 +36,8 @@ def test_report_time_format():
 
 def test_ensure_production_config_dev_no_op():
     """В dev-окружении проверка production не должна бросать исключение."""
-    settings.ensure_production_config()
+    assert settings.IS_PRODUCTION is False
+    assert settings.ensure_production_config() is None
 
 
 def test_dev_environment_is_not_production():
@@ -144,7 +145,7 @@ def test_validate_required_passes_with_full_config(monkeypatch):
 
     fresh = Settings()
     # Не должно бросать исключение
-    fresh.validate_required()
+    assert fresh.validate_required() is None
 
 
 def _production_settings(**overrides):

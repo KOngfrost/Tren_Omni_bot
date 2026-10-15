@@ -78,6 +78,8 @@ ALL_MODULE_NAMES = (
     "web.routes.dept_frame",
     "web.routes.sse",
     "web.routes.vk_callback",
+    "web.routes.broadcast",
+    "core.services.broadcast_service",
     "core.archival",
     "core.services.privacy_service",
 )
