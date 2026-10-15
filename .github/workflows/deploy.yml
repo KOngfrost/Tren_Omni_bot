@@ -1,0 +1,64 @@
+name: CD - Deploy to Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+concurrency:
+  group: production_deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Execute Remote Deployment via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_HOST || '45.150.111.240' }}
+          username: ${{ secrets.PROD_USER || 'root' }}
+          password: ${{ secrets.PROD_PASSWORD }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          timeout: 120s
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            echo "=== [1/6] Navigating to production directory ==="
+            cd /opt/oss_bot
+
+            echo "=== [2/6] Synchronizing Git repository with master ==="
+            git fetch origin master
+            git reset --hard origin/master
+
+            echo "=== [3/6] Syncing configuration and version ==="
+            if [ -f .env ]; then
+              sed -i 's/^APP_VERSION=.*/APP_VERSION=0.9.1/' .env
+            fi
+
+            echo "=== [4/6] Building and preparing Docker containers ==="
+            docker compose build
+
+            echo "=== [5/6] Applying database migrations ==="
+            docker compose run --rm migrate
+
+            echo "=== [6/6] Launching all services ==="
+            docker compose up -d --remove-orphans
+
+            echo "=== Validating deployment health ==="
+            sleep 5
+            docker compose ps
+            
+            # Healthcheck probe (internal HTTP fallback & public domain)
+            curl -fsSL -k http://localhost:8000/health || curl -fsSL -k https://yenotick.duckdns.org/health
+
+            echo " Deployment of OSS Bot v0.9.1 successfully completed!"
