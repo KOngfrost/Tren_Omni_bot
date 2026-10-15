@@ -39,6 +39,9 @@ from web.security.login_rate_limiter import (
 from web.security.login_rate_limiter import (
     record_failed_attempt as _record_failed_attempt,
 )
+from web.security.login_rate_limiter import (
+    record_login_request_velocity as _record_login_request_velocity,
+)
 from web.security.middleware import DBRateLimiter, mask_ip_for_logs
 from web.security.passwords import verify_dummy_password, verify_password
 from web.templating import templates
@@ -170,20 +173,18 @@ async def _log_action(action: str, details: str) -> None:
 
 
 async def _notify_superadmin(details: str) -> None:
-    """Уведомить суперадминистратора о подозрительной активности (с fallback на Telegram)."""
+    """Уведомить суперадминистратора о подозрительной активности в Telegram и VK."""
     logger.warning("Подозрительная активность: %s", details)
-    notified = False
     if settings.VK_REPORT_ADMIN_ID:
         try:
             await send_vk_message(
                 settings.VK_REPORT_ADMIN_ID,
                 f"Веб-админка: подозрительная активность\n{details}",
             )
-            notified = True
         except Exception:
             logger.exception("Не удалось отправить VK-уведомление администратору")
 
-    if not notified and settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_ADMIN_ID > 0:
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_ADMIN_ID > 0:
         try:
             import httpx
 
@@ -473,8 +474,9 @@ async def login(request: Request):
     """Обработка входа с rate limiting, журналированием и вторым фактором."""
     client_ip = _get_client_ip(request)
     masked_client_ip = mask_ip_for_logs(client_ip)
+    await _record_login_request_velocity(client_ip)
     form = await request.form()
-    username: str = str(form.get("username", ""))
+    username: str = str(form.get("username", "")).strip()
     password: str = str(form.get("password", ""))
 
     async with core_db.async_session_maker() as session:
@@ -482,13 +484,25 @@ async def login(request: Request):
             details = f"Блокировка IP {masked_client_ip}: превышен лимит попыток входа (username={username!r})"
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
+            from core.security_alerts import send_security_alert
+
+            await send_security_alert(
+                event_type="login_bruteforce",
+                title="Превышение лимита запросов / Брутфорс входа",
+                details={
+                    "ip": masked_client_ip,
+                    "username": username or "<empty>",
+                    "path": "/auth/login",
+                    "reason": "IP временно заблокирован из-за превышения лимита попыток входа",
+                },
+            )
             request.session["flash_error"] = "Слишком много попыток входа. Подождите 15 минут."
             return RedirectResponse(url="/auth/login", status_code=302)
 
         user_data: dict | None = await _authenticate(session, username, password)
 
         if user_data is None:
-            await _record_failed_attempt(client_ip)
+            failed_count = await _record_failed_attempt(client_ip)
             masked_user = (
                 f"{username[0]}***{username[-1]}"
                 if len(username) > 2
@@ -499,6 +513,19 @@ async def login(request: Request):
                 f"Неудачный вход с IP {masked_client_ip} (username={masked_user!r})",
             )
             logger.warning("Неудачная попытка входа с IP %s", masked_client_ip)
+            if failed_count >= 3:
+                from core.security_alerts import send_security_alert
+
+                await send_security_alert(
+                    event_type="multiple_failed_logins",
+                    title="Серия неудачных попыток входа",
+                    details={
+                        "ip": masked_client_ip,
+                        "username": masked_user,
+                        "path": "/auth/login",
+                        "reason": f"Зафиксировано {failed_count} неудачных попыток ввода пароля подряд",
+                    },
+                )
             request.session["flash_error"] = "Неверный логин или пароль"
             return RedirectResponse(url="/auth/login", status_code=302)
 

@@ -15,6 +15,7 @@ from core.database import async_session_maker
 from web.security.csrf import CSRFMiddleware
 from web.security.middleware import (
     MaintenanceMiddleware,
+    ProbeFilterMiddleware,
     RequestSizeLimitMiddleware,
     RequestSizeValidator,
     SecurityHeadersMiddleware,
@@ -242,6 +243,7 @@ def setup_middleware(app: FastAPI) -> None:
     app.add_middleware(RequestSizeLimitMiddleware, max_body_size=REQUEST_MAX_BODY_SIZE)
     app.add_middleware(AuditMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(ProbeFilterMiddleware)
 
     app.middleware("http")(add_static_cache_headers)
     app.middleware("http")(validate_request_size)

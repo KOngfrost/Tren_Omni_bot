@@ -120,6 +120,10 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
     username = payload.username.strip()
     password = payload.password
 
+    from web.security.login_rate_limiter import record_login_request_velocity
+
+    await record_login_request_velocity(client_ip)
+
     async with async_session_maker() as session:
         if await _is_rate_limited(session, client_ip):
             details = (
@@ -127,6 +131,18 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
             )
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
+            from core.security_alerts import send_security_alert
+
+            await send_security_alert(
+                event_type="login_bruteforce",
+                title="Превышение лимита запросов / Брутфорс входа (API)",
+                details={
+                    "ip": client_ip,
+                    "username": username or "<empty>",
+                    "path": "/api/v1/auth/login",
+                    "reason": "IP временно заблокирован из-за превышения лимита попыток входа",
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Слишком много попыток входа. Подождите 15 минут.",
@@ -134,10 +150,23 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
 
         user_data = await _authenticate(session, username, password)
         if user_data is None:
-            await _record_failed_attempt(client_ip)
+            failed_count = await _record_failed_attempt(client_ip)
             await _log_action(
                 "web_login_failed", f"Неудачный вход с IP {client_ip} (username={username!r})"
             )
+            if failed_count >= 3:
+                from core.security_alerts import send_security_alert
+
+                await send_security_alert(
+                    event_type="multiple_failed_logins",
+                    title="Серия неудачных попыток входа (API)",
+                    details={
+                        "ip": client_ip,
+                        "username": username or "<empty>",
+                        "path": "/api/v1/auth/login",
+                        "reason": f"Зафиксировано {failed_count} неудачных попыток ввода пароля подряд",
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Неверный логин или пароль",

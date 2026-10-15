@@ -6,6 +6,7 @@ import html
 import ipaddress
 import json
 import logging
+import re
 import secrets
 import time
 from collections import defaultdict
@@ -543,5 +544,49 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
                 status_code=503,
                 headers={"Retry-After": "300"},
             )
+
+        return await call_next(request)
+
+
+# Регулярное выражение для выявления попыток зондирования системных файлов и RCE-эксплойтов
+SUSPICIOUS_PROBE_REGEX = re.compile(
+    r"(?i)(/\.(env|git|svn|htaccess|aws|config)"
+    r"|phpunit"
+    r"|eval-stdin"
+    r"|phpinfo"
+    r"|\.php"
+    r"|laravel-filemanager"
+    r"|wp-admin|wp-login|xmlrpc"
+    r"|/debug/default/index"
+    r"|gcloud/application_default_credentials"
+    r"|firebase-adminsdk)"
+)
+
+
+class ProbeFilterMiddleware(BaseHTTPMiddleware):
+    """Блокирует попытки зондирования системных файлов, RCE и эксплойтов, отправляя алерт в Telegram."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+        if SUSPICIOUS_PROBE_REGEX.search(path):
+            ip = request.client.host if request.client else "unknown"
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                ip = forwarded.split(",")[0].strip()
+
+            logger.warning("MALICIOUS PROBE BLOCKED: path=%s ip=%s", path, ip)
+            from core.security_alerts import send_security_alert
+
+            await send_security_alert(
+                event_type="exploit_probe",
+                title="Зондирование эксплойта / системных файлов",
+                details={
+                    "ip": ip,
+                    "username": "аноним",
+                    "path": path,
+                    "reason": "Обнаружена попытка обращения к запрещенному системному пути / файлу конфигурации",
+                },
+            )
+            return Response(status_code=status.HTTP_404_NOT_FOUND, content="Not Found")
 
         return await call_next(request)
