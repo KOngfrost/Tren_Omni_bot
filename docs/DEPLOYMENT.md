@@ -264,3 +264,30 @@ curl -s http://127.0.0.1:8000/health
   docker compose logs --tail=100 bot
   ```
 
+---
+
+## 🚀 Автоматический CI/CD (GitHub Actions)
+
+В проекте настроен пайплайн автоматического деплоя `.github/workflows/deploy.yml` при каждом push в ветку `master`:
+
+1. **Подключение к прод-серверу** по SSH (`appleboy/ssh-action`).
+2. **Синхронизация кода**: `git fetch origin master && git reset --hard origin/master`.
+3. **Обновление контейнеров и запуск миграций**:
+   ```bash
+   docker compose build
+   docker compose run --rm migrate
+   docker compose up -d --remove-orphans
+   ```
+4. **Проверка работоспособности**: автоматический healthcheck `/health`.
+
+### Настройка GitHub Secrets в репозитории
+
+В настройках GitHub-репозитория (**Settings -> Secrets and variables -> Actions**) добавьте следующие переменные:
+
+| Secret | Описание | Пример значения |
+|---|---|---|
+| `PROD_HOST` | IP или домен сервера | `203.0.113.10` |
+| `PROD_USER` | Пользователь SSH | `root` |
+| `PROD_PASSWORD` | Пароль root (при парольном доступе) | `<ваш_пароль>` |
+| `PROD_SSH_KEY` | Приватный ключ SSH (при ключевом доступе) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `PROD_PORT` | SSH порт (по умолчанию 22) | `22` |
