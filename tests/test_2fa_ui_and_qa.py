@@ -20,6 +20,7 @@ UI Tests (Playwright Chromium):
 """
 
 import re
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -33,10 +34,19 @@ from web.templating import templates
 
 try:
     from playwright.async_api import async_playwright
+    from playwright.sync_api import sync_playwright
 
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
+    with sync_playwright() as _p:
+        _exe = _p.chromium.executable_path
+        PLAYWRIGHT_AVAILABLE = bool(_exe and Path(_exe).exists())
+except Exception:
     PLAYWRIGHT_AVAILABLE = False
+
+
+@pytest.fixture(autouse=True)
+def _disable_outbox_fire(monkeypatch):
+    """Предотвращает гонки фонового воркера доставки outbox с in-memory SQLite в тестах."""
+    monkeypatch.setattr("core.outbox.fire_outbox_delivery", lambda: None)
 
 
 @pytest.mark.asyncio

@@ -223,3 +223,21 @@ COMMANDS_PAGINATION_PREV = (
     COMMAND_PAGINATION_PREV,
     "⬅️ назад",
 )
+
+# Рассылка сообщений (только суперадмин)
+COMMANDS_BROADCAST = (
+    "Рассылка",
+    "рассылка",
+    "/broadcast",
+    "Отправить рассылку",
+    "отправить рассылку",
+)
+COMMANDS_CONFIRM_BROADCAST = (
+    "Подтвердить рассылку",
+    "подтвердить рассылку",
+    "Подтвердить",
+    "подтвердить",
+    "Да",
+    "да",
+)
+BROADCAST_DIRECT_PATTERN = r"(?i)^Рассылка\s+(\d+)\s+([\s\S]+)$"

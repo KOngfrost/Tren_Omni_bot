@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from core.database import async_session_maker
 from core.models import PartnershipRequest
-from web.dependencies import require_superadmin
+from web.dependencies import require_partnerships_access
 from web.security.csrf import get_csrf_token
 from web.security.middleware import sanitize_html
 from web.templating import templates
@@ -26,8 +26,8 @@ ALLOWED_STATUSES = {
 
 
 @router.get("/")
-async def partnerships_page(request: Request, user=Depends(require_superadmin)):
-    """Страница заявок на партнёрство (доступна только суперадминистраторам)."""
+async def partnerships_page(request: Request, user=Depends(require_partnerships_access)):
+    """Страница заявок на партнёрство (доступна суперадминистраторам и назначенным админам)."""
     items: list[PartnershipRequest] = []
     db_error: bool = False
 
@@ -58,7 +58,7 @@ async def partnerships_page(request: Request, user=Depends(require_superadmin)):
 
 @router.post("/{request_id}/status")
 async def update_partnership_status(
-    request_id: int, request: Request, user=Depends(require_superadmin)
+    request_id: int, request: Request, user=Depends(require_partnerships_access)
 ):
     """Обновление статуса заявки на партнёрство."""
     form = await request.form()

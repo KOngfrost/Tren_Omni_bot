@@ -1,34 +1,3 @@
-"""Тесты отчётности: обязательные проверки для миграций на ГК РФ и УК РФ."""
-
-
-def test_get_report_for_12_months_supports_full_year_window() -> None:
-    """Мигрированные записи: отчёт может формироваться за любой период ≥ 1 года."""
-
-
-def test_get_report_for_12_months_does_not_raise_off_by_one() -> None:
-    """Границы 12-месячного окна инклюзивны и не теряют тикеты на краях."""
-
-
-def test_build_daily_report_supports_gk_fk_departments() -> None:
-    """В новом юридическом поле отчёта отражаются ГК РФ и УК РФ."""
-
-
-def test_build_daily_report_supports_uk_fk_departments() -> None:
-    """В поле УК РФ отчёт корректно группирует административные правонарушения."""
-
-
-def test_report_period_api_accepts_february_29_in_leap_year() -> None:
-    """12-месячные отчёты в високосный год не ломаются на 29 февраля."""
-
-
-def test_report_period_api_rejects_overlapping_windows() -> None:
-    """Перекрывающиеся окна отвергаются на уровне валидации запроса."""
-
-
-def test_report_summaries_include_new_legal_fields() -> None:
-    """Сводные листы содержат колонки для мигрированных направлений."""
-
-
 """Тесты отчётов: генерация Excel, маскировка анонимных, защита от дублей."""
 
 from datetime import date, datetime
@@ -308,3 +277,84 @@ async def test_get_report_for_period_collects_tickets(db_session_maker):
     data = await get_report_for_period(date_from, date_to)
     assert len(data["tickets"]) == 1
     assert data["tickets"][0].topic == "Заявка в периоде"
+
+
+async def test_get_report_for_period_leap_year(db_session_maker):
+    """Отчёт за период, включающий 29 февраля високосного года, корректно собирает тикеты."""
+    from core.reporting import get_report_for_period
+
+    async with db_session_maker() as session:
+        user = User(vk_id=888)
+        department = Department(name="Жилбыт")
+        session.add_all([user, department])
+        await session.flush()
+
+        ticket_leap = Ticket(
+            user_id=user.id,
+            department_id=department.id,
+            topic="Тикет 29 февраля",
+            created_at=datetime(2024, 2, 29, 12, 0),
+        )
+        session.add(ticket_leap)
+        await session.commit()
+
+    date_from = date(2024, 2, 28)
+    date_to = date(2024, 3, 1)
+
+    data = await get_report_for_period(date_from, date_to)
+    assert len(data["tickets"]) == 1
+    assert data["tickets"][0].topic == "Тикет 29 февраля"
+
+
+async def test_get_report_for_period_full_year_window(db_session_maker):
+    """12-месячное окно отчёта инклюзивно: включает крайние тикеты и отсекает внешние."""
+    from core.reporting import get_report_for_period
+
+    async with db_session_maker() as session:
+        user = User(vk_id=777)
+        department = Department(name="Информ")
+        session.add_all([user, department])
+        await session.flush()
+
+        t_start = Ticket(
+            user_id=user.id,
+            department_id=department.id,
+            topic="Тикет на старте года",
+            created_at=datetime(2025, 1, 1, 0, 0, 5),
+        )
+        t_end = Ticket(
+            user_id=user.id,
+            department_id=department.id,
+            topic="Тикет в конце года",
+            created_at=datetime(2025, 12, 31, 23, 59, 50),
+        )
+        t_before = Ticket(
+            user_id=user.id,
+            department_id=department.id,
+            topic="Тикет до начала года",
+            created_at=datetime(2024, 12, 31, 23, 59, 59),
+        )
+        t_after = Ticket(
+            user_id=user.id,
+            department_id=department.id,
+            topic="Тикет после окончания года",
+            created_at=datetime(2026, 1, 1, 0, 0, 1),
+        )
+        session.add_all([t_start, t_end, t_before, t_after])
+        await session.commit()
+
+    data = await get_report_for_period(date(2025, 1, 1), date(2025, 12, 31))
+    topics = {t.topic for t in data["tickets"]}
+    assert "Тикет на старте года" in topics
+    assert "Тикет в конце года" in topics
+    assert "Тикет до начала года" not in topics
+    assert "Тикет после окончания года" not in topics
+
+
+async def test_get_report_for_period_empty_range_returns_clean_structure(db_session_maker):
+    """При отсутствии тикетов в диапазоне возвращается пустой список и структура отделов."""
+    from core.reporting import get_report_for_period
+
+    data = await get_report_for_period(date(2020, 1, 1), date(2020, 1, 10))
+    assert data["tickets"] == []
+    assert isinstance(data["departments"], list)

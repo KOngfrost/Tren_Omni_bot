@@ -188,7 +188,7 @@ async def fetch_counters_and_dashboard(user: dict) -> dict:
             await session.scalar(select(func.count(Ticket.id)).where(*reply_scope))
         ) or 0
 
-        if is_super:
+        if is_super or user.get("can_access_partnerships"):
             new_partnerships_count = (
                 await session.scalar(
                     select(func.count(PartnershipRequest.id)).where(

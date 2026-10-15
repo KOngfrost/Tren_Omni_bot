@@ -337,7 +337,7 @@ class TestRequestSizeValidator:
         mock_request = MagicMock()
         mock_request.headers = {"content-length": "1024"}
         # Не должно выбрасывать исключение
-        validator.check_content_length(mock_request)
+        assert validator.check_content_length(mock_request) is None
 
     def test_check_content_length_exceeds_limit(self):
         """Запрос превышает лимит — HTTPException."""
@@ -431,7 +431,9 @@ class TestAppSecurityIntegration:
         )
 
         assert response.status_code != 500
-        assert response.status_code in {200, 302, 303, 400, 401, 403, 404, 422}
+        assert response.status_code in (302, 303, 401, 403)
+        if response.status_code in (302, 303):
+            assert "/auth/login" in response.headers.get("location", "")
 
     def test_server_header_removed(self, client):
         """Заголовок Server должен быть удалён."""
@@ -491,7 +493,7 @@ class TestAppSecurityIntegration:
         assert re.search(r'name="csrf_token" value="[^"]+"', new_login_page.text)
 
     def test_login_without_csrf_token_returns_403(self, client):
-        """POST на вход без CSRF-токена — 403 (или 500 из-за group exception)."""
+        """POST на вход без CSRF-токена возвращает 403 Forbidden."""
         response = client.post(
             "/auth/login",
             data={
@@ -499,9 +501,7 @@ class TestAppSecurityIntegration:
                 "password": "test_password_123",
             },
         )
-        # CSRF middleware должен вернуть 403. Из-за exception group в TestClient
-        # может быть 500, но внутри — 403 CSRF error.
-        assert response.status_code in (403, 500)
+        assert response.status_code == 403
 
     def test_content_security_policy_strict(self, client):
         """CSP должен запрещать загрузку ресурсов с посторонних источников."""

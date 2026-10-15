@@ -42,15 +42,19 @@ import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import closing
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 try:
     from playwright.async_api import async_playwright
+    from playwright.sync_api import sync_playwright
 
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:  # pragma: no cover - зависит от окружения
+    with sync_playwright() as _p:
+        _exe = _p.chromium.executable_path
+        PLAYWRIGHT_AVAILABLE = bool(_exe and Path(_exe).exists())
+except Exception:  # pragma: no cover - зависит от окружения
     PLAYWRIGHT_AVAILABLE = False
 
 requires_playwright = pytest.mark.skipif(

@@ -51,7 +51,7 @@ def _production_settings(**values: str) -> Settings:
 
 
 def test_production_configuration_accepts_explicit_secure_values():
-    _production_settings().ensure_production_config()
+    assert _production_settings().ensure_production_config() is None
 
 
 def test_production_configuration_rejects_missing_vk_token():

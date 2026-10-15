@@ -120,6 +120,10 @@ async def _verify_web_user(
         # к VK код подтверждения доставлять некуда.
         "two_factor_enabled": bool(web_user.two_factor_enabled),
         "two_factor_available": web_user.two_factor_available,
+        # Гранулярные права доступа к разделам веб-панели
+        "can_access_partnerships": bool(web_user.can_access_partnerships),
+        "can_access_broadcast": bool(web_user.can_access_broadcast),
+        "can_access_logs": bool(web_user.can_access_logs),
     }
     request.session["user"] = canonical
     return canonical
@@ -259,6 +263,54 @@ async def require_superadmin(request: Request) -> dict:
     user = await require_auth(request)
     if not is_superadmin(user):
         raise HTTPException(status_code=403, detail="Действие доступно только суперадминистратору")
+    return user
+
+
+def can_access_partnerships(user: dict) -> bool:
+    """Проверка прав доступа к разделу «Партнёрство»."""
+    return is_superadmin(user) or bool(user.get("can_access_partnerships"))
+
+
+def can_access_broadcast(user: dict) -> bool:
+    """Проверка прав доступа к разделу «Массовая рассылка»."""
+    return is_superadmin(user) or bool(user.get("can_access_broadcast"))
+
+
+def can_access_logs(user: dict) -> bool:
+    """Проверка прав доступа к разделу «Журнал аудита»."""
+    return is_superadmin(user) or bool(user.get("can_access_logs"))
+
+
+async def require_partnerships_access(request: Request) -> dict:
+    """Проверка прав доступа к разделу «Партнёрство»."""
+    user = await require_auth(request)
+    if not can_access_partnerships(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для доступа к разделу «Партнёрство»",
+        )
+    return user
+
+
+async def require_broadcast_access(request: Request) -> dict:
+    """Проверка прав доступа к разделу «Массовая рассылка»."""
+    user = await require_auth(request)
+    if not can_access_broadcast(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для доступа к разделу «Массовая рассылка»",
+        )
+    return user
+
+
+async def require_logs_access(request: Request) -> dict:
+    """Проверка прав доступа к разделу «Журнал аудита»."""
+    user = await require_auth(request)
+    if not can_access_logs(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для доступа к разделу «Журнал аудита»",
+        )
     return user
 
 

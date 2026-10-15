@@ -75,13 +75,24 @@ def build_ticket_department_keyboard(departments: list[str]) -> str:
     return _format_keyboard(rows, one_time=True)
 
 
-def build_admin_keyboard() -> str:
+def build_admin_keyboard(is_super: bool = False) -> str:
     """Панель администратора: все действия белые, возврат в меню белый."""
     rows: list[list[tuple[str, str]]] = [
         [("Заявки администратора", "secondary"), ("Сформировать отчет", "secondary")],
-        [("Обычное меню", "secondary")],
     ]
+    if is_super:
+        rows.append([("Рассылка", "secondary")])
+    rows.append([("Обычное меню", "secondary")])
     return _format_keyboard(rows, one_time=False)
+
+
+def build_broadcast_confirm_keyboard() -> str:
+    """Клавиатура подтверждения отправки рассылки."""
+    rows: list[list[tuple[str, str]]] = [
+        [("Подтвердить рассылку", "positive")],
+        [("Отмена", "negative")],
+    ]
+    return _format_keyboard(rows, one_time=True)
 
 
 def build_admin_report_types_keyboard() -> str:

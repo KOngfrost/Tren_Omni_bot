@@ -168,9 +168,10 @@ class TestParallelSessions:
                     follow_redirects=False,
                 )
 
-            # Second user should still be logged in
+            # Second user should still be logged in (200 OK, not redirected to login)
             dash2 = client2.get("/", follow_redirects=False)
-            assert dash2.status_code in (200, 302, 303)
+            assert dash2.status_code == 200
+            assert "/auth/login" not in dash2.headers.get("location", "")
 
 
 class TestLogout:

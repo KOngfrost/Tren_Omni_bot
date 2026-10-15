@@ -41,11 +41,12 @@ class BotCore:
         async with async_session_maker() as session:
             db_user = await session.scalar(select(User).where(User.vk_id == vk_id))
             if db_user is not None:
+                db_user.last_seen_at = func.now()
                 if not db_user.full_name:
                     name = await fetch_vk_user_name(vk_id)
                     if name:
                         db_user.full_name = name
-                        await session.commit()
+                await session.commit()
                 return db_user
             name = await fetch_vk_user_name(vk_id)
             db_user = User(vk_id=vk_id, full_name=name)
@@ -127,4 +128,17 @@ class BotCore:
                 details=details,
             )
             session.add(log_entry)
+            await session.commit()
+
+    @staticmethod
+    async def touch_user_activity(vk_id: int) -> None:
+        """Обновляет время последней активности пользователя при входящем сообщении/действии."""
+        if vk_id <= 0:
+            return
+        from sqlalchemy import update
+
+        async with async_session_maker() as session:
+            await session.execute(
+                update(User).where(User.vk_id == vk_id).values(last_seen_at=func.now())
+            )
             await session.commit()

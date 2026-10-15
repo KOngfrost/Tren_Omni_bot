@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Рассылка сообщений — OSS Bot{% endblock %}
+{% block meta_description %}Массовая отправка сообщений последним активным пользователям бота.{% endblock %}
+{% block canonical_url %}/broadcast/{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="crumb">Коммуникация</div>
+        <h1>Рассылка сообщений</h1>
+        <div class="page-desc">Отправка сообщения N последним пользователям по дате их активности и обращений</div>
+    </div>
+</div>
+
+{% if flash_success %}
+<div class="alert alert-success" role="status" aria-live="polite">{{ flash_success }}</div>
+{% endif %}
+{% if flash_error %}
+<div class="alert alert-error" role="alert" aria-live="assertive">{{ flash_error }}</div>
+{% endif %}
+
+<div class="dashboard-grid" style="display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 24px; align-items: start;">
+    <!-- Форма отправки рассылки -->
+    <div class="card">
+        <h2 style="font-size: 16px; margin-bottom: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+            Параметры рассылки
+        </h2>
+
+        <form method="post" action="/broadcast/send" id="broadcast-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label for="broadcast-count" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
+                    Количество последних пользователей (N):
+                </label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input
+                        type="number"
+                        id="broadcast-count"
+                        name="count"
+                        class="form-input"
+                        value="{{ preview_count }}"
+                        min="1"
+                        max="{{ total_users if total_users > 0 else 1000 }}"
+                        required
+                        style="width: 120px;"
+                    >
+                    <span style="font-size: 12px; color: var(--text-tertiary);">
+                        Всего в системе: <strong>{{ total_users }}</strong>
+                    </span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
+                    Выбираются пользователи с самой недавней активностью в боте.
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="broadcast-text" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
+                    Текст сообщения:
+                </label>
+                <textarea
+                    id="broadcast-text"
+                    name="text"
+                    rows="6"
+                    class="form-input"
+                    placeholder="Введите текст сообщения для рассылки..."
+                    maxlength="4000"
+                    required
+                    style="resize: vertical; width: 100%; font-family: inherit; font-size: 13.5px;"
+                ></textarea>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
+                    <span>Поддерживаются обычный текст и переносы строк</span>
+                    <span id="char-counter">0 / 4000</span>
+                </div>
+            </div>
+
+            <div style="background: var(--bg-secondary); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 12px; color: var(--text-secondary); line-height: 1.45;">
+                <div style="font-weight: 600; margin-bottom: 4px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    Безопасная очередь Outbox:
+                </div>
+                Сообщения добавляются в очередь и отправляются фоновым процессом с соблюдением лимитов ВКонтакте во избежание блокировок.
+            </div>
+
+            <button
+                type="submit"
+                id="btn-submit-broadcast"
+                class="btn btn-primary"
+                style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; font-weight: 600;"
+            >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+                Запустить рассылку
+            </button>
+        </form>
+    </div>
+
+    <!-- Таблица предпросмотра получателей -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="font-size: 16px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Предпросмотр списка получателей
+            </h2>
+            <span class="badge" id="preview-badge" style="background: var(--bg-secondary); font-size: 12px; font-weight: 600;">
+                Получателей: <span id="recipient-count-display">{{ recent_users|length }}</span>
+            </span>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 45px;">№</th>
+                        <th style="width: 160px;">Пользователь</th>
+                        <th>VK ID</th>
+                        <th>Общежитие</th>
+                        <th style="width: 150px;">Посл. активность</th>
+                    </tr>
+                </thead>
+                <tbody id="recipients-tbody">
+                    {% for u in recent_users %}
+                    <tr>
+                        <td style="color: var(--text-tertiary); font-size: 12px;">{{ loop.index }}</td>
+                        <td>
+                            <strong>{{ u.full_name or 'Без имени' }}</strong>
+                        </td>
+                        <td>
+                            {% if u.vk_id %}
+                            <a href="https://vk.com/id{{ u.vk_id }}" target="_blank" rel="noopener noreferrer" class="link-external" style="font-size: 12px;">
+                                vk.com/id{{ u.vk_id }}
+                            </a>
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 12px;">{{ u.dormitory or '—' }}</td>
+                        <td style="font-size: 12px; color: var(--text-tertiary);">
+                            {{ (u.last_seen_at or u.created_at)|format_dt }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">
+                            Пользователи не найдены.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce('script') }}">
+(function() {
+    var countInput = document.getElementById('broadcast-count');
+    var textInput = document.getElementById('broadcast-text');
+    var charCounter = document.getElementById('char-counter');
+    var tbody = document.getElementById('recipients-tbody');
+    var recipientCountDisplay = document.getElementById('recipient-count-display');
+    var form = document.getElementById('broadcast-form');
+    var debounceTimer = null;
+
+    if (textInput && charCounter) {
+        textInput.addEventListener('input', function() {
+            charCounter.textContent = textInput.value.length + ' / 4000';
+        });
+    }
+
+    function updatePreview(count) {
+        if (!tbody) return;
+        fetch('/broadcast/preview?count=' + encodeURIComponent(count), {
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.users) return;
+            if (recipientCountDisplay) {
+                recipientCountDisplay.textContent = data.users.length;
+            }
+            if (data.users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">Пользователи не найдены.</td></tr>';
+                return;
+            }
+            var html = '';
+            for (var i = 0; i < data.users.length; i++) {
+                var u = data.users[i];
+                html += '<tr>' +
+                    '<td style="color: var(--text-tertiary); font-size: 12px;">' + (i + 1) + '</td>' +
+                    '<td><strong>' + escapeHtml(u.full_name) + '</strong></td>' +
+                    '<td><a href="https://vk.com/id' + u.vk_id + '" target="_blank" rel="noopener noreferrer" class="link-external" style="font-size: 12px;">vk.com/id' + u.vk_id + '</a></td>' +
+                    '<td style="font-size: 12px;">' + escapeHtml(u.dormitory) + '</td>' +
+                    '<td style="font-size: 12px; color: var(--text-tertiary);">' + escapeHtml(u.last_seen) + '</td>' +
+                    '</tr>';
+            }
+            tbody.innerHTML = html;
+        })
+        .catch(function(err) {
+            console.error('Ошибка обновления предпросмотра:', err);
+        });
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    if (countInput) {
+        countInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function() {
+                var val = parseInt(countInput.value, 10);
+                if (val > 0) {
+                    updatePreview(val);
+                }
+            }, 300);
+        });
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            var count = countInput ? countInput.value : '';
+            var text = textInput ? textInput.value.trim() : '';
+            if (!text) {
+                e.preventDefault();
+                alert('Пожалуйста, введите текст сообщения.');
+                return;
+            }
+            var confirmed = confirm('Вы уверены, что хотите запустить рассылку для ' + count + ' пользователей?');
+            if (!confirmed) {
+                e.preventDefault();
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from core.database import async_session_maker
 from core.models import Log
-from web.dependencies import require_superadmin
+from web.dependencies import require_logs_access
 from web.security.csrf import get_csrf_token
 from web.security.middleware import escape_for_csv, sanitize_csv_field
 from web.templating import format_datetime, templates
@@ -35,7 +35,7 @@ async def logs_page(
     request: Request,
     page: str | int = 1,
     actor: str | None = None,
-    user=Depends(require_superadmin),
+    user=Depends(require_logs_access),
 ):
     """Журнал аудита: полная история действий в веб-панели.
 
@@ -100,7 +100,7 @@ async def logs_page(
 
 
 @router.get("/export")
-async def export_logs(user=Depends(require_superadmin)):
+async def export_logs(user=Depends(require_logs_access)):
     """Выгрузка системного журнала в CSV с UTF-8 BOM и экранированием полей."""
     try:
         async with async_session_maker() as session:
