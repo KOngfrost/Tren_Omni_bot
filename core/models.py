@@ -472,6 +472,8 @@ class VkOutbox(Base):
     error = mapped_column(Text, nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
     sent_at = mapped_column(DateTime(timezone=True), nullable=True)
+    attachment = mapped_column(String(512), nullable=True)
+    forward = mapped_column(Text, nullable=True)
 
 
 class VkInbox(Base):

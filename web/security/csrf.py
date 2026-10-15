@@ -106,6 +106,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if "application/x-www-form-urlencoded" in content_type:
                 return await self._token_from_raw_form(request)
             try:
+                # Читаем body для фиксации в _CachedRequest, чтобы тело было доступно downstream
+                await request.body()
                 form = await request.form()
                 value = form.get(CSRF_FORM_FIELD)
                 return str(value) if value else None

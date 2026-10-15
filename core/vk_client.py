@@ -53,7 +53,13 @@ async def close_vk_client() -> None:
         _client_loop = None
 
 
-async def send_vk_message(vk_id: int, text: str, random_id: int | None = None) -> bool:
+async def send_vk_message(
+    vk_id: int,
+    text: str = "",
+    random_id: int | None = None,
+    attachment: str | None = None,
+    forward: str | None = None,
+) -> bool:
     """Отправить сообщение студенту через VK API (HTTP).
 
     Возвращает True при успехе. Ошибки не бросаются и не прерывают
@@ -66,20 +72,37 @@ async def send_vk_message(vk_id: int, text: str, random_id: int | None = None) -
         logger.warning("VK_BOT_TOKEN не задан: сообщение vk_id=%s не отправлено", vk_id)
         return False
 
+    has_message = bool(text and text.strip())
+    has_attachment = bool(attachment and attachment.strip())
+    has_forward = bool(forward and forward.strip())
+    if not (has_message or has_attachment or has_forward):
+        logger.warning(
+            "Отправка сообщения vk_id=%s отклонена: не указан текст, attachment или forward",
+            vk_id,
+        )
+        return False
+
     if random_id is None:
         random_id = secrets.randbelow(2**31 - 1) + 1
+
+    payload_data: dict[str, str | int] = {
+        "access_token": settings.VK_BOT_TOKEN,
+        "v": VK_API_VERSION,
+        "peer_id": vk_id,
+        "random_id": random_id,
+    }
+    if has_message:
+        payload_data["message"] = text[:4000]
+    if has_attachment:
+        payload_data["attachment"] = attachment.strip()
+    if has_forward:
+        payload_data["forward"] = forward.strip()
 
     try:
         client = get_vk_client()
         response = await client.post(
             VK_API_URL,
-            data={
-                "access_token": settings.VK_BOT_TOKEN,
-                "v": VK_API_VERSION,
-                "peer_id": vk_id,
-                "random_id": random_id,
-                "message": text[:4000],
-            },
+            data=payload_data,
         )
         response.raise_for_status()
         payload = response.json()

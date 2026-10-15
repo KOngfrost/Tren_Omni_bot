@@ -10,6 +10,7 @@ from core.services.broadcast_service import (
     enqueue_broadcast,
     get_recent_users,
     get_total_users_count,
+    parse_vk_post_reference,
 )
 
 
@@ -104,10 +105,10 @@ async def test_enqueue_broadcast_success(db_session_maker, monkeypatch):
 async def test_enqueue_broadcast_validation(db_session_maker):
     """Проверка валидации входных параметров рассылки."""
     async with db_session_maker() as session:
-        # Пустой текст
+        # Пустой текст и отсутствие вложений
         r1 = await enqueue_broadcast(session, text="   ", count=5)
         assert r1.status == "error"
-        assert "пустым" in (r1.error or "")
+        assert "Укажите текст" in (r1.error or "")
 
         # Некорректное число N
         r2 = await enqueue_broadcast(session, text="Тест", count=0)
@@ -118,3 +119,98 @@ async def test_enqueue_broadcast_validation(db_session_maker):
         r3 = await enqueue_broadcast(session, text="Тест", count=5)
         assert r3.status == "error"
         assert "нет пользователей" in (r3.error or "")
+
+
+def test_parse_vk_post_reference():
+    """Тестирование парсинга ссылок и идентификаторов постов ВКонтакте."""
+    assert parse_vk_post_reference("wall-207038317_1234") == "wall-207038317_1234"
+    assert parse_vk_post_reference("https://vk.com/wall-207038317_1234") == "wall-207038317_1234"
+    assert parse_vk_post_reference("http://vk.com/wall-207038317_1234") == "wall-207038317_1234"
+    assert parse_vk_post_reference("vk.com/wall-207038317_1234") == "wall-207038317_1234"
+    assert parse_vk_post_reference("https://m.vk.com/wall-207038317_1234") == "wall-207038317_1234"
+    assert parse_vk_post_reference("m.vk.com/wall-207038317_1234") == "wall-207038317_1234"
+    assert (
+        parse_vk_post_reference("https://vk.com/club207038317?w=wall-207038317_1234")
+        == "wall-207038317_1234"
+    )
+    assert (
+        parse_vk_post_reference("https://vk.com/feed?w=wall-207038317_1234%2Fall")
+        == "wall-207038317_1234"
+    )
+    assert parse_vk_post_reference("wall123_456") == "wall123_456"
+
+    # Невалидные варианты
+    assert parse_vk_post_reference("https://vk.com/club207038317") is None
+    assert parse_vk_post_reference("произвольный текст без ссылки") is None
+    assert parse_vk_post_reference("") is None
+    assert parse_vk_post_reference(None) is None
+
+
+@pytest.mark.asyncio
+async def test_enqueue_broadcast_attachment_only(db_session_maker, monkeypatch):
+    """Рассылка только с вложением (без сопроводительного текста)."""
+    now = datetime.now(UTC)
+    monkeypatch.setattr("core.services.broadcast_service.fire_outbox_delivery", lambda: None)
+
+    async with db_session_maker() as session:
+        u = User(vk_id=301, full_name="Тест", created_at=now)
+        session.add(u)
+        await session.commit()
+
+        result = await enqueue_broadcast(
+            session=session,
+            text="",
+            count=1,
+            attachment="wall-207038317_1234",
+            author_name="test_admin",
+            actor_type="bot",
+        )
+
+        assert result.status == "success"
+        assert result.recipients_count == 1
+        assert result.recipient_vk_ids == [301]
+
+        outbox_item = await session.scalar(select(VkOutbox).where(VkOutbox.vk_id == 301))
+        assert outbox_item is not None
+        assert outbox_item.text == ""
+        assert outbox_item.attachment == "wall-207038317_1234"
+
+        log_item = await session.scalar(select(Log).where(Log.action == "broadcast_sent"))
+        assert log_item is not None
+        assert "вложение: wall-207038317_1234" in log_item.details
+
+
+@pytest.mark.asyncio
+async def test_enqueue_broadcast_with_exclusion(db_session_maker, monkeypatch):
+    """Исключение пользователей из рассылки по ID или VK ID."""
+    now = datetime.now(UTC)
+    monkeypatch.setattr("core.services.broadcast_service.fire_outbox_delivery", lambda: None)
+
+    async with db_session_maker() as session:
+        u1 = User(vk_id=401, full_name="Пользователь 1", created_at=now - timedelta(minutes=5))
+        u2 = User(vk_id=402, full_name="Пользователь 2", created_at=now - timedelta(minutes=4))
+        u3 = User(vk_id=403, full_name="Пользователь 3", created_at=now - timedelta(minutes=3))
+        session.add_all([u1, u2, u3])
+        await session.commit()
+        u2_id = u2.id
+
+        # Исключаем пользователя 2 по его внутреннему user_id
+        result = await enqueue_broadcast(
+            session=session,
+            text="Тестовое сообщение",
+            count=3,
+            excluded_user_ids=[u2_id],
+        )
+        assert result.status == "success"
+        assert result.recipients_count == 2
+        assert set(result.recipient_vk_ids) == {401, 403}
+
+        # Если исключены все пользователи
+        result_all_excluded = await enqueue_broadcast(
+            session=session,
+            text="Тестовое сообщение",
+            count=3,
+            excluded_user_ids=[401, 402, 403],  # по VK ID
+        )
+        assert result_all_excluded.status == "error"
+        assert "исключены" in (result_all_excluded.error or "")

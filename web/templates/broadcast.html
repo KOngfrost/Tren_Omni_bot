@@ -19,7 +19,7 @@
 <div class="alert alert-error" role="alert" aria-live="assertive">{{ flash_error }}</div>
 {% endif %}
 
-<div class="dashboard-grid" style="display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 24px; align-items: start;">
+<div class="dashboard-grid" style="display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 24px; align-items: start;">
     <!-- Форма отправки рассылки -->
     <div class="card">
         <h2 style="font-size: 16px; margin-bottom: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
@@ -29,8 +29,9 @@
             Параметры рассылки
         </h2>
 
-        <form method="post" action="/broadcast/send" id="broadcast-form">
+        <form method="post" action="/broadcast/send" id="broadcast-form" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="excluded_ids" id="excluded-ids-input" value="">
 
             <div class="form-group" style="margin-bottom: 16px;">
                 <label for="broadcast-count" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
@@ -57,6 +58,49 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label for="broadcast-post-url" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
+                    Прикрепить пост ВКонтакте (необязательно):
+                </label>
+                <input
+                    type="text"
+                    id="broadcast-post-url"
+                    name="post_url"
+                    class="form-input"
+                    placeholder="https://vk.com/wall-207038317_1234"
+                    style="width: 100%;"
+                >
+                <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
+                    Поддерживаются ссылки формата vk.com/wall-XXX_YYY
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label for="broadcast-image" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
+                    Прикрепить изображение (необязательно):
+                </label>
+                <input
+                    type="file"
+                    id="broadcast-image"
+                    name="image"
+                    class="form-input"
+                    accept="image/jpeg,image/png,image/webp"
+                    style="width: 100%; padding: 6px;"
+                >
+                <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
+                    Форматы: JPG, PNG, WEBP. Максимальный размер: 50 МБ.
+                </div>
+                <div id="image-preview-container" style="display: none; margin-top: 10px; align-items: center; gap: 12px; background: var(--bg-secondary); padding: 8px; border-radius: 6px;">
+                    <img id="image-preview" src="" alt="Предпросмотр изображения" style="max-width: 100px; max-height: 70px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color);">
+                    <div style="overflow: hidden; flex: 1;">
+                        <div id="image-filename" style="font-size: 12px; font-weight: 600; color: var(--text-primary); word-break: break-all;"></div>
+                        <button type="button" id="btn-remove-image" class="btn btn-secondary" style="margin-top: 4px; padding: 2px 8px; font-size: 11px;">
+                            Удалить изображение
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="form-group" style="margin-bottom: 20px;">
                 <label for="broadcast-text" class="form-label" style="display: block; margin-bottom: 6px; font-weight: 600;">
                     Текст сообщения:
@@ -64,11 +108,10 @@
                 <textarea
                     id="broadcast-text"
                     name="text"
-                    rows="6"
+                    rows="5"
                     class="form-input"
                     placeholder="Введите текст сообщения для рассылки..."
                     maxlength="4000"
-                    required
                     style="resize: vertical; width: 100%; font-family: inherit; font-size: 13.5px;"
                 ></textarea>
                 <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
@@ -103,7 +146,7 @@
 
     <!-- Таблица предпросмотра получателей -->
     <div class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
             <h2 style="font-size: 16px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 8px;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
@@ -112,14 +155,27 @@
                 Предпросмотр списка получателей
             </h2>
             <span class="badge" id="preview-badge" style="background: var(--bg-secondary); font-size: 12px; font-weight: 600;">
-                Получателей: <span id="recipient-count-display">{{ recent_users|length }}</span>
+                <span id="recipient-counter-text">Получателей: {{ recent_users|length }} из {{ recent_users|length }} (исключено: 0)</span>
             </span>
+        </div>
+
+        <div id="recipient-search-container" style="display: {% if recent_users|length > 20 %}block{% else %}none{% endif %}; margin-bottom: 12px;">
+            <input
+                type="text"
+                id="recipient-search"
+                class="form-input"
+                placeholder="Поиск по имени или VK ID..."
+                style="width: 100%;"
+            >
         </div>
 
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
+                        <th style="width: 40px; text-align: center;">
+                            <input type="checkbox" id="select-all" checked title="Выбрать всех / Снять выделение">
+                        </th>
                         <th style="width: 45px;">№</th>
                         <th style="width: 160px;">Пользователь</th>
                         <th>VK ID</th>
@@ -129,8 +185,11 @@
                 </thead>
                 <tbody id="recipients-tbody">
                     {% for u in recent_users %}
-                    <tr>
-                        <td style="color: var(--text-tertiary); font-size: 12px;">{{ loop.index }}</td>
+                    <tr data-user-id="{{ u.id }}" data-full-name="{{ (u.full_name or '')|lower }}" data-vk-id="{{ u.vk_id or '' }}" data-dormitory="{{ (u.dormitory or '')|lower }}">
+                        <td style="text-align: center;">
+                            <input type="checkbox" class="recipient-toggle" data-user-id="{{ u.id }}" checked>
+                        </td>
+                        <td style="color: var(--text-tertiary); font-size: 12px;" class="row-index">{{ loop.index }}</td>
                         <td>
                             <strong>{{ u.full_name or 'Без имени' }}</strong>
                         </td>
@@ -150,7 +209,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">
+                        <td colspan="6" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">
                             Пользователи не найдены.
                         </td>
                     </tr>
@@ -166,14 +225,151 @@
     var countInput = document.getElementById('broadcast-count');
     var textInput = document.getElementById('broadcast-text');
     var charCounter = document.getElementById('char-counter');
+    var postUrlInput = document.getElementById('broadcast-post-url');
+    var imageInput = document.getElementById('broadcast-image');
+    var imagePreviewContainer = document.getElementById('image-preview-container');
+    var imagePreview = document.getElementById('image-preview');
+    var imageFilename = document.getElementById('image-filename');
+    var btnRemoveImage = document.getElementById('btn-remove-image');
+    var excludedIdsInput = document.getElementById('excluded-ids-input');
+    var selectAllCheckbox = document.getElementById('select-all');
+    var recipientSearchContainer = document.getElementById('recipient-search-container');
+    var recipientSearchInput = document.getElementById('recipient-search');
+    var recipientCounterText = document.getElementById('recipient-counter-text');
     var tbody = document.getElementById('recipients-tbody');
-    var recipientCountDisplay = document.getElementById('recipient-count-display');
     var form = document.getElementById('broadcast-form');
     var debounceTimer = null;
+
+    var excludedIds = new Set();
 
     if (textInput && charCounter) {
         textInput.addEventListener('input', function() {
             charCounter.textContent = textInput.value.length + ' / 4000';
+        });
+    }
+
+    if (imageInput) {
+        imageInput.addEventListener('change', function() {
+            if (imageInput.files && imageInput.files[0]) {
+                var file = imageInput.files[0];
+                if (imageFilename) imageFilename.textContent = file.name;
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    if (imagePreview) imagePreview.src = e.target.result;
+                    if (imagePreviewContainer) imagePreviewContainer.style.display = 'flex';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+                if (imagePreview) imagePreview.src = '';
+                if (imageFilename) imageFilename.textContent = '';
+            }
+        });
+    }
+
+    if (btnRemoveImage) {
+        btnRemoveImage.addEventListener('click', function() {
+            if (imageInput) imageInput.value = '';
+            if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+            if (imagePreview) imagePreview.src = '';
+            if (imageFilename) imageFilename.textContent = '';
+        });
+    }
+
+    function updateCounterAndHiddenInput() {
+        if (!tbody) return;
+        var toggles = tbody.querySelectorAll('.recipient-toggle');
+        var total = toggles.length;
+        var excluded = 0;
+        var checked = 0;
+
+        for (var i = 0; i < toggles.length; i++) {
+            var t = toggles[i];
+            var uid = t.getAttribute('data-user-id');
+            if (excludedIds.has(uid)) {
+                t.checked = false;
+                excluded++;
+            } else {
+                t.checked = true;
+                checked++;
+            }
+        }
+
+        if (excludedIdsInput) {
+            excludedIdsInput.value = Array.from(excludedIds).join(',');
+        }
+
+        if (recipientCounterText) {
+            recipientCounterText.textContent = 'Получателей: ' + checked + ' из ' + total + ' (исключено: ' + excluded + ')';
+        }
+
+        if (selectAllCheckbox) {
+            if (total === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checked === total) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checked === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+    }
+
+    function filterTable() {
+        if (!tbody) return;
+        var q = (recipientSearchInput ? recipientSearchInput.value : '').trim().toLowerCase();
+        var rows = tbody.querySelectorAll('tr[data-user-id]');
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var name = (row.getAttribute('data-full-name') || '').toLowerCase();
+            var vkId = (row.getAttribute('data-vk-id') || '').toLowerCase();
+            var dorm = (row.getAttribute('data-dormitory') || '').toLowerCase();
+            if (!q || name.indexOf(q) !== -1 || vkId.indexOf(q) !== -1 || dorm.indexOf(q) !== -1) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    }
+
+    if (recipientSearchInput) {
+        recipientSearchInput.addEventListener('input', function() {
+            filterTable();
+        });
+    }
+
+    if (tbody) {
+        tbody.addEventListener('change', function(e) {
+            if (e.target && e.target.classList.contains('recipient-toggle')) {
+                var uid = e.target.getAttribute('data-user-id');
+                if (e.target.checked) {
+                    excludedIds.delete(uid);
+                } else {
+                    excludedIds.add(uid);
+                }
+                updateCounterAndHiddenInput();
+            }
+        });
+    }
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            var shouldCheck = selectAllCheckbox.checked;
+            var toggles = tbody.querySelectorAll('.recipient-toggle');
+            for (var i = 0; i < toggles.length; i++) {
+                var uid = toggles[i].getAttribute('data-user-id');
+                if (shouldCheck) {
+                    excludedIds.delete(uid);
+                } else {
+                    excludedIds.add(uid);
+                }
+            }
+            updateCounterAndHiddenInput();
         });
     }
 
@@ -185,25 +381,42 @@
         .then(function(res) { return res.json(); })
         .then(function(data) {
             if (!data.users) return;
-            if (recipientCountDisplay) {
-                recipientCountDisplay.textContent = data.users.length;
+
+            if (recipientSearchContainer) {
+                recipientSearchContainer.style.display = data.users.length > 20 ? 'block' : 'none';
             }
+            if (recipientSearchInput && data.users.length <= 20) {
+                recipientSearchInput.value = '';
+            }
+
             if (data.users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">Пользователи не найдены.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="text-align: center; padding: 32px 16px; color: var(--text-tertiary);">Пользователи не найдены.</td></tr>';
+                updateCounterAndHiddenInput();
                 return;
             }
+
             var html = '';
             for (var i = 0; i < data.users.length; i++) {
                 var u = data.users[i];
-                html += '<tr>' +
-                    '<td style="color: var(--text-tertiary); font-size: 12px;">' + (i + 1) + '</td>' +
-                    '<td><strong>' + escapeHtml(u.full_name) + '</strong></td>' +
-                    '<td><a href="https://vk.com/id' + u.vk_id + '" target="_blank" rel="noopener noreferrer" class="link-external" style="font-size: 12px;">vk.com/id' + u.vk_id + '</a></td>' +
-                    '<td style="font-size: 12px;">' + escapeHtml(u.dormitory) + '</td>' +
-                    '<td style="font-size: 12px; color: var(--text-tertiary);">' + escapeHtml(u.last_seen) + '</td>' +
+                var uidStr = String(u.id);
+                var isExcluded = excludedIds.has(uidStr);
+                var fullName = u.full_name || '';
+                var dorm = u.dormitory || '';
+                var vkId = u.vk_id || '';
+                var vkLink = vkId ? '<a href="https://vk.com/id' + vkId + '" target="_blank" rel="noopener noreferrer" class="link-external" style="font-size: 12px;">vk.com/id' + vkId + '</a>' : '—';
+
+                html += '<tr data-user-id="' + uidStr + '" data-full-name="' + escapeHtml(fullName.toLowerCase()) + '" data-vk-id="' + escapeHtml(String(vkId).toLowerCase()) + '" data-dormitory="' + escapeHtml(dorm.toLowerCase()) + '">' +
+                    '<td style="text-align: center;"><input type="checkbox" class="recipient-toggle" data-user-id="' + uidStr + '"' + (isExcluded ? '' : ' checked') + '></td>' +
+                    '<td style="color: var(--text-tertiary); font-size: 12px;" class="row-index">' + (i + 1) + '</td>' +
+                    '<td><strong>' + escapeHtml(fullName || 'Без имени') + '</strong></td>' +
+                    '<td>' + vkLink + '</td>' +
+                    '<td style="font-size: 12px;">' + escapeHtml(dorm || '—') + '</td>' +
+                    '<td style="font-size: 12px; color: var(--text-tertiary);">' + escapeHtml(u.last_seen || '') + '</td>' +
                     '</tr>';
             }
             tbody.innerHTML = html;
+            filterTable();
+            updateCounterAndHiddenInput();
         })
         .catch(function(err) {
             console.error('Ошибка обновления предпросмотра:', err);
@@ -233,19 +446,37 @@
 
     if (form) {
         form.addEventListener('submit', function(e) {
-            var count = countInput ? countInput.value : '';
             var text = textInput ? textInput.value.trim() : '';
-            if (!text) {
+            var postUrl = postUrlInput ? postUrlInput.value.trim() : '';
+            var hasImage = imageInput && imageInput.files && imageInput.files.length > 0;
+
+            if (!text && !postUrl && !hasImage) {
                 e.preventDefault();
-                alert('Пожалуйста, введите текст сообщения.');
+                alert('Укажите текст сообщения или прикрепите пост/изображение.');
                 return;
             }
-            var confirmed = confirm('Вы уверены, что хотите запустить рассылку для ' + count + ' пользователей?');
+
+            var toggles = tbody ? tbody.querySelectorAll('.recipient-toggle') : [];
+            var checkedCount = 0;
+            for (var i = 0; i < toggles.length; i++) {
+                if (toggles[i].checked) checkedCount++;
+            }
+
+            if (toggles.length > 0 && checkedCount === 0) {
+                e.preventDefault();
+                alert('Не выбрано ни одного получателя для рассылки.');
+                return;
+            }
+
+            var confirmed = confirm('Вы уверены, что хотите запустить рассылку для ' + checkedCount + ' пользователей?');
             if (!confirmed) {
                 e.preventDefault();
             }
         });
     }
+
+    // Первичная синхронизация счетчика и скрытого поля
+    updateCounterAndHiddenInput();
 })();
 </script>
 {% endblock %}

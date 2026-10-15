@@ -130,4 +130,3 @@ def test_setup_logging_dynamic_log_level(tmp_path, monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "")
     setup_logging(log_dir=log_dir, level=logging.INFO)
     assert logging.getLogger().level == logging.INFO
-
