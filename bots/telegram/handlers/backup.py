@@ -286,7 +286,7 @@ async def cmd_backup(
             await target_message.answer(report, parse_mode="HTML")
     else:
         err_text = html.escape(info)
-        fail_text = f"❌ <b>Не удалось создать резервную копию:</b>\n\n<code>{err_text}</code>"
+        fail_text = f"🚫 <b>Не удалось создать резервную копию:</b>\n\n<code>{err_text}</code>"
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="backup:create")],

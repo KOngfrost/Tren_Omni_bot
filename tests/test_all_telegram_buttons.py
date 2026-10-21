@@ -21,6 +21,7 @@ from bots.telegram.handlers.base import cmd_help, cmd_start
 from bots.telegram.handlers.containers import (
     callback_reboot_cancel,
     callback_reboot_confirm,
+    callback_restart_all,
     callback_view_logs,
     cmd_logs_menu,
     cmd_restart_menu,
@@ -28,12 +29,14 @@ from bots.telegram.handlers.containers import (
 from bots.telegram.handlers.maintenance import (
     callback_maintenance_disable,
     callback_maintenance_enable,
+    callback_maintenance_refresh,
     cmd_maintenance,
 )
 from bots.telegram.handlers.status import callback_status_refresh, cmd_status
 from bots.telegram.handlers.two_factor import (
     callback_two_factor_disable,
     callback_two_factor_enable,
+    callback_two_factor_refresh,
     cmd_two_factor,
 )
 from bots.telegram.keyboards import (
@@ -167,7 +170,9 @@ async def test_button_help():
     msg = _make_msg("ℹ️ Помощь")
     await cmd_help(msg, get_settings())
     msg.answer.assert_called_once()
-    assert "Справочник команд" in msg.answer.call_args[0][0]
+    help_text = msg.answer.call_args[0][0]
+    assert "Справочник команд" in help_text
+    assert "/kickall" not in help_text
 
 
 @pytest.mark.asyncio
@@ -353,3 +358,96 @@ async def test_inline_button_backup_create():
     ):
         await cmd_backup(cb, docker_mock, settings)
     cb.answer.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_inline_button_maint_refresh():
+    cb = _make_cb("maint:refresh")
+    with patch(
+        "bots.telegram.handlers.maintenance.get_maintenance_info",
+        return_value={"enabled": False},
+    ):
+        await callback_maintenance_refresh(cb)
+    cb.answer.assert_called_once_with("✅️ Статус техработ обновлён.")
+
+    # Exception path: edit_text raises
+    cb_err = _make_cb("maint:refresh")
+    cb_err.message.edit_text.side_effect = Exception("Message is not modified")
+    with patch(
+        "bots.telegram.handlers.maintenance.get_maintenance_info",
+        return_value={"enabled": False},
+    ):
+        await callback_maintenance_refresh(cb_err)
+    cb_err.answer.assert_called_once_with("✅️ Данные актуальны.")
+
+
+@pytest.mark.asyncio
+async def test_inline_button_two_factor_refresh():
+    cb = _make_cb("2fa:refresh")
+    with patch(
+        "bots.telegram.handlers.two_factor.get_two_factor_info",
+        return_value={"enabled": True},
+    ):
+        await callback_two_factor_refresh(cb)
+    cb.answer.assert_called_once_with("✅️ Статус 2FA обновлён.")
+
+    # Exception path: edit_text raises
+    cb_err = _make_cb("2fa:refresh")
+    cb_err.message.edit_text.side_effect = Exception("Message is not modified")
+    with patch(
+        "bots.telegram.handlers.two_factor.get_two_factor_info",
+        return_value={"enabled": True},
+    ):
+        await callback_two_factor_refresh(cb_err)
+    cb_err.answer.assert_called_once_with("✅️ Данные актуальны.")
+
+
+@pytest.mark.asyncio
+async def test_inline_button_reboot_confirm_failure():
+    cb = _make_cb("reboot:confirm")
+    docker_mock = AsyncMock(spec=DockerClient)
+    docker_mock.restart_container = AsyncMock(return_value=False)
+    docker_mock.list_containers.return_value = [
+        ContainerInfo("1", "oss_bot_app", "img", "running", "Up", "healthy", True)
+    ]
+    await callback_reboot_confirm(cb, docker_mock)
+    cb.answer.assert_called_once_with("Перезапуск запущен!")
+    last_call = cb.message.edit_text.call_args[0][0]
+    assert "🚫 <b>Не удалось перезапустить:</b>" in last_call
+    assert "oss_bot_app" in last_call
+
+
+@pytest.mark.asyncio
+async def test_inline_button_restart_all_failure():
+    cb = _make_cb("restart:all_project")
+    docker_mock = AsyncMock(spec=DockerClient)
+    docker_mock.restart_container = AsyncMock(return_value=(False, "Failed"))
+    docker_mock.list_containers.return_value = [
+        ContainerInfo("1", "oss_bot_app", "img", "running", "Up", "healthy", True)
+    ]
+    await callback_restart_all(cb, docker_mock)
+    cb.answer.assert_called_once_with("Перезапуск проектных сервисов...")
+    last_call = cb.message.edit_text.call_args[0][0]
+    assert "🚫 <b>Не удалось перезапустить:</b>" in last_call
+    assert "oss_bot_app" in last_call
+
+
+@pytest.mark.asyncio
+async def test_inline_button_backup_failure():
+    from core.config import get_settings
+
+    cb = _make_cb("backup:create")
+    status_msg = AsyncMock()
+    cb.message.answer = AsyncMock(return_value=status_msg)
+    docker_mock = AsyncMock(spec=DockerClient)
+    settings = get_settings()
+    with patch(
+        "bots.telegram.handlers.backup.perform_database_backup",
+        new=AsyncMock(return_value=(False, None, "pg_dump failed with exit code 1")),
+    ):
+        await cmd_backup(cb, docker_mock, settings)
+    cb.answer.assert_called_once()
+    assert status_msg.edit_text.call_count >= 1
+    last_call = status_msg.edit_text.call_args[0][0]
+    assert "🚫 <b>Не удалось создать резервную копию:</b>" in last_call
+    assert "pg_dump failed with exit code 1" in last_call

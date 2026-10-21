@@ -73,9 +73,9 @@ async def callback_maintenance_refresh(callback: CallbackQuery) -> None:
     try:
         if callback.message:
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-        await callback.answer("Статус техработ обновлён.")
+        await callback.answer("✅️ Статус техработ обновлён.")
     except Exception:
-        await callback.answer("Данные актуальны.")
+        await callback.answer("✅️ Данные актуальны.")
 
 
 @router.callback_query(F.data == "maint:enable")
