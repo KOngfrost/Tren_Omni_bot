@@ -112,7 +112,7 @@ async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename
         await api.messages.send(
             peer_id=admin_vk_id,
             random_id=secrets.randbelow(2**31 - 1) + 1,
-            message="Ежедневный отчёт.",
+            message="📊 Ежедневный отчёт.",
             attachment=attachment,
         )
     finally:
