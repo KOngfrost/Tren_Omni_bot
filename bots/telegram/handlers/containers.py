@@ -70,18 +70,27 @@ async def callback_restart_all(
         )
 
     containers = await docker_client.list_containers(all=True)
-    restarted = []
+    restarted: list[str] = []
+    failed: list[str] = []
     for c in containers:
         if c.is_project_container and "migrate" not in c.name:
             ok, _ = await docker_client.restart_container(c.name)
             if ok:
                 restarted.append(c.name)
+            else:
+                failed.append(c.name)
 
-    result_text = (
-        f"✅ Перезапущены: {', '.join(restarted)}"
-        if restarted
-        else "⚠️ Нет сервисов для перезапуска."
-    )
+    parts: list[str] = []
+    if restarted:
+        parts.append(f"✅ Перезапущены: {', '.join(restarted)}")
+    elif not failed:
+        parts.append("⚠️ Нет сервисов для перезапуска.")
+    if failed:
+        parts.append(
+            "🚫 <b>Не удалось перезапустить:</b>\n"
+            + "\n".join(f"• <code>{n}</code>" for n in failed)
+        )
+    result_text = "\n\n".join(parts) if parts else "⚠️ Нет сервисов для перезапуска."
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📊 К статусу", callback_data="status:refresh")]
@@ -108,7 +117,7 @@ async def callback_restart_single(
         )
 
     ok, msg = await docker_client.restart_container(target)
-    emoji = "✅" if ok else "❌"
+    emoji = "✅" if ok else "🚫"
     res_text = f"{emoji} <b>{msg}</b>"
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -234,7 +243,7 @@ async def callback_reboot_confirm(
             f"• <code>{n}</code>" for n in restarted
         )
         if failed:
-            res += "\n\n❌ <b>Не удалось перезапустить:</b>\n" + "\n".join(
+            res += "\n\n🚫 <b>Не удалось перезапустить:</b>\n" + "\n".join(
                 f"• <code>{n}</code>" for n in failed
             )
         res += "\n\n💡 <i>Примечание: перезагрузка физического сервера выполняется через SSH-терминал (`sudo reboot`).</i>"
