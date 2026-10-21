@@ -42,7 +42,7 @@ jobs:
 
             echo "=== [3/6] Syncing configuration and version ==="
             if [ -f .env ]; then
-              sed -i 's/^APP_VERSION=.*/APP_VERSION=0.9.1/' .env
+              sed -i 's/^APP_VERSION=.*/APP_VERSION=0.9.5/' .env
             fi
 
             echo "=== [4/6] Building and preparing Docker containers ==="
@@ -61,4 +61,4 @@ jobs:
             # Healthcheck probe (internal HTTP fallback & public domain)
             curl -fsSL -k http://localhost:8000/health || curl -fsSL -k https://yenotick.duckdns.org/health
 
-            echo " Deployment of OSS Bot v0.9.1 successfully completed!"
+            echo " Deployment of OSS Bot v0.9.5 successfully completed!"
