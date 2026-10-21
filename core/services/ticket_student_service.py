@@ -89,18 +89,20 @@ async def create_ticket(
                 continue
             if department and department.id:
                 notification = (
-                    f"Новая заявка #{ticket.id} [{department.name}]\n"
-                    f"От: {student_info}{dorm_info}\n"
-                    f"Тема: {topic}\n\nТекст: {description}\n\n"
+                    f"🔔 Новая заявка #{ticket.id} [{department.name}]\n\n"
+                    f"👤 От: {student_info}{dorm_info}\n"
+                    f"📌 Тема: {topic}\n\n"
+                    f"Текст: {description}\n\n"
                     f"Для работы напишите: «Заявка #{ticket.id}»"
                 )
             else:
                 notification = (
-                    f"Новое общее обращение #{ticket.id} [Общий вопрос]\n"
-                    f"От: {student_info}{dorm_info}\n"
-                    f"Тема: {topic}\n\nТекст: {description}\n\n"
-                    "Обращение не закреплено за отделом — ответьте первым "
-                    "или передайте его в профильный отдел.\n"
+                    f"🔔 Новое общее обращение #{ticket.id} [Общий вопрос]\n\n"
+                    f"👤 От: {student_info}{dorm_info}\n"
+                    f"📌 Тема: {topic}\n\n"
+                    f"Текст: {description}\n\n"
+                    "❕️Обращение не закреплено за отделом — ответьте первым "
+                    "или передайте его в профильный отдел.\n\n"
                     f"Для работы напишите: «Заявка #{ticket.id}»"
                 )
             add_outbox_message(session, admin.user.vk_id, notification)
@@ -149,7 +151,7 @@ async def add_student_reply(
         scheduled = False
         for admin in admins:
             if admin.user and admin.user.vk_id:
-                subject = "Повторно открыто" if reopened else "Новый ответ студента"
+                subject = "🔔 Повторно открыто" if reopened else "🔔 Новый ответ студента"
                 add_outbox_message(
                     session,
                     admin.user.vk_id,

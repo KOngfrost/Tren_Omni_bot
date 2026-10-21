@@ -233,13 +233,14 @@ async def _send_otp_to_vk(
     """
     from core.outbox import add_outbox_message, fire_outbox_delivery
 
+    ttl_min = max(1, settings.TWO_FACTOR_CODE_TTL // 60)
     add_outbox_message(
         session,
         vk_id=vk_admin_id,
         text=(
-            f"{reason}:\n{otp_code}\n"
-            f"Код действителен {settings.TWO_FACTOR_CODE_TTL // 60} мин. "
-            "Если это были не вы, немедленно смените пароль."
+            f"{reason}:\n{otp_code}\n\n"
+            f"Код действителен {ttl_min} мин.\n\n"
+            "❗️Если это были не вы, немедленно смените пароль."
         ),
     )
     await session.commit()

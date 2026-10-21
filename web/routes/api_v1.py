@@ -216,7 +216,7 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
                 session,
                 vk_admin_id=int(vk_admin_id),
                 otp_code=otp_code,
-                reason="Одноразовый код для входа в панель управления OSS Bot",
+                reason="🔐 Одноразовый код для входа в панель управления OSS Bot",
             )
             return {
                 "success": True,
