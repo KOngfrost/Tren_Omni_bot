@@ -405,3 +405,34 @@ def test_main_reply_keyboard_webapp_button():
     assert kb.keyboard[0][0].text == "📱 Веб-панель"
     assert kb.keyboard[0][0].web_app is not None
     assert kb.keyboard[0][0].web_app.url == "https://bot.example.com"
+
+
+@pytest.mark.asyncio
+async def test_critical_disk_alert_threshold_and_deduplication():
+    """Тест порога дискового алерта (>=92%) и 15-минутного антиспам-кулдауна."""
+    from unittest.mock import AsyncMock, patch
+
+    from bots.telegram.monitor_service import MonitorService
+
+    mock_bot = AsyncMock()
+    service = MonitorService(bot=mock_bot, admin_id=12345, docker_client=None)
+
+    metrics = {
+        "disk_percent": 94.0,
+        "disk_free": "1.2GB",
+        "disk_used": "18.8GB",
+        "disk_total": "20GB",
+        "ram_percent": 45.0,
+        "ram_used": "1G",
+        "ram_total": "2G",
+    }
+    with patch("bots.telegram.monitor_service.get_system_metrics", return_value=metrics):
+        await service._check_system_resources()
+        assert mock_bot.send_message.call_count == 1
+        sent_text = mock_bot.send_message.call_args[1]["text"]
+        assert "🚨 <b>Критически мало места на диске!</b>" in sent_text
+        assert "94.0%" in sent_text
+
+        # Второй такт сразу же — обязан быть подавлен кулдауном
+        await service._check_system_resources()
+        assert mock_bot.send_message.call_count == 1

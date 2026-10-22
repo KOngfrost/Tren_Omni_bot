@@ -509,3 +509,19 @@ class TestAppSecurityIntegration:
         csp = response.headers.get("content-security-policy", "")
         assert "script-src" in csp
         assert "form-action 'self'" in csp
+
+
+def test_verify_dummy_password_and_needs_rehash(monkeypatch):
+    """Тестирование anti-timing verify_dummy_password и детекции rehash для устаревших хешей."""
+    from web.security.passwords import hash_password, needs_rehash, verify_dummy_password
+
+    called = []
+    monkeypatch.setattr("web.security.passwords.verify_password", lambda p, s: called.append(p))
+    verify_dummy_password("dummy_probe_password")
+    assert len(called) == 1
+    assert called[0] == "dummy_probe_password"
+
+    legacy_pbkdf2 = "pbkdf2_sha256$100000$salt$hash"
+    assert needs_rehash(legacy_pbkdf2) is True
+    argon_hash = hash_password("secret123")
+    assert needs_rehash(argon_hash) is False

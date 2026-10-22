@@ -216,3 +216,25 @@ async def test_authenticate_blocks_unlinked_qa_user_in_production(db_session_mak
         result_test = await _authenticate(session, "qa_hacker", "qa_hacker_pass")
         assert result_test is not None
         assert result_test["needs_2fa"] is False
+
+
+@pytest.mark.asyncio
+async def test_otp_message_strict_formatting_and_warning(db_session_maker):
+    """Строгая проверка формата 2FA сообщения: предупреждение безопасности и разделители."""
+    from core.models import VkOutbox
+    from web.routes.auth import _send_otp_to_vk
+
+    async with db_session_maker() as session:
+        await _send_otp_to_vk(
+            session,
+            vk_admin_id=999888,
+            otp_code="123456",
+            reason="🔐 Одноразовый код для входа в панель управления OSS Bot",
+        )
+        msg_row = (await session.scalars(select(VkOutbox).where(VkOutbox.vk_id == 999888))).first()
+        assert msg_row is not None
+        assert (
+            "🔐 Одноразовый код для входа в панель управления OSS Bot:\n123456\n\n" in msg_row.text
+        )
+        assert "Код действителен 5 мин." in msg_row.text
+        assert "❗️Если это были не вы, немедленно смените пароль." in msg_row.text

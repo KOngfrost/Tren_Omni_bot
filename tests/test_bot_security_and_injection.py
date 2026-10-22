@@ -242,3 +242,25 @@ async def test_reports_date_injection(db_session_maker):
     await report_by_period_input(msg_sqli_period)
     msg_sqli_period.answer.assert_called_once()
     assert "Неверный формат" in msg_sqli_period.answer.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_ticket_description_min_and_max_length_validation():
+    """Валидация длины описания проблемы в VK: <10 и >3000 символов."""
+    from unittest.mock import AsyncMock
+
+    from bots.vk.handlers.student import ticket_description_handler
+
+    # 1. Слишком короткое (< 10)
+    mock_msg_short = AsyncMock()
+    mock_msg_short.text = "сломалось"  # 9 символов
+    await ticket_description_handler(mock_msg_short)
+    assert mock_msg_short.answer.called
+    assert "минимум 10 символов" in mock_msg_short.answer.call_args[0][0]
+
+    # 2. Слишком длинное (> 3000)
+    mock_msg_long = AsyncMock()
+    mock_msg_long.text = "А" * 3005
+    await ticket_description_handler(mock_msg_long)
+    assert mock_msg_long.answer.called
+    assert "максимум 3000 символов" in mock_msg_long.answer.call_args[0][0]

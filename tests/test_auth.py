@@ -134,3 +134,43 @@ class TestSessionHelpers:
         user = await require_superadmin(request)
 
         assert user["role"] == "SUPERADMIN"
+
+
+def test_login_blocked_for_expired_account(web_client):
+    """Блокировка авторизации для администраторов с истёкшим сроком учётной записи."""
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from core.database import async_session_maker
+    from core.models import WebRole, WebUser
+    from web.security.passwords import hash_password
+
+    async def _create_expired():
+        async with async_session_maker() as session:
+            expired_user = WebUser(
+                username="expired_admin_qa",
+                password_hash=hash_password("ValidSecret123!"),
+                role=WebRole.DEPARTMENT_ADMIN,
+                is_active=True,
+                expires_at=datetime.now(UTC) - timedelta(days=2),
+            )
+            session.add(expired_user)
+            await session.commit()
+
+    asyncio.run(_create_expired())
+
+    login_page = web_client.get("/auth/login")
+    assert login_page.status_code == 200
+    page_text = login_page.text
+    token = ""
+    prefix = 'name="csrf_token" value="'
+    if prefix in page_text:
+        token = page_text.split(prefix)[1].split('"')[0]
+
+    res = web_client.post(
+        "/auth/login",
+        data={"username": "expired_admin_qa", "password": "ValidSecret123!", "csrf_token": token},
+        follow_redirects=True,
+    )
+    assert res.status_code == 200
+    assert "Неверный логин или пароль" in res.text or "Истёк срок" in res.text

@@ -116,3 +116,22 @@ def test_2fa_template_structure():
     assert 'type="submit"' in template_content
     assert "required" in template_content
     assert "/legal/consent" in template_content
+
+
+def test_csrf_strictly_blocks_delete_without_token(web_client):
+    """Метод DELETE обязан блокироваться CSRF-middleware без токена."""
+    res = web_client.delete("/api/v1/departments/1", headers={"accept": "application/json"})
+    assert res.status_code == 403
+    assert "CSRF" in res.text
+
+
+def test_csrf_rejects_forged_token_with_active_session(web_client):
+    """Поддельный CSRF токен обязан отвергаться при существующей сессии."""
+    web_client.get("/auth/login")
+    res = web_client.post(
+        "/auth/login",
+        data={"csrf_token": "FORGED_ATTACKER_TOKEN", "username": "admin", "password": "x"},
+        headers={"accept": "application/json"},
+    )
+    assert res.status_code == 403
+    assert "Недействительный CSRF-токен" in res.text
