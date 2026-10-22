@@ -42,6 +42,7 @@ Status/
 # Reports
 bandit-report.json
 pip-audit-report.json
+mutation_test_report.json
 *.sql.gz
 
 # OS files
