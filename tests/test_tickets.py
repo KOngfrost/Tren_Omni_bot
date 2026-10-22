@@ -599,3 +599,73 @@ async def test_community_reply_target_by_vk_quote(db_session_maker):
     assert updated2.id == ticket2.id
     assert updated2.status == TicketStatus.IN_PROGRESS
     assert updated2.response_text == "Приняли ваше обращение"
+
+
+@pytest.mark.asyncio
+async def test_ticket_student_notifications_strict_format_and_outbox(db_session_maker):
+    """Строгая проверка шаблонов уведомлений v0.9.5 и обязательной постановки в Outbox."""
+    from core.models import Admin, UserRole, VkOutbox
+    from core.services.ticket_student_service import add_student_reply, create_ticket
+
+    async with db_session_maker() as session:
+        dept = Department(name="Жилищный отдел")
+        session.add(dept)
+        await session.flush()
+
+        admin_user = User(vk_id=888111, full_name="Админ Профильный")
+        super_user = User(vk_id=888222, full_name="Суперадмин")
+        student_user = User(vk_id=888333, full_name="Иван Студент")
+        session.add_all([admin_user, super_user, student_user])
+        await session.flush()
+
+        admin = Admin(user_id=admin_user.id, department_id=dept.id, role=UserRole.ADMIN)
+        superadmin = Admin(user_id=super_user.id, department_id=None, role=UserRole.SUPERADMIN)
+        session.add_all([admin, superadmin])
+        await session.commit()
+
+    # 1. Профильная заявка: проверяем 🔔 и точный префикс
+    t_dept = await create_ticket(
+        topic="Проблема с комнатой",
+        description="Сломался стол в комнате 5",
+        department_name="Жилищный отдел",
+        vk_id=888333,
+        keep_identity=True,
+    )
+    async with db_session_maker() as session:
+        dept_outbox = (
+            await session.scalars(select(VkOutbox).where(VkOutbox.vk_id == 888111))
+        ).all()
+        assert len(dept_outbox) >= 1
+        msg = dept_outbox[-1].text
+        assert msg.startswith(f"🔔 Новая заявка #{t_dept.id} [Жилищный отдел]\n\n")
+        assert "👤 От: Иван Студент" in msg
+        assert "📌 Тема: Проблема с комнатой" in msg
+
+    # 2. Общее обращение: проверяем 🔔 и плашку ❕️Обращение не закреплено
+    t_gen = await create_ticket(
+        topic="Общий вопрос",
+        description="Как получить пропуск?",
+        department_name=None,
+        vk_id=888333,
+        keep_identity=True,
+    )
+    async with db_session_maker() as session:
+        gen_outbox = (
+            await session.scalars(select(VkOutbox).where(VkOutbox.vk_id == 888222))
+        ).all()
+        assert len(gen_outbox) >= 1
+        msg_gen = gen_outbox[-1].text
+        assert msg_gen.startswith(f"🔔 Новое общее обращение #{t_gen.id} [Общий вопрос]\n\n")
+        assert "❕️Обращение не закреплено за отделом — ответьте первым " in msg_gen
+
+    # 3. Ответ студента: проверяем 🔔 тему и факт создания outbox записи для админа
+    reply_res = await add_student_reply(t_dept.id, 888333, "Уточняю: стол деревянный")
+    assert reply_res is not None
+    async with db_session_maker() as session:
+        reply_outbox = (
+            await session.scalars(select(VkOutbox).where(VkOutbox.vk_id == 888111))
+        ).all()
+        assert len(reply_outbox) >= 2
+        reply_msg = reply_outbox[-1].text
+        assert reply_msg.startswith("🔔 Новый ответ студента\n\n")
+        assert f"Студент ответил на заявку #{t_dept.id}:\n\nУточняю: стол деревянный" in reply_msg

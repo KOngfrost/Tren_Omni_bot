@@ -196,6 +196,7 @@ async def test_send_report_to_vk_uploads_bytes_and_sends_document(monkeypatch):
 
     assert api.messages.kwargs["peer_id"] == 123
     assert api.messages.kwargs["attachment"] == "doc-attachment"
+    assert api.messages.kwargs["message"] == "📊 Ежедневный отчёт."
 
 
 async def test_start_report_scheduler_uses_current_loop(monkeypatch):

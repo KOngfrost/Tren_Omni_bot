@@ -356,3 +356,22 @@ class TestApiDeleteDepartment:
         resp = _api_post(web_client, f"/api/departments/{dept_id}/delete", json={})
         assert resp.status_code == 400
         assert "не пуст" in resp.json()["error"]
+
+    def test_html_form_delete_non_empty_department_blocked(self, web_client):
+        """Удаление отдела через HTML-форму (/departments/{id}/delete) блокируется при наличии данных."""
+        _login(web_client)
+        dept_id = _create_department_api(web_client, "НепустойОтделHTML")
+        _db_execute(
+            web_client,
+            "INSERT INTO knowledge_base (department_id, keywords, answer) "
+            "VALUES (?, 'ключ', 'ответ')",
+            (dept_id,),
+        )
+        csrf = _api_csrf(web_client)
+        resp = web_client.post(
+            f"/departments/{dept_id}/delete",
+            data={"csrf_token": csrf},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert "не пуст" in resp.text

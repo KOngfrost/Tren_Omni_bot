@@ -169,3 +169,30 @@ async def test_run_archival(db_session_maker, tmp_path, monkeypatch):
     log_files = [f for f in files if f.startswith("logs_")]
     assert len(ticket_files) >= 1
     assert len(log_files) >= 1
+
+
+@pytest.mark.asyncio
+async def test_recent_completed_tickets_preserved(db_session_maker):
+    """Свежие выполненные заявки (младше порога) не должны архивироваться или удаляться."""
+    from datetime import UTC, datetime, timedelta
+
+    from core.archival import archive_and_delete_tickets
+    from core.models import Ticket, TicketStatus
+
+    now = datetime.now(UTC)
+    async with db_session_maker() as session:
+        fresh = Ticket(
+            topic="Свежая закрытая заявка",
+            description="Только что починили",
+            status=TicketStatus.COMPLETED,
+            updated_at=now - timedelta(days=2),
+        )
+        session.add(fresh)
+        await session.commit()
+        fresh_id = fresh.id
+
+    archived_count, _ = await archive_and_delete_tickets(now)
+    assert archived_count == 0
+
+    async with db_session_maker() as session:
+        assert (await session.get(Ticket, fresh_id)) is not None

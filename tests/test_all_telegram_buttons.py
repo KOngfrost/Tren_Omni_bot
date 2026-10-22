@@ -451,3 +451,18 @@ async def test_inline_button_backup_failure():
     last_call = status_msg.edit_text.call_args[0][0]
     assert "🚫 <b>Не удалось создать резервную копию:</b>" in last_call
     assert "pg_dump failed with exit code 1" in last_call
+
+
+@pytest.mark.asyncio
+async def test_single_container_restart_failure_stop_icon():
+    """При ошибке одиночного перезапуска используется эмодзи 🚫, а не ❌."""
+    from bots.telegram.docker_client import DockerClient
+    from bots.telegram.handlers.containers import callback_restart_single
+
+    cb = _make_cb("restart:oss_bot_app")
+    docker_mock = AsyncMock(spec=DockerClient)
+    docker_mock.restart_container = AsyncMock(return_value=(False, "Docker daemon timeout"))
+    await callback_restart_single(cb, docker_mock)
+    last_call = cb.message.edit_text.call_args[0][0]
+    assert "🚫" in last_call
+    assert "❌" not in last_call
