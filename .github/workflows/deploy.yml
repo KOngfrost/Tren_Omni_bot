@@ -12,8 +12,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pre-deploy-check:
+    name: Verify Required Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PROD_HOST Secret
+        run: |
+          if [ -z "${{ secrets.PROD_HOST }}" ]; then
+            echo "❌ ОШИБКА: GitHub Secret 'PROD_HOST' не настроен!"
+            echo "Перейдите в Settings -> Secrets and variables -> Actions и добавьте PROD_HOST."
+            exit 1
+          fi
+          if [ -z "${{ secrets.PROD_SSH_KEY }}" ] && [ -z "${{ secrets.PROD_PASSWORD }}" ]; then
+            echo "❌ ОШИБКА: Требуется указать либо 'PROD_SSH_KEY', либо 'PROD_PASSWORD' в GitHub Secrets!"
+            exit 1
+          fi
+          echo "✅ Все обязательные секреты развёртывания настроены."
+
   deploy:
     name: Deploy to Production Server
+    needs: [pre-deploy-check]
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -33,32 +51,60 @@ jobs:
           command_timeout: 15m
           script: |
             set -euo pipefail
-            echo "=== [1/6] Navigating to production directory ==="
-            cd /opt/oss_bot
+            PROD_DIR="${PROD_DEPLOY_DIR:-/opt/oss_bot}"
 
-            echo "=== [2/6] Synchronizing Git repository with master ==="
+            echo "=== [1/6] Navigating to production directory ($PROD_DIR) ==="
+            if [ ! -d "$PROD_DIR" ]; then
+              echo "Directory $PROD_DIR not found. Creating..."
+              mkdir -p "$PROD_DIR"
+            fi
+            cd "$PROD_DIR"
+
+            if [ ! -d .git ]; then
+              echo "Git repository not initialized in $PROD_DIR. Initializing..."
+              git clone https://github.com/KOngfrost/Tren_Omni_bot.git .
+            fi
+
+            echo "=== [2/6] Synchronizing Git repository with origin/master ==="
             git fetch origin master
             git reset --hard origin/master
 
-            echo "=== [3/6] Syncing configuration and version ==="
-            if [ -f .env ]; then
-              sed -i 's/^APP_VERSION=.*/APP_VERSION=0.9.5/' .env
+            echo "=== [3/6] Validating environment configuration ==="
+            if [ ! -f .env ]; then
+              echo "⚠️ ВНИМАНИЕ: Файл .env не найден! Создаём из .env.example..."
+              cp .env.example .env
+              echo "❌ Заполните боевые переменные в $PROD_DIR/.env и запустите деплой повторно."
+              exit 1
+            fi
+
+            # Автоматическая синхронизация версии приложения из pyproject.toml
+            if command -v python3 &>/dev/null && [ -f pyproject.toml ]; then
+              NEW_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || echo "0.9.6")
+              sed -i "s/^APP_VERSION=.*/APP_VERSION=${NEW_VERSION}/" .env || true
             fi
 
             echo "=== [4/6] Building and preparing Docker containers ==="
             docker compose build
 
             echo "=== [5/6] Applying database migrations ==="
+            # Запуск разового контейнера миграций (Alembic upgrade head)
             docker compose run --rm migrate
 
-            echo "=== [6/6] Launching all services ==="
+            echo "=== [6/6] Launching all services (Zero-Orphans) ==="
             docker compose up -d --remove-orphans
 
-            echo "=== Validating deployment health ==="
-            sleep 5
+            echo "=== [7/7] Validating deployment health ==="
+            sleep 7
             docker compose ps
-            
-            # Healthcheck probe (internal HTTP fallback & public domain)
-            curl -fsSL -k http://localhost:8000/health || curl -fsSL -k https://${{ secrets.PROD_DOMAIN || 'bot.example.com' }}/health
 
-            echo " Deployment of OSS Bot v0.9.5 successfully completed!"
+            # Liveness/Readiness probe: локальный healthcheck контейнера web-admin
+            echo "Checking http://localhost:8000/health..."
+            curl -fsSL -m 10 http://localhost:8000/health || (echo "❌ Локальный healthcheck не ответил! Логи web-admin:" && docker compose logs --tail=50 web-admin && exit 1)
+
+            # Проверка внешнего домена, если настроен секрет PROD_DOMAIN
+            if [ -n "${{ secrets.PROD_DOMAIN }}" ]; then
+              echo "Checking external domain https://${{ secrets.PROD_DOMAIN }}/health..."
+              curl -fsSL -k -m 10 "https://${{ secrets.PROD_DOMAIN }}/health" || echo "⚠️ Внешний домен ещё не резолвится или прогревается SSL"
+            fi
+
+            echo "🎉 Развёртывание на боевом сервере успешно завершено!"

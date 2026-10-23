@@ -291,3 +291,4 @@ curl -s http://127.0.0.1:8000/health
 | `PROD_PASSWORD` | Пароль root (при парольном доступе) | `<ваш_пароль>` |
 | `PROD_SSH_KEY` | Приватный ключ SSH (при ключевом доступе) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `PROD_PORT` | SSH порт (по умолчанию 22) | `22` |
+| `PROD_DOMAIN` | Домен для проверки внешнего SSL/Healthcheck | `bot.example.com` |
