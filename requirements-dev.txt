@@ -8,7 +8,7 @@ mypy==1.11.2
 # Установка браузера: python -m playwright install chromium
 # Без него тесты test_ui_buttons_browser.py пропускаются (skipif),
 # а не падают: в CI образ без браузера — норма.
-playwright==1.49.1
+playwright==1.63.0
 
 # SQLite драйвер для тестовой базы данных
 aiosqlite==0.21.0
