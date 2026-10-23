@@ -18,14 +18,28 @@ venv/
 env/
 ENV/
 
-# IDE
+# Go binaries and artifacts
+backend_go/cmd/server/server
+backend_go/cmd/server/server.exe
+backend_go/go-server
+backend_go/server.exe
+*.exe
+*.test
+
+# IDE & Editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Secrets & Certificates
 *.pem
 *.key
 *.crt
+.session_secret
 
-# Testing caches
+# Testing caches & Coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -43,7 +57,27 @@ Status/
 bandit-report.json
 pip-audit-report.json
 mutation_test_report.json
+
+# Local runtime fallbacks & Watchdog
+.maintenance_fallback
+.two_factor_fallback
+.heartbeat
+*.heartbeat
+
+# Data archives, backups & database dumps
+archives/*
+!archives/.gitkeep
+backups/
+!backups/.gitkeep
+*.dump
+*.tar.gz
 *.sql.gz
+*.json.gz
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
 
 # OS files
 .DS_Store
@@ -52,20 +86,29 @@ Thumbs.db
 # Node
 node_modules/
 
-# Test directories
+# Test directories & bundle artifacts
 test/
+*.bundle
 
-# Dev-секрет сессий (генерируется автоматически в development-режиме)
-.session_secret
+# PgBouncer: прозрачная авторизация через PostgreSQL (SEC-12)
+pgbouncer/userlist.txt
 
-# Локальные артефакты, выводы проверок и черновики
+# Private diagrams, handovers and mockups
+Kak_rabotaet_studencheskiy_pomoschnik.svg
+docs/system_architecture_and_button_flowchart.md
+docs/PROJECT_HANDOVER.md
+figma/
+
+# Screenshots
+screenshots/
+скриншоты/
+
+# Local test scratch outputs
 mypy_output.txt
 results.txt
 _o.txt
 _e2e_check.sh
 py2.txt
-
-# Tmp test files
 dept_test.txt
 e2e_final.txt
 form_final.txt
@@ -78,24 +121,3 @@ test_form_result.txt
 test_output.txt
 test_result.txt
 test_ui_result.txt
-*.bundle
-
-# ============================================================
-# PgBouncer: прозрачная авторизация через PostgreSQL (SEC-12)
-# ============================================================
-# userlist.txt генерируется автоматически сервисом pgbouncer-userlist
-# (docker-compose.yml) и содержит SCRAM-SHA-256 verifier'ы пользователей.
-# В Git он попадать не должен.
-pgbouncer/userlist.txt
-
-# Private diagrams and handover files
-Kak_rabotaet_studencheskiy_pomoschnik.svg
-docs/system_architecture_and_button_flowchart.md
-docs/PROJECT_HANDOVER.md
-figma/
-
-# Screenshots
-screenshots/
-скриншоты/
-
-
