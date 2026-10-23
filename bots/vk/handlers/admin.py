@@ -84,7 +84,7 @@ async def admin_panel(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "У вас нет доступа к админ-панели.\n\n"
+            "⛔️ У вас нет доступа к админ-панели.\n\n"
             "По всем вопросам обращайтесь к Техническому администратору.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
@@ -97,7 +97,7 @@ async def admin_panel(message: Message):
         is_super = True
 
     desc_lines = [
-        "Админ-панель\n",
+        "👔 Админ-панель\n",
         "Доступные функции:",
         "• Просмотр и решение заявок студентов за сегодняшний день",
         "• Формирование оперативных отчётов",
@@ -131,7 +131,7 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
 
     if not is_super and dept_id is None:
         await message.answer(
-            "У вас нет доступа к заявкам администратора.",
+            "⛔️ У вас нет доступа к заявкам администратора.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -176,7 +176,7 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
 
     if not tickets:
         await message.answer(
-            f"Заявок за сегодня ({today_str}) пока нет.\n\n"
+            f"💭 Заявок за сегодня ({today_str}) пока нет.\n\n"
             f"Всего за сегодня: {total_count or 0}\n"
             f"В обработке / новых: {pending_count or 0}",
             keyboard=build_admin_keyboard(),
@@ -235,7 +235,7 @@ async def admin_ticket_view_handler(message: Message):
         if not await BotCore.is_admin(user):
             return
         await message.answer(
-            f"Заявка #{ticket_id} не найдена или относится к другому отделу.",
+            f"⭕️ Заявка #{ticket_id} не найдена или относится к другому отделу.",
             keyboard=build_admin_keyboard(),
         )
         return
@@ -248,7 +248,7 @@ async def admin_ticket_view_handler(message: Message):
         )
 
     if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+        await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
     messages = await get_ticket_messages(ticket_id)
@@ -317,7 +317,9 @@ async def admin_ticket_history_handler(message: Message):
     ticket_id = int(match.group(1))
 
     if not await _operator_can_access(message.from_id, ticket_id):
-        await message.answer("Заявка не найдена или недоступна.", keyboard=build_admin_keyboard())
+        await message.answer(
+            "⭕️ Заявка не найдена или недоступна.", keyboard=build_admin_keyboard()
+        )
         return
 
     async with async_session_maker() as session:
@@ -326,7 +328,7 @@ async def admin_ticket_history_handler(message: Message):
         )
 
     if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+        await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
     messages = await get_ticket_messages(ticket_id)
@@ -367,7 +369,9 @@ async def admin_reply_start_handler(message: Message):
     ticket_id = int(match.group(1))
 
     if not await _operator_can_access(message.from_id, ticket_id):
-        await message.answer("Заявка не найдена или недоступна.", keyboard=build_admin_keyboard())
+        await message.answer(
+            "⭕️ Заявка не найдена или недоступна.", keyboard=build_admin_keyboard()
+        )
         return
 
     from bots.vk.bot import vk_bot
@@ -401,20 +405,20 @@ async def admin_reply_text_handler(message: Message):
         keyboard = (
             build_admin_ticket_actions_keyboard(ticket_id) if ticket_id else build_admin_keyboard()
         )
-        await message.answer("Ввод ответа отменён.", keyboard=keyboard)
+        await message.answer("❌️ Ввод ответа отменён.", keyboard=keyboard)
         return
 
     if not ticket_id:
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "Сессия ответа истекла. Пожалуйста, откройте заявку заново.",
+            "⭕️ Сессия ответа истекла. Пожалуйста, откройте заявку заново.",
             keyboard=build_admin_keyboard(),
         )
         return
 
     if len(raw_text) < 2:
         await message.answer(
-            "Текст ответа слишком короткий. Введите ответ подробнее или нажмите «Отмена»:"
+            "‼️ Текст ответа слишком короткий. Введите ответ подробнее или нажмите «Отмена»:"
         )
         return
 
@@ -430,7 +434,7 @@ async def admin_reply_text_handler(message: Message):
     await vk_bot.state_dispenser.delete(message.from_id)
 
     if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+        await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
     note = (
@@ -455,7 +459,9 @@ async def admin_quick_complete_handler(message: Message):
     ticket_id = int(match.group(1))
 
     if not await _operator_can_access(message.from_id, ticket_id):
-        await message.answer("Заявка не найдена или недоступна.", keyboard=build_admin_keyboard())
+        await message.answer(
+            "⭕️ Заявка не найдена или недоступна.", keyboard=build_admin_keyboard()
+        )
         return
 
     try:
@@ -463,11 +469,13 @@ async def admin_quick_complete_handler(message: Message):
             ticket_id, TicketStatus.COMPLETED, f"VK:{message.from_id}"
         )
     except (ValueError, StatusTransitionError) as e:
-        await message.answer(f"Не удалось завершить заявку: {e}", keyboard=build_admin_keyboard())
+        await message.answer(
+            f"⭕️ Не удалось завершить заявку: {e}", keyboard=build_admin_keyboard()
+        )
         return
 
     if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+        await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
     await message.answer(
@@ -486,7 +494,9 @@ async def admin_quick_in_progress_handler(message: Message):
     ticket_id = int(match.group(1))
 
     if not await _operator_can_access(message.from_id, ticket_id):
-        await message.answer("Заявка не найдена или недоступна.", keyboard=build_admin_keyboard())
+        await message.answer(
+            "⭕️ Заявка не найдена или недоступна.", keyboard=build_admin_keyboard()
+        )
         return
 
     try:
@@ -494,11 +504,13 @@ async def admin_quick_in_progress_handler(message: Message):
             ticket_id, TicketStatus.IN_PROGRESS, f"VK:{message.from_id}"
         )
     except (ValueError, StatusTransitionError) as e:
-        await message.answer(f"Не удалось изменить статус: {e}", keyboard=build_admin_keyboard())
+        await message.answer(
+            f"⭕️ Не удалось изменить статус: {e}", keyboard=build_admin_keyboard()
+        )
         return
 
     if ticket is None:
-        await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+        await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
         return
 
     await message.answer(
@@ -528,7 +540,7 @@ async def admin_status_handler(message: Message):
         is_adm = await BotCore.is_admin(user)
         keyboard = build_admin_keyboard() if is_adm else await _main_keyboard_for(message.from_id)
         await message.answer(
-            "Заявка не найдена или недоступна.",
+            "⭕️ Заявка не найдена или недоступна.",
             keyboard=keyboard,
         )
         return
@@ -537,7 +549,7 @@ async def admin_status_handler(message: Message):
         ticket = await change_ticket_status(int(match.group(1)), new_status, str(message.from_id))
     except (ValueError, StatusTransitionError):
         await message.answer(
-            "Неизвестный статус или недопустимый переход.\n"
+            "⭕️ Неизвестный статус или недопустимый переход.\n"
             " Допустимые статусы: "
             " Новое,"
             " В обработке,"
@@ -548,7 +560,7 @@ async def admin_status_handler(message: Message):
         )
         return
     await message.answer(
-        f"Статус заявки #{match.group(1)} изменён: {status_label(ticket.status)}."
+        f"✅️ Статус заявки #{match.group(1)} изменён: {status_label(ticket.status)}."
         if ticket
         else "Заявка не найдена.",
         keyboard=build_admin_keyboard(),

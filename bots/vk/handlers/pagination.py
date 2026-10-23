@@ -142,7 +142,7 @@ async def show_page(
     if renderer is None:
         logger.error("Пагинация: рендерер для списка %r не зарегистрирован", kind)
         await message.answer(
-            "Список временно недоступен. Пожалуйста, вернитесь в меню.",
+            "⭕️ Список временно недоступен. Пожалуйста, вернитесь в меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -164,7 +164,7 @@ async def _turn_page(message: Message, delta: int) -> None:
     state = await _load_state(message.from_id)
     if state is None:
         await message.answer(
-            "Список устарел или был закрыт. Пожалуйста, откройте его заново из меню.",
+            "⭕️ Список устарел или был закрыт. Пожалуйста, откройте его заново из меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return

@@ -115,7 +115,7 @@ async def _handle_bot_error(error: Exception, *args, **kwargs):
     if msg is not None and hasattr(msg, "answer"):
         try:
             await msg.answer(
-                "Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору."
+                "⚠️️ Произошла ошибка. Пожалуйста, сфотографируйте экран и отправьте техническому администратору."
             )
         except Exception:
             logger.exception("Не удалось отправить сообщение об ошибке пользователю")
