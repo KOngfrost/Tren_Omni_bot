@@ -281,7 +281,7 @@ func GetStats(cfg *config.Config) fiber.Handler {
 }
 
 func GetDepartments(c *fiber.Ctx) error {
-	ctx := c.Context()
+	ctx := c.UserContext()
 
 	if !ensurePool(c, "список отделов") {
 		return nil
@@ -335,7 +335,7 @@ func CreateDepartment(c *fiber.Ctx) error {
 	}
 
 	name := strings.TrimSpace(body.Name)
-	ctx := c.Context()
+	ctx := c.UserContext()
 
 	if !ensurePool(c, "создание отдела") {
 		return nil
@@ -359,7 +359,7 @@ func CreateDepartment(c *fiber.Ctx) error {
 }
 
 func GetTickets(c *fiber.Ctx) error {
-	ctx := c.Context()
+	ctx := c.UserContext()
 	limit := c.QueryInt("limit", 50)
 	if limit < 1 || limit > 100 {
 		limit = 50

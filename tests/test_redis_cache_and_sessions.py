@@ -63,6 +63,44 @@ async def test_redis_availability_check():
     assert isinstance(available, bool)
 
 
+@pytest.mark.asyncio
+async def test_concurrent_get_redis_client(monkeypatch):
+    """Проверка защиты get_redis_client от race condition при конкурентных вызовах."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    import core.redis_client as rc
+
+    rc._redis_client = None
+    rc._redis_available = None
+
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+
+    create_count = 0
+
+    def fake_from_url(*args, **kwargs):
+        nonlocal create_count
+        create_count += 1
+        return mock_client
+
+    monkeypatch.setattr("core.config.settings.REDIS_URL", "redis://localhost:6379/0")
+
+    with patch("redis.asyncio.from_url", side_effect=fake_from_url):
+        results = await asyncio.gather(
+            rc.get_redis_client(),
+            rc.get_redis_client(),
+            rc.get_redis_client(),
+            rc.get_redis_client(),
+        )
+        assert len(results) == 4
+        assert all(r is mock_client for r in results)
+        assert create_count == 1
+
+    rc._redis_client = None
+    rc._redis_available = None
+
+
 def test_session_middleware_initialization():
     """Проверка инициализации RedisSessionMiddleware."""
 

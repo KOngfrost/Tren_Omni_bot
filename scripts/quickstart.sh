@@ -65,7 +65,9 @@ echo -e "${GREEN}============================================================${N
 echo -e "Веб-панель доступна по адресу: http://localhost:8000"
 echo -e "Метрики Prometheus: http://localhost:8000/metrics"
 echo -e "Для создания первого суперадминистратора выполните:"
-echo -e "  docker compose exec web python scripts/init_superadmin.py --login admin"
+echo -e "  docker compose exec web-admin python scripts/init_superadmin.py --vk-id <VK_ID> --name \"<ИМЯ>\""
+echo -e "Для создания администратора веб-панели (create_web_user.py) выполните:"
+echo -e "  docker compose exec web-admin python scripts/create_web_user.py --username admin --role SUPERADMIN"
 echo -e "${GREEN}============================================================${NC}"
 
 

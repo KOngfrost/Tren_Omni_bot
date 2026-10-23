@@ -62,7 +62,7 @@ if [ -f "$ENV_FILE" ]; then
     COMPOSE_DIR=$(dirname "$ENV_FILE")
     if command -v docker &>/dev/null && [ -f "$COMPOSE_DIR/docker-compose.yml" ]; then
         echo "  -> Перезапуск контейнеров bot и web-admin..."
-        (cd "$COMPOSE_DIR" && docker compose restart bot web-admin)
+        (cd "$COMPOSE_DIR" && docker compose restart bot web-admin go-api)
         echo "  -> Сервисы перезапущены с обновлённой конфигурацией."
     fi
 else
