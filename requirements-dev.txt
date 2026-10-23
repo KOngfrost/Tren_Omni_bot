@@ -2,7 +2,7 @@ pytest==8.2.0
 pytest-asyncio==0.23.7
 pytest-cov>=5.0.0
 ruff==0.6.9
-mypy==1.11.2
+mypy==2.3.1
 
 # E2E-тесты интерфейса в реальном браузере (этап 5.4).
 # Установка браузера: python -m playwright install chromium
