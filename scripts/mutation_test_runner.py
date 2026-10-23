@@ -18,6 +18,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 
 @dataclasses.dataclass
@@ -430,9 +431,9 @@ MUTATIONS: list[Mutation] = [
 ]
 
 
-def run_mutation_tests(venv_python: str) -> dict:
+def run_mutation_tests(venv_python: str) -> dict[str, Any]:
     repo_root = Path(__file__).resolve().parent.parent
-    results = []
+    results: list[dict[str, Any]] = []
 
     print(f"🚀 Запуск системного мутационного тестирования OSS Bot ({len(MUTATIONS)} мутаций)...")
     print("Режим: Two-Phase Verification across ALL 619+ tests")
