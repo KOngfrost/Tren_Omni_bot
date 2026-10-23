@@ -22,7 +22,7 @@ def format_ticket_list(
     if not tickets:
         return "У вас пока нет заявок."
 
-    lines = [f"Ваши заявки (последние {len(tickets)}):", ""]
+    lines = [f"📌 Ваши заявки (последние {len(tickets)}):", ""]
     for ticket in tickets:
         created = ticket.created_at.strftime("%d.%m.%Y") if ticket.created_at else "—"
         dept = ticket.department.name if ticket.department else "—"
@@ -53,11 +53,12 @@ def format_ticket_details(
     display_id = local_id if local_id is not None else ticket.id
 
     lines = [
-        f"Заявка #{display_id}",
-        f"Отдел: {dept}",
-        f"Тема: {ticket.topic or 'Без темы'}",
-        f"Статус: {status_label(ticket.status)}",
-        f"Создана: {created}",
+        f"📮 Заявка #{display_id}",
+        "",
+        f"🗂 Отдел: {dept}",
+        f"📌 Тема: {ticket.topic or 'Без темы'}",
+        f"📊 Статус: {status_label(ticket.status)}",
+        f"🕒 Создана: {created}",
         "",
         "История обращений:",
         "— — —",

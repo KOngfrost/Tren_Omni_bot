@@ -37,13 +37,13 @@ async def events_handler(message: Message):
         )
     if not events:
         await message.answer(
-            "Ближайших мероприятий нет.\n\n"
+            "💭 Ближайших мероприятий нет.\n\n"
             "Следите за анонсами в сообществе или загляните в этот раздел позже.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
 
-    lines = ["Ближайшие мероприятия:"]
+    lines = ["📅 Ближайшие мероприятия:"]
     event_ids = []
     for event in events:
         event_ids.append(event.id)
@@ -73,7 +73,7 @@ async def register_event_handler(message: Message):
         event = await session.get(Event, event_id)
         if event is None:
             await message.answer(
-                f"Мероприятие #{event_id} не найдено или было удалено.",
+                f"⭕️ Мероприятие #{event_id} не найдено или было удалено.",
                 keyboard=await _main_keyboard_for(message.from_id),
             )
             return
@@ -84,7 +84,7 @@ async def register_event_handler(message: Message):
             event_dt = event_date if event_date.tzinfo else event_date.replace(tzinfo=UTC)
             if event_dt < now:
                 await message.answer(
-                    "Нельзя записаться на прошедшее мероприятие.",
+                    "⭕️ Нельзя записаться на прошедшее мероприятие.",
                     keyboard=await _main_keyboard_for(message.from_id),
                 )
                 return
@@ -94,13 +94,13 @@ async def register_event_handler(message: Message):
         except IntegrityError:
             await session.rollback()
             await message.answer(
-                f"Вы уже зарегистрированы на «{event_title}».\n\nЖдём вас на мероприятии!",
+                f"✅️ Вы уже зарегистрированы на «{event_title}».\n\nЖдём вас на мероприятии!",
                 keyboard=await _main_keyboard_for(message.from_id),
             )
             return
 
     date_str = f" ({event_date.strftime('%d.%m.%Y %H:%M')})" if event_date else ""
     await message.answer(
-        f"Вы зарегистрированы на «{event_title}»{date_str}!\n\nЖдём вас на мероприятии.",
+        f"✅️ Вы зарегистрированы на «{event_title}»{date_str}!\n\nЖдём вас на мероприятии.",
         keyboard=await _main_keyboard_for(message.from_id),
     )

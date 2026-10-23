@@ -132,12 +132,12 @@ async def cancel_handler(message: Message):
     if user_state is not None:
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "Действие отменено. Вы вернулись в главное меню.",
+            "❌️ Действие отменено. Вы вернулись в главное меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
     else:
         await message.answer(
-            "Нечего отменять. Вы уже в главном меню.",
+            "🚫 Отмена невозможна. Вы уже в главном меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
 
@@ -150,7 +150,7 @@ async def _render_my_tickets_page(message: Message, page: int, meta: dict[str, A
 
     if not tickets:
         await message.answer(
-            "У вас пока нет созданных заявок.\n\n"
+            "💭 У вас пока нет созданных заявок.\n\n"
             "Чтобы создать заявку, нажмите кнопку «Создать заявку» в меню ниже.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
@@ -189,7 +189,7 @@ async def ticket_details_handler(message: Message):
     match = re.search(r"(\d+)", message.text or "")
     if not match:
         await message.answer(
-            "Укажите номер заявки, например: «Подробнее #1» или «#1».",
+            "#️⃣ Укажите номер заявки, например: «Подробнее #1» или «#1».",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -201,7 +201,7 @@ async def ticket_details_handler(message: Message):
 
     if ticket is None or ticket.id is None:
         await message.answer(
-            f"Заявка #{parsed_id} не найдена среди ваших заявок.",
+            f"⭕️ Заявка #{parsed_id} не найдена среди ваших заявок.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -252,12 +252,12 @@ async def ticket_reply_handler(message: Message):
         result = await add_student_reply(user_ticket.id, message.from_id, reply_text)
         if result is None:
             await message.answer(
-                "Заявка не найдена или ответ в неё недоступен.",
+                "⭕️ Заявка не найдена или ответ в неё недоступен.",
                 keyboard=await _main_keyboard_for(message.from_id),
             )
             return
         await message.answer(
-            f"Ваш вопрос/ответ добавлен к заявке #{local_num}.\n"
+            f"✅️ Ваш вопрос/ответ добавлен к заявке #{local_num}.\n"
             f"Ответственный отдел уведомлён, статус обновлён.",
             keyboard=build_tickets_keyboard([local_num]),
         )
@@ -269,17 +269,17 @@ async def ticket_reply_handler(message: Message):
             ticket_id=parsed_id, admin_username=str(message.from_id), message=reply_text
         )
         if ticket is None:
-            await message.answer("Заявка не найдена.", keyboard=build_admin_keyboard())
+            await message.answer("⭕️ Заявка не найдена.", keyboard=build_admin_keyboard())
             return
         await message.answer(
-            "Ответ сохранён." + (" Уведомление поставлено в очередь VK." if delivered else ""),
+            "✅️ Ответ сохранён." + (" Уведомление поставлено в очередь VK." if delivered else ""),
             keyboard=build_admin_keyboard(),
         )
         return
 
     # 3. Ни автор, ни оператор
     await message.answer(
-        f"Заявка #{parsed_id} не найдена среди ваших заявок.",
+        f"⭕️ Заявка #{parsed_id} не найдена среди ваших заявок.",
         keyboard=await _main_keyboard_for(message.from_id),
     )
 
@@ -299,7 +299,7 @@ async def _start_ticket_flow(
         topic=topic,
         department=department,
     )
-    header = f"Раздел «{topic}»" if department else "Создать заявку"
+    header = f"✏️ Раздел «{topic}»" if department else "📝 Создание заявки"
     await message.answer(
         f"{header}\n\n"
         "Опишите вашу проблему или вопрос одним сообщением (минимум 10 символов).\n"
@@ -373,7 +373,7 @@ async def ticket_department_choice_handler(message: Message):
         ]
         if not matched:
             await message.answer(
-                "Пожалуйста, выберите отдел из предложенных кнопок или нажмите «Без отдела».\n"
+                "❗️Пожалуйста, выберите отдел из предложенных кнопок или нажмите «Без отдела».\n"
                 "Для отмены нажмите кнопку «Отмена».",
                 keyboard=build_ticket_department_keyboard(departments),
             )
@@ -389,7 +389,7 @@ async def ticket_department_choice_handler(message: Message):
         department=selected_dept,
     )
     await message.answer(
-        f"📝 Выбран раздел: {dept_label}\n\n"
+        f"📎 Выбран раздел: {dept_label}\n\n"
         "Опишите вашу проблему или вопрос одним сообщением (минимум 10 символов).\n"
         "Чем подробнее описание, тем быстрее мы сможем вам помочь.\n\n"
         "Нажмите «Отмена», чтобы отменить создание заявки.",
@@ -409,7 +409,7 @@ async def anonymous_section_start(message: Message):
         department=None,
     )
     await message.answer(
-        "Анонимное обращение\n\n"
+        "🗣 Анонимное обращение\n\n"
         "Вы можете сообщить о проблеме без указания своего имени.\n"
         "Ваше имя и VK ID не будут привязаны к обращению.\n\n"
         "Опишите проблему в одном сообщении (минимум 10 символов):\n\n"
@@ -432,7 +432,7 @@ async def ticket_description_handler(message: Message):
 
     if len(description) < 10:
         await message.answer(
-            "Описание слишком короткое.\n\n"
+            "‼️ Описание слишком короткое.\n\n"
             "Пожалуйста, опишите проблему подробнее (минимум 10 символов).\n\n"
             "Или нажмите «Отмена» для возврата в меню:",
             keyboard=build_cancel_keyboard(),
@@ -441,7 +441,7 @@ async def ticket_description_handler(message: Message):
 
     if len(description) > 3000:
         await message.answer(
-            "Описание слишком длинное (максимум 3000 символов).\n\n"
+            "‼️ Описание слишком длинное (максимум 3000 символов).\n\n"
             f"Текущая длина: {len(description)} символов. Пожалуйста, сократите текст и отправьте снова:",
             keyboard=build_cancel_keyboard(),
         )
@@ -461,7 +461,7 @@ async def ticket_description_handler(message: Message):
             department=department,
         )
         await message.answer(
-            "Выберите режим обращения:\n\n"
+            "🔎 Выберите режим обращения:\n\n"
             "«Остаться не анонимным» — администратор сможет ответить вам в VK.\n"
             "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n\n"
             "Нажмите «Отмена», если хотите отменить создание заявки.",
@@ -480,7 +480,7 @@ async def ticket_description_handler(message: Message):
             department=department,
         )
         await message.answer(
-            f"Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
+            f"💡 Возможно, поможет эта информация:\n\n{knowledge_entry.answer}\n\n"
             "Если ответ не подходит, нажмите «Создать заявку», чтобы продолжить.",
             keyboard=build_knowledge_suggest_keyboard(),
         )
@@ -494,7 +494,7 @@ async def ticket_description_handler(message: Message):
         department=department,
     )
     await message.answer(
-        "Выберите режим обращения:\n\n"
+        "🔎 Выберите режим обращения:\n\n"
         "«Остаться не анонимным» — администратор сможет ответить вам в VK.\n"
         "«Остаться анонимным» — VK ID не будет сохранён, ответ через VK невозможен.\n\n"
         "Нажмите «Отмена», если хотите отменить создание заявки.",
@@ -515,7 +515,7 @@ async def ticket_identity_choice_handler(message: Message):
 
     if text not in COMMANDS_ANONYMOUS_STAY:
         await message.answer(
-            "Пожалуйста, выберите один из вариантов на клавиатуре или нажмите «Отмена»:",
+            "❗️Пожалуйста, выберите один из вариантов на клавиатуре или нажмите «Отмена»:",
             keyboard=build_anonymous_choice_keyboard(),
         )
         return
@@ -530,7 +530,7 @@ async def ticket_identity_choice_handler(message: Message):
     if not str(description).strip():
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "Сессия создания обращения истекла или текст вопроса пуст.\n"
+            "⭕️ Сессия создания обращения истекла или текст вопроса пуст.\n"
             "Пожалуйста, начните оформление обращения заново через главное меню.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
@@ -539,7 +539,7 @@ async def ticket_identity_choice_handler(message: Message):
     # SEC-08: не более 3 обращений за 5 минут от одного VK ID.
     if await _is_ticket_rate_limited(message.from_id):
         await message.answer(
-            "Слишком много обращений подряд.\n\n"
+            "❗️Слишком много обращений подряд.\n\n"
             "Лимит: не более 3 обращений за 5 минут. Пожалуйста, подождите "
             "несколько минут и выберите режим обращения снова — описание сохранено.",
             keyboard=await _main_keyboard_for(message.from_id),
@@ -567,7 +567,7 @@ async def ticket_identity_choice_handler(message: Message):
             else "VK ID не сохранён. Ответ через VK на это обращение не отправляется."
         )
         await message.answer(
-            f"Ваше обращение принято.\n\n"
+            f"✅️ Ваше обращение принято.\n\n"
             f"Номер обращения: #{local_num}\n"
             f"Раздел: {department_name}\n"
             f"Статус: {status_label(ticket.status)}\n\n"
@@ -579,7 +579,7 @@ async def ticket_identity_choice_handler(message: Message):
     except Exception:
         logger.exception("Ошибка при создании обращения")
         await message.answer(
-            "Не удалось отправить обращение. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
+            "⚠️️ Не удалось отправить обращение. Пожалуйста, сфотографируйте экран и отправьте техническому администратору.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         await vk_bot.state_dispenser.delete(message.from_id)
@@ -621,7 +621,7 @@ async def partnership_proposal_handler(message: Message):
 
     if len(text) < 10:
         await message.answer(
-            "Пожалуйста, расскажите о вашем предложении подробнее (минимум 10 символов).\n"
+            "❗️Пожалуйста, расскажите о вашем предложении подробнее (минимум 10 символов).\n"
             "Или нажмите «Отмена» для выхода в меню.",
             keyboard=build_cancel_keyboard(),
         )
@@ -651,13 +651,13 @@ async def partnership_proposal_handler(message: Message):
             notify_ticket_change()
 
         await message.answer(
-            "Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",
+            "✅️ Спасибо за ваше предложение! Мы с вами свяжемся в ближайшее время.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
     except Exception:
         logger.exception("Ошибка при сохранении заявки на партнёрство")
         await message.answer(
-            "Произошла ошибка при отправке предложения. Пожалуйста, попробуйте позже.",
+            "⭕️ Произошла ошибка при отправке предложения. Пожалуйста, попробуйте позже.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
     finally:

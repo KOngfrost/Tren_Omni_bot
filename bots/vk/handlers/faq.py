@@ -70,7 +70,7 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
                 stmt = stmt.where(FAQNode.department_id == dept.id)
             else:
                 await message.answer(
-                    f"Раздел «{dept_raw}» не найден.\nВыберите раздел из списка:",
+                    f"⭕️ Раздел «{dept_raw}» не найден.\nВыберите раздел из списка:",
                     keyboard=build_back_nav_keyboard("К разделам вопросов"),
                 )
                 return
@@ -88,7 +88,7 @@ async def _render_faq_department_page(message: Message, page: int, meta: dict[st
 
     if not nodes:
         await message.answer(
-            f"В разделе «{dept_raw}» пока нет опубликованных вопросов.\n"
+            f"💭 В разделе «{dept_raw}» пока нет опубликованных вопросов.\n"
             "Вы можете задать свой вопрос напрямую операторам через кнопку «Создать заявку» в меню.",
             keyboard=build_back_nav_keyboard("К разделам вопросов"),
         )
@@ -183,7 +183,7 @@ async def _render_faq_search_page(message: Message, page: int, meta: dict[str, A
     if not query:
         # Без поискового запроса список не восстановить — возвращаем в разделы
         await message.answer(
-            "Поисковый запрос потерян. Выберите раздел вопросов:",
+            "⭕️ Поисковый запрос потерян. Выберите раздел вопросов:",
             keyboard=build_back_nav_keyboard("К разделам вопросов"),
         )
         return
@@ -206,7 +206,7 @@ async def _render_faq_search_page(message: Message, page: int, meta: dict[str, A
 
     if not nodes:
         await message.answer(
-            f"По запросу «{query}» в частых вопросах ничего не найдено.\n"
+            f"⭕️ По запросу «{query}» в частых вопросах ничего не найдено.\n"
             "Попробуйте сформулировать иначе или задайте вопрос через кнопку «Задать вопрос» в меню.",
             keyboard=build_back_nav_keyboard("К разделам вопросов"),
         )

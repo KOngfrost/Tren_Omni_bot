@@ -82,7 +82,7 @@ async def knowledge_department_handler(message: Message):
                 title = f"Отдел: {dept.name}"
             else:
                 await message.answer(
-                    f"Раздел «{query_raw}» не найден.\nВыберите раздел из списка:",
+                    f"⭕️ Раздел «{query_raw}» не найден.\nВыберите раздел из списка:",
                     keyboard=build_back_nav_keyboard("К разделам Базы"),
                 )
                 return
@@ -91,7 +91,7 @@ async def knowledge_department_handler(message: Message):
 
     if not entries:
         await message.answer(
-            f"В разделе «{query_raw}» пока нет опубликованных материалов.\n"
+            f"💭 В разделе «{query_raw}» пока нет опубликованных материалов.\n"
             "Вы можете задать вопрос оператору через кнопку «Создать заявку» в меню.",
             keyboard=build_back_nav_keyboard("К разделам Базы"),
         )
@@ -143,7 +143,7 @@ async def knowledge_search_handler(message: Message):
 
     if not entries:
         await message.answer(
-            f"По запросу «{query}» в базе знаний ничего не найдено.\n"
+            f"⭕️ По запросу «{query}» в базе знаний ничего не найдено.\n"
             "Попробуйте другое слово или обратитесь через «Задать вопрос» в меню.",
             keyboard=build_back_nav_keyboard("К разделам Базы"),
         )

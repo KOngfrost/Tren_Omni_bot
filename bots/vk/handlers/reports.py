@@ -40,7 +40,7 @@ async def report_menu_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
         )
         return
 
@@ -64,7 +64,7 @@ async def report_today_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
         )
         return
 
@@ -96,13 +96,13 @@ async def report_today_handler(message: Message):
             user, "report_generated", f"Сформирован отчёт за сегодня {filename}"
         )
         await message.answer(
-            f"Отчёт за сегодня ({report_date:%d.%m.%Y}) сформирован и отправлен вам в VK.",
+            f"✅️ Отчёт за сегодня ({report_date:%d.%m.%Y}) сформирован и отправлен вам в VK.",
             keyboard=build_admin_keyboard(),
         )
     except Exception:
         logger.exception("Ошибка при формировании отчёта за сегодня")
         await message.answer(
-            "Не удалось сформировать отчёт за сегодня. Пожалуйста, обратитесь к техническому администратору.",
+            "⭕️ Не удалось сформировать отчёт за сегодня. Пожалуйста, обратитесь к техническому администратору.",
             keyboard=build_admin_keyboard(),
         )
 
@@ -113,7 +113,7 @@ async def report_by_date(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "Эта команда доступна только администраторам.",
+            "⛔️ Эта команда доступна только администраторам.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -122,7 +122,7 @@ async def report_by_date(message: Message):
 
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE)
     await message.answer(
-        "Введите дату для отчета в формате ДД.ММ.ГГГГ (например: 31.08.2026):\n\n"
+        "📅 Введите дату для отчета в формате ДД.ММ.ГГГГ (например: 31.08.2026):\n\n"
         "Или нажмите «Отмена» для возврата.",
         keyboard=build_admin_cancel_keyboard(),
     )
@@ -138,14 +138,14 @@ async def report_by_date_input(message: Message):
 
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
         )
         return
 
     parsed = parse_report_date(message.text)
     if parsed is None:
         await message.answer(
-            "Неверный формат. Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)"
+            "⭕️ Неверный формат. Введите дату в формате ДД.ММ.ГГГГ (например: 31.08.2026)"
         )
         return
 
@@ -173,7 +173,7 @@ async def report_by_date_input(message: Message):
         )
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            f"Отчет за {parsed:%d.%m.%Y} сформирован и отправлен.",
+            f"✅️ Отчет за {parsed:%d.%m.%Y} сформирован и отправлен.",
             keyboard=build_admin_keyboard(),
         )
     except Exception:
@@ -182,7 +182,7 @@ async def report_by_date_input(message: Message):
         logging.getLogger(__name__).exception("Ошибка при формировании отчёта по дате %s", parsed)
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "Не удалось сформировать отчет за указанную дату.",
+            "⭕️ Не удалось сформировать отчет за указанную дату.",
             keyboard=build_admin_keyboard(),
         )
 
@@ -193,7 +193,7 @@ async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
         await message.answer(
-            "Эта команда доступна только администраторам.",
+            "⛔️ Эта команда доступна только администраторам.",
             keyboard=await _main_keyboard_for(message.from_id),
         )
         return
@@ -202,7 +202,7 @@ async def report_by_period_handler(message: Message):
 
     await vk_bot.state_dispenser.set(message.from_id, ReportStates.WAITING_DATE_FROM)
     await message.answer(
-        "Введите диапазон дат через дефис в формате: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ\n"
+        "📅 Введите диапазон дат через дефис в формате: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ\n"
         "Например: 01.08.2026 - 31.08.2026\n\n"
         "Или нажмите «Отмена» для возврата.",
         keyboard=build_admin_cancel_keyboard(),
@@ -219,14 +219,14 @@ async def report_by_period_input(message: Message):
 
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
+            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
         )
         return
 
     match = re.match(_REPORT_PERIOD_PATTERN, message.text or "")
     if not match:
         await message.answer(
-            "Неверный формат. Введите диапазон: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ (например: 01.08.2026 - 31.08.2026)"
+            "⭕️ Неверный формат. Введите диапазон: ДД.ММ.ГГГГ - ДД.ММ.ГГГГ (например: 01.08.2026 - 31.08.2026)"
         )
         return
 
@@ -235,17 +235,19 @@ async def report_by_period_input(message: Message):
     date_to = parse_report_date(date_to_str)
 
     if not date_from or not date_to:
-        await message.answer("Неверный формат даты. Используйте ДД.ММ.ГГГГ (например: 31.08.2026)")
+        await message.answer(
+            "⭕️ Неверный формат даты. Используйте ДД.ММ.ГГГГ (например: 31.08.2026)"
+        )
         return
 
     if date_from > date_to:
-        await message.answer("Дата начала не может быть позже даты окончания.")
+        await message.answer("⭕️ Дата начала не может быть позже даты окончания.")
         return
 
     MAX_PERIOD_DAYS = 90
     if (date_to - date_from).days > MAX_PERIOD_DAYS:
         await message.answer(
-            f"Слишком большой период (максимум {MAX_PERIOD_DAYS} дней).\n"
+            f"⭕️ Слишком большой период (максимум {MAX_PERIOD_DAYS} дней).\n"
             "Пожалуйста, укажите меньший диапазон для выгрузки."
         )
         return
@@ -280,7 +282,7 @@ async def report_by_period_input(message: Message):
         )
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            f"Отчет за период с {date_from:%d.%m.%Y} по {date_to:%d.%m.%Y} сформирован и отправлен.",
+            f"✅️ Отчет за период с {date_from:%d.%m.%Y} по {date_to:%d.%m.%Y} сформирован и отправлен.",
             keyboard=build_admin_keyboard(),
         )
     except Exception:
@@ -291,7 +293,7 @@ async def report_by_period_input(message: Message):
         )
         await vk_bot.state_dispenser.delete(message.from_id)
         await message.answer(
-            "Не удалось сформировать отчет за указанный период.",
+            "⭕️ Не удалось сформировать отчет за указанный период.",
             keyboard=build_admin_keyboard(),
         )
 
