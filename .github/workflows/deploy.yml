@@ -24,7 +24,7 @@ jobs:
       - name: Execute Remote Deployment via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.PROD_HOST || '203.0.113.10' }}
+          host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER || 'root' }}
           password: ${{ secrets.PROD_PASSWORD }}
           key: ${{ secrets.PROD_SSH_KEY }}
@@ -59,6 +59,6 @@ jobs:
             docker compose ps
             
             # Healthcheck probe (internal HTTP fallback & public domain)
-            curl -fsSL -k http://localhost:8000/health || curl -fsSL -k https://example-bot.duckdns.org/health
+            curl -fsSL -k http://localhost:8000/health || curl -fsSL -k https://${{ secrets.PROD_DOMAIN || 'bot.example.com' }}/health
 
             echo " Deployment of OSS Bot v0.9.5 successfully completed!"
