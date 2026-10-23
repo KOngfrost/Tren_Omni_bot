@@ -1,5 +1,6 @@
 """Асинхронный клиент Redis с поддержкой пула соединений и graceful fallback."""
 
+import asyncio
 import logging
 import re
 import time
@@ -13,6 +14,23 @@ _redis_client: Any = None
 _redis_available: bool | None = None
 _last_failed_attempt: float = 0.0
 RECONNECT_INTERVAL_SECONDS = 30.0
+
+_redis_lock: asyncio.Lock | None = None
+_redis_lock_loop_id: int | None = None
+
+
+def _get_redis_lock() -> asyncio.Lock:
+    """Получить мьютекс инициализации Redis для текущего цикла событий."""
+    global _redis_lock, _redis_lock_loop_id
+    try:
+        current_loop_id = id(asyncio.get_running_loop())
+    except RuntimeError:
+        current_loop_id = None
+
+    if _redis_lock is None or _redis_lock_loop_id != current_loop_id:
+        _redis_lock = asyncio.Lock()
+        _redis_lock_loop_id = current_loop_id
+    return _redis_lock
 
 
 def _mask_redis_url(url: str) -> str:
@@ -35,37 +53,46 @@ async def get_redis_client() -> Any | None:
         _redis_available = False
         return None
 
-    now = time.time()
-    if _redis_available is False and (now - _last_failed_attempt) < RECONNECT_INTERVAL_SECONDS:
-        return None
+    lock = _get_redis_lock()
+    async with lock:
+        if _redis_client is not None:
+            return _redis_client
 
-    try:
-        import redis.asyncio as aioredis  # type: ignore[import-untyped]
+        if not settings.REDIS_URL:
+            _redis_available = False
+            return None
 
-        client = aioredis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=0.5,
-            socket_timeout=0.5,
-            health_check_interval=30,
-            max_connections=20,
-        )
-        # Проверяем подключение
-        await client.ping()
-        _redis_client = client
-        _redis_available = True
-        logger.info("Успешное подключение к Redis: %s", _mask_redis_url(settings.REDIS_URL))
-        return _redis_client
-    except Exception as e:
-        logger.debug(
-            "Redis недоступен (%s). Используется fallback: %s",
-            _mask_redis_url(settings.REDIS_URL),
-            e,
-        )
-        _redis_available = False
-        _redis_client = None
-        _last_failed_attempt = now
-        return None
+        now = time.time()
+        if _redis_available is False and (now - _last_failed_attempt) < RECONNECT_INTERVAL_SECONDS:
+            return None
+
+        try:
+            import redis.asyncio as aioredis  # type: ignore[import-untyped]
+
+            client = aioredis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5,
+                health_check_interval=30,
+                max_connections=20,
+            )
+            # Проверяем подключение
+            await client.ping()
+            _redis_client = client
+            _redis_available = True
+            logger.info("Успешное подключение к Redis: %s", _mask_redis_url(settings.REDIS_URL))
+            return _redis_client
+        except Exception as e:
+            logger.debug(
+                "Redis недоступен (%s). Используется fallback: %s",
+                _mask_redis_url(settings.REDIS_URL),
+                e,
+            )
+            _redis_available = False
+            _redis_client = None
+            _last_failed_attempt = now
+            return None
 
 
 async def is_redis_available() -> bool:
@@ -88,12 +115,14 @@ async def is_redis_available() -> bool:
 async def close_redis_client() -> None:
     """Закрыть соединения с Redis при завершении приложения."""
     global _redis_client, _redis_available
-    if _redis_client is not None:
-        try:
-            await _redis_client.close()
-            logger.info("Соединение с Redis корректно закрыто")
-        except Exception as e:
-            logger.debug("Ошибка при закрытии Redis: %s", e)
-        finally:
-            _redis_client = None
-            _redis_available = None
+    lock = _get_redis_lock()
+    async with lock:
+        if _redis_client is not None:
+            try:
+                await _redis_client.close()
+                logger.info("Соединение с Redis корректно закрыто")
+            except Exception as e:
+                logger.debug("Ошибка при закрытии Redis: %s", e)
+            finally:
+                _redis_client = None
+                _redis_available = None
