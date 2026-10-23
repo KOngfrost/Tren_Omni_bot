@@ -3,12 +3,8 @@ import contextlib
 import logging
 import os
 import secrets
-from datetime import UTC, date, datetime, timedelta
-from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from datetime import date, datetime, timedelta
 
-import aiosmtplib
 from sqlalchemy import select
 from vkbottle.tools.uploader import DocMessagesUploader
 
@@ -23,6 +19,7 @@ from core.reports.daily import (
     build_daily_report,
     get_app_tz,
 )
+from core.reports.delivery import send_report_email
 from core.reports.period import (
     REPORT_CHUNK_SIZE,
     _fetch_report_data,
@@ -39,39 +36,6 @@ logger = logging.getLogger(__name__)
 # ещё нет ни одного отдела, чтобы отчёт формировался в пустой системе.
 # В production отделы создаёт администратор через панель управления, и
 # книга Excel получает по вкладке на каждый отдел из БД (Ошибка #16).
-
-
-async def send_report_email(report_bytes: bytes, filename: str) -> None:
-    """Отправляет отчёт по email через SMTP (асинхронно)."""
-    if not settings.SMTP_HOST or not settings.REPORT_EMAILS:
-        logger.info("SMTP не настроен, email-рассылка пропущена")
-        return
-
-    msg = MIMEMultipart()
-    msg["Subject"] = f"Отчёт студенческого бота за {datetime.now(UTC):%d.%m.%Y}"
-    msg["From"] = settings.SMTP_FROM
-    msg["To"] = ", ".join(settings.REPORT_EMAILS)
-
-    msg.attach(MIMEText("Ежедневный отчёт во вложении.", "plain", "utf-8"))
-
-    attachment = MIMEApplication(
-        report_bytes,
-        _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-    attachment.add_header("Content-Disposition", "attachment", filename=filename)
-    msg.attach(attachment)
-
-    await aiosmtplib.send(
-        msg,
-        hostname=settings.SMTP_HOST,
-        port=settings.SMTP_PORT,
-        start_tls=True,
-        username=settings.SMTP_USER,
-        password=settings.SMTP_PASSWORD,
-        timeout=30,
-    )
-
-    logger.info("Отчёт отправлен по email: %s", ", ".join(settings.REPORT_EMAILS))
 
 
 async def send_report_to_vk(api, admin_vk_id: int, report_bytes: bytes, filename: str) -> None:
