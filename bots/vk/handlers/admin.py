@@ -117,7 +117,11 @@ async def regular_menu_handler(message: Message):
     touch_heartbeat()
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     departments = await _get_department_names()
-    keyboard = build_main_keyboard(await BotCore.is_admin(user), departments)
+    keyboard = build_main_keyboard(
+        await BotCore.is_admin(user),
+        departments,
+        is_tech_admin=BotCore.is_tech_admin_vk_id(message.from_id),
+    )
     await message.answer(
         _main_reply_text(departments),
         keyboard=keyboard,

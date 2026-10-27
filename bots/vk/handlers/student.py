@@ -33,7 +33,6 @@ from bots.vk.keyboards import (
     build_anonymous_choice_keyboard,
     build_cancel_keyboard,
     build_knowledge_suggest_keyboard,
-    build_main_keyboard,
     build_ticket_department_keyboard,
     build_tickets_keyboard,
 )
@@ -111,7 +110,7 @@ async def start_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     await BotCore.log_action(user, "start", "Пользователь нажал /start")
     departments = await _get_department_names()
-    keyboard = build_main_keyboard(await BotCore.is_admin(user), departments)
+    keyboard = await _main_keyboard_for(message.from_id)
     await message.answer(_main_reply_text(departments), keyboard=keyboard)
 
 
