@@ -11,6 +11,7 @@ import re
 from datetime import UTC, datetime
 
 from vkbottle.bot import BotLabeler, Message
+from vkbottle.dispatch.rules.base import RegexRule
 
 from bots.telegram.docker_client import DockerClient
 from bots.telegram.system_metrics import get_system_metrics, render_progress_bar
@@ -23,6 +24,7 @@ from bots.vk.keyboards import (
 )
 from core.backup_service import perform_isolated_database_backup
 from core.bot_core import BotCore
+from core.commands import COMMANDS_TECH_PANEL
 from core.config import settings
 from core.database import async_session_maker
 from core.maintenance import is_maintenance_mode, set_maintenance_mode
@@ -33,23 +35,11 @@ logger = logging.getLogger(__name__)
 
 tech_admin_labeler = BotLabeler()
 
-COMMANDS_TECH_PANEL = [
-    "🔧 тех-админ",
-    "🔧 тех админ",
-    "тех-админ",
-    "тех админ",
-    "тех-меню",
-    "тех меню",
-    "🔧 тех-меню",
-    "/tech",
-    "/server",
-    "тех",
-    "tech",
-]
-
 # Регулярные выражения для команд действий
-RESTART_CONTAINER_PATTERN = re.compile(r"^🔄\s*перезапуск\s+([a-zA-Z0-9_\-]+)$", re.IGNORECASE)
-LOGS_CONTAINER_PATTERN = re.compile(r"^📋\s*логи\s+([a-zA-Z0-9_\-]+)$", re.IGNORECASE)
+RESTART_CONTAINER_PATTERN = re.compile(
+    r"^(?:🔄\s*)?перезапуск\s+([a-zA-Z0-9_\-]+)$", re.IGNORECASE
+)
+LOGS_CONTAINER_PATTERN = re.compile(r"^(?:📋\s*)?логи\s+([a-zA-Z0-9_\-]+)$", re.IGNORECASE)
 
 
 def is_tech_admin(vk_id: int | None) -> bool:
@@ -58,14 +48,10 @@ def is_tech_admin(vk_id: int | None) -> bool:
 
 
 async def _check_access(message: Message) -> bool:
-    """Проверить доступ и отправить отказ, если пользователь не тех-админ."""
+    """Проверить доступ: если не тех-админ — тихо отбросить запрос."""
     if not is_tech_admin(message.from_id):
         logger.warning(
             "Отклонён неавторизованный запрос к тех-панели VK от vk_id=%s", message.from_id
-        )
-        await message.answer(
-            "⛔ Доступ запрещён. Меню доступно исключительно Техническому администратору сервера.",
-            keyboard=await _main_keyboard_for(message.from_id),
         )
         return False
     return True
@@ -88,7 +74,7 @@ async def tech_panel_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["📊 Сервер", "сервер", "/tech_status"])
+@tech_admin_labeler.private_message(text=["Сервер", "сервер", "📊 Сервер", "/tech_status"])
 async def tech_status_handler(message: Message) -> None:
     """Состояние хоста: CPU, RAM, диск, аптайм и статус контейнеров."""
     if not await _check_access(message):
@@ -130,7 +116,7 @@ async def tech_status_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["📈 Метрики", "метрики", "/tech_metrics"])
+@tech_admin_labeler.private_message(text=["Метрики", "метрики", "📈 Метрики", "/tech_metrics"])
 async def tech_metrics_handler(message: Message) -> None:
     """Прикладные бизнес-метрики: тикеты, DB ping, Redis, очереди Outbox."""
     if not await _check_access(message):
@@ -212,7 +198,9 @@ async def tech_metrics_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["💾 Бэкап БД", "бэкап", "/tech_backup"])
+@tech_admin_labeler.private_message(
+    text=["Бэкап БД", "бэкап бд", "Бэкап", "бэкап", "💾 Бэкап БД", "/tech_backup"]
+)
 async def tech_backup_handler(message: Message) -> None:
     """Запуск резервного копирования базы данных в изолированном режиме."""
     if not await _check_access(message):
@@ -237,7 +225,9 @@ async def tech_backup_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["🚧 Техработы", "техработы", "/tech_maintenance"])
+@tech_admin_labeler.private_message(
+    text=["Техработы", "техработы", "🚧 Техработы", "/tech_maintenance"]
+)
 async def tech_maintenance_handler(message: Message) -> None:
     """Просмотр и переключение режима технических работ."""
     if not await _check_access(message):
@@ -257,7 +247,16 @@ async def tech_maintenance_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_maintenance_keyboard(active))
 
 
-@tech_admin_labeler.private_message(text=["🔴 Включить техработы", "🟢 Отключить техработы"])
+@tech_admin_labeler.private_message(
+    text=[
+        "Включить техработы",
+        "включить техработы",
+        "Отключить техработы",
+        "отключить техработы",
+        "🔴 Включить техработы",
+        "🟢 Отключить техработы",
+    ]
+)
 async def tech_maintenance_toggle_handler(message: Message) -> None:
     """Переключение режима техработ по кнопке."""
     if not await _check_access(message):
@@ -274,7 +273,9 @@ async def tech_maintenance_toggle_handler(message: Message) -> None:
     )
 
 
-@tech_admin_labeler.private_message(text=["🔄 Контейнеры", "контейнеры", "/tech_containers"])
+@tech_admin_labeler.private_message(
+    text=["Контейнеры", "контейнеры", "🔄 Контейнеры", "/tech_containers"]
+)
 async def tech_containers_handler(message: Message) -> None:
     """Список контейнеров с возможностью выбора для перезапуска."""
     if not await _check_access(message):
@@ -302,51 +303,64 @@ async def tech_containers_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_containers_keyboard(names))
 
 
-@tech_admin_labeler.private_message()
-async def tech_action_dynamic_handler(message: Message) -> None:
-    """Динамическая обработка кнопок перезапуска контейнеров и просмотра логов."""
-    raw_text = (message.text or "").strip()
-
-    # Перезапуск контейнера
-    restart_match = RESTART_CONTAINER_PATTERN.match(raw_text)
-    if restart_match:
-        if not await _check_access(message):
-            return
-        c_name = restart_match.group(1).strip()
-        await message.answer(f"⏳ Перезапуск контейнера <code>{c_name}</code>...")
-        docker_client = DockerClient()
-        ok, res_msg = await docker_client.restart_container(c_name)
-        if ok:
-            await message.answer(
-                f"✅ Контейнер <code>{c_name}</code> успешно перезапущен!",
-                keyboard=build_tech_admin_keyboard(),
-            )
-        else:
-            await message.answer(
-                f"❌ Ошибка перезапуска <code>{c_name}</code>:\n{res_msg}",
-                keyboard=build_tech_admin_keyboard(),
-            )
+@tech_admin_labeler.private_message(RegexRule(r"(?i)^(?:🔄\s*)?перезапуск\s+([a-zA-Z0-9_\-]+)$"))
+async def tech_restart_container_handler(message: Message) -> None:
+    """Перезапуск контейнера по кнопке или команде."""
+    if not await _check_access(message):
         return
-
-    # Просмотр логов контейнера
-    logs_match = LOGS_CONTAINER_PATTERN.match(raw_text)
-    if logs_match:
-        if not await _check_access(message):
-            return
-        c_name = logs_match.group(1).strip()
-        docker_client = DockerClient()
-        logs_text = await docker_client.get_container_logs(c_name, tail=25)
-        clean_logs = logs_text[-2000:] if len(logs_text) > 2000 else logs_text
-        if not clean_logs.strip():
-            clean_logs = "(Логи пусты)"
+    raw_text = (message.text or "").strip()
+    restart_match = RESTART_CONTAINER_PATTERN.match(raw_text)
+    if not restart_match:
+        return
+    c_name = restart_match.group(1).strip()
+    await message.answer(f"⏳ Перезапуск контейнера <code>{c_name}</code>...")
+    docker_client = DockerClient()
+    ok, res_msg = await docker_client.restart_container(c_name)
+    if ok:
         await message.answer(
-            f"📋 <b>Последние логи {c_name}:</b>\n\n<pre>{clean_logs}</pre>",
+            f"✅ Контейнер <code>{c_name}</code> успешно перезапущен!",
             keyboard=build_tech_admin_keyboard(),
         )
+    else:
+        await message.answer(
+            f"❌ Ошибка перезапуска <code>{c_name}</code>:\n{res_msg}",
+            keyboard=build_tech_admin_keyboard(),
+        )
+
+
+@tech_admin_labeler.private_message(RegexRule(r"(?i)^(?:📋\s*)?логи\s+([a-zA-Z0-9_\-]+)$"))
+async def tech_logs_container_handler(message: Message) -> None:
+    """Просмотр логов контейнера по кнопке или команде."""
+    if not await _check_access(message):
         return
+    raw_text = (message.text or "").strip()
+    logs_match = LOGS_CONTAINER_PATTERN.match(raw_text)
+    if not logs_match:
+        return
+    c_name = logs_match.group(1).strip()
+    docker_client = DockerClient()
+    logs_text = await docker_client.get_container_logs(c_name, tail=25)
+    clean_logs = logs_text[-2000:] if len(logs_text) > 2000 else logs_text
+    if not clean_logs.strip():
+        clean_logs = "(Логи пусты)"
+    await message.answer(
+        f"📋 <b>Последние логи {c_name}:</b>\n\n<pre>{clean_logs}</pre>",
+        keyboard=build_tech_admin_keyboard(),
+    )
 
 
-@tech_admin_labeler.private_message(text=["🚪 Сброс сессий", "kickall", "/tech_kickall"])
+async def tech_action_dynamic_handler(message: Message) -> None:
+    """Совместимый диспетчер команд перезапуска и логов (для прямого вызова)."""
+    raw_text = (message.text or "").strip()
+    if RESTART_CONTAINER_PATTERN.match(raw_text):
+        await tech_restart_container_handler(message)
+    elif LOGS_CONTAINER_PATTERN.match(raw_text):
+        await tech_logs_container_handler(message)
+
+
+@tech_admin_labeler.private_message(
+    text=["Сброс сессий", "сброс сессий", "🚪 Сброс сессий", "kickall", "/tech_kickall"]
+)
 async def tech_kickall_handler(message: Message) -> None:
     """Экстренный сброс всех активных сессий пользователей в Redis."""
     if not await _check_access(message):
@@ -379,7 +393,9 @@ async def tech_kickall_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["📋 Логи сервисов", "логи", "/tech_logs"])
+@tech_admin_labeler.private_message(
+    text=["Логи сервисов", "логи сервисов", "Логи", "логи", "📋 Логи сервисов", "/tech_logs"]
+)
 async def tech_logs_menu_handler(message: Message) -> None:
     """Меню выбора сервиса для просмотра последних логов."""
     if not await _check_access(message):
@@ -389,7 +405,9 @@ async def tech_logs_menu_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_logs_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["🔐 2FA статус", "2fa", "/tech_2fa"])
+@tech_admin_labeler.private_message(
+    text=["2FA статус", "2fa статус", "2FA", "2fa", "🔐 2FA статус", "/tech_2fa"]
+)
 async def tech_2fa_handler(message: Message) -> None:
     """Просмотр глобального статуса двухфакторной аутентификации."""
     if not await _check_access(message):
@@ -407,7 +425,9 @@ async def tech_2fa_handler(message: Message) -> None:
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
 
-@tech_admin_labeler.private_message(text=["Главное меню", "Обычное меню", "/menu", "меню"])
+@tech_admin_labeler.private_message(
+    text=["Главное меню", "главное меню", "Обычное меню", "обычное меню", "/menu", "меню", "Меню"]
+)
 async def tech_return_main_menu(message: Message) -> None:
     """Возврат в обычное главное меню."""
     kb = await _main_keyboard_for(message.from_id)

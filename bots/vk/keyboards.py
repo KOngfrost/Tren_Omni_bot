@@ -13,9 +13,9 @@ def _pagination_nav_row(page: int, has_more: bool) -> list[tuple[str, str]]:
     """
     row: list[tuple[str, str]] = []
     if page > 0:
-        row.append(("⬅️ Назад", "secondary"))
+        row.append(("Назад", "secondary"))
     if has_more:
-        row.append(("Ещё ➡️", "secondary"))
+        row.append(("Ещё", "secondary"))
     return row
 
 
@@ -53,7 +53,7 @@ def build_main_keyboard(
     - Ряд 1: Создать заявку / Мои заявки (белые)
     - Ряд 2: Частые вопросы / База знаний (белые)
     - Ряд 3: Мероприятия / Партнёрство (белые)
-    - Ряд 4: Админ / 🔧 Тех-админ (белые)
+    - Ряд 4: Админ / Тех-админ (белые)
     """
     rows: list[list[tuple[str, str]]] = [
         [("Создать заявку", "secondary"), ("Мои заявки", "secondary")],
@@ -64,7 +64,7 @@ def build_main_keyboard(
     if is_admin:
         admin_row.append(("Админ", "secondary"))
     if is_tech_admin:
-        admin_row.append(("🔧 Тех-админ", "secondary"))
+        admin_row.append(("Тех-админ", "secondary"))
     if admin_row:
         rows.append(admin_row)
     return _format_keyboard(rows, one_time=False)
@@ -311,10 +311,10 @@ def build_knowledge_suggest_keyboard() -> str:
 def build_tech_admin_keyboard() -> str:
     """Главная панель Технического администратора."""
     rows: list[list[tuple[str, str]]] = [
-        [("📊 Сервер", "secondary"), ("📈 Метрики", "secondary")],
-        [("💾 Бэкап БД", "secondary"), ("🚧 Техработы", "secondary")],
-        [("🔄 Контейнеры", "secondary"), ("🚪 Сброс сессий", "secondary")],
-        [("📋 Логи сервисов", "secondary"), ("🔐 2FA статус", "secondary")],
+        [("Сервер", "secondary"), ("Метрики", "secondary")],
+        [("Бэкап БД", "secondary"), ("Техработы", "secondary")],
+        [("Контейнеры", "secondary"), ("Сброс сессий", "secondary")],
+        [("Логи сервисов", "secondary"), ("2FA статус", "secondary")],
         [("Главное меню", "secondary")],
     ]
     return _format_keyboard(rows, one_time=False)
@@ -331,18 +331,18 @@ def build_tech_containers_keyboard(containers: list[str] | None = None) -> str:
         "oss_bot_caddy",
     ]
     rows: list[list[tuple[str, str]]] = [
-        [(f"🔄 Перезапуск {name}", "secondary")] for name in c_list[:6]
+        [(f"Перезапуск {name}", "secondary")] for name in c_list[:6]
     ]
-    rows.append([("🔧 Тех-меню", "secondary"), ("Главное меню", "secondary")])
+    rows.append([("Тех-меню", "secondary"), ("Главное меню", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
 
 def build_tech_maintenance_keyboard(is_active: bool) -> str:
     """Клавиатура управления режимом технического обслуживания."""
-    action_text = "🟢 Отключить техработы" if is_active else "🔴 Включить техработы"
+    action_text = "Отключить техработы" if is_active else "Включить техработы"
     rows: list[list[tuple[str, str]]] = [
         [(action_text, "negative" if not is_active else "positive")],
-        [("🔧 Тех-меню", "secondary"), ("Главное меню", "secondary")],
+        [("Тех-меню", "secondary"), ("Главное меню", "secondary")],
     ]
     return _format_keyboard(rows, one_time=False)
 
@@ -350,6 +350,6 @@ def build_tech_maintenance_keyboard(is_active: bool) -> str:
 def build_tech_logs_keyboard(containers: list[str] | None = None) -> str:
     """Клавиатура выбора сервиса для просмотра последних логов."""
     c_list = containers or ["oss_bot_app", "oss_bot_web", "oss_bot_redis", "oss_bot_db"]
-    rows: list[list[tuple[str, str]]] = [[(f"📋 Логи {name}", "secondary")] for name in c_list[:4]]
-    rows.append([("🔧 Тех-меню", "secondary"), ("Главное меню", "secondary")])
+    rows: list[list[tuple[str, str]]] = [[(f"Логи {name}", "secondary")] for name in c_list[:4]]
+    rows.append([("Тех-меню", "secondary"), ("Главное меню", "secondary")])
     return _format_keyboard(rows, one_time=False)

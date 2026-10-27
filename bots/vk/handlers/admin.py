@@ -83,10 +83,8 @@ admin_labeler = BotLabeler()
 async def admin_panel(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "⛔️ У вас нет доступа к админ-панели.\n\n"
-            "По всем вопросам обращайтесь к Техническому администратору.",
-            keyboard=await _main_keyboard_for(message.from_id),
+        logger.warning(
+            "Отклонён неавторизованный запрос к админ-панели VK от vk_id=%s", message.from_id
         )
         return
 
@@ -134,10 +132,7 @@ async def _render_admin_tickets_page(message: Message, page: int, meta: dict[str
         is_super, dept_id = await get_admin_scope_for_vk_id(session, message.from_id)
 
     if not is_super and dept_id is None:
-        await message.answer(
-            "⛔️ У вас нет доступа к заявкам администратора.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
+        logger.warning("Отклонён запрос к заявкам администратора от vk_id=%s", message.from_id)
         return
 
     now_msk = datetime.now(get_app_tz())
@@ -580,19 +575,11 @@ async def broadcast_start_handler(message: Message):
     touch_heartbeat()
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "У вас нет доступа к этой команде.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
         return
 
     async with async_session_maker() as session:
         is_super, _ = await get_admin_scope_for_vk_id(session, message.from_id)
     if not is_super and not BotCore.is_admin_vk_id(message.from_id):
-        await message.answer(
-            "Рассылка сообщений доступна только суперадминистраторам.",
-            keyboard=build_admin_keyboard(),
-        )
         return
 
     from bots.vk.bot import vk_bot
@@ -754,10 +741,6 @@ async def broadcast_direct_handler(message: Message):
     async with async_session_maker() as session:
         is_super, _ = await get_admin_scope_for_vk_id(session, message.from_id)
     if not is_super and not BotCore.is_admin_vk_id(message.from_id):
-        await message.answer(
-            "Рассылка сообщений доступна только суперадминистраторам.",
-            keyboard=build_admin_keyboard(),
-        )
         return
 
     match = re.match(BROADCAST_DIRECT_PATTERN, message.text or "", re.DOTALL)

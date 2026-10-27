@@ -78,17 +78,17 @@ def test_build_main_keyboard_with_tech_admin():
     """Кнопка '🔧 Тех-админ' отображается только при is_tech_admin=True."""
     kb_tech = json.loads(build_main_keyboard(is_admin=False, is_tech_admin=True))
     all_labels = [btn["action"]["label"] for row in kb_tech["buttons"] for btn in row]
-    assert "🔧 Тех-админ" in all_labels
+    assert "Тех-админ" in all_labels
     assert "Админ" not in all_labels
 
     kb_both = json.loads(build_main_keyboard(is_admin=True, is_tech_admin=True))
     labels_both = [btn["action"]["label"] for row in kb_both["buttons"] for btn in row]
-    assert "🔧 Тех-админ" in labels_both
+    assert "Тех-админ" in labels_both
     assert "Админ" in labels_both
 
     kb_student = json.loads(build_main_keyboard(is_admin=False, is_tech_admin=False))
     labels_student = [btn["action"]["label"] for row in kb_student["buttons"] for btn in row]
-    assert "🔧 Тех-админ" not in labels_student
+    assert "Тех-админ" not in labels_student
     assert "Админ" not in labels_student
 
 
@@ -96,30 +96,30 @@ def test_build_tech_admin_keyboards():
     """Проверка структуры клавиатур панели технического администратора."""
     kb_admin = json.loads(build_tech_admin_keyboard())
     admin_labels = [btn["action"]["label"] for row in kb_admin["buttons"] for btn in row]
-    assert "📊 Сервер" in admin_labels
-    assert "📈 Метрики" in admin_labels
-    assert "💾 Бэкап БД" in admin_labels
-    assert "🚧 Техработы" in admin_labels
-    assert "🔄 Контейнеры" in admin_labels
-    assert "🚪 Сброс сессий" in admin_labels
+    assert "Сервер" in admin_labels
+    assert "Метрики" in admin_labels
+    assert "Бэкап БД" in admin_labels
+    assert "Техработы" in admin_labels
+    assert "Контейнеры" in admin_labels
+    assert "Сброс сессий" in admin_labels
     assert "Главное меню" in admin_labels
 
     kb_containers = json.loads(build_tech_containers_keyboard(["app", "web"]))
     c_labels = [btn["action"]["label"] for row in kb_containers["buttons"] for btn in row]
-    assert "🔄 Перезапуск app" in c_labels
-    assert "🔄 Перезапуск web" in c_labels
+    assert "Перезапуск app" in c_labels
+    assert "Перезапуск web" in c_labels
 
     kb_maint_off = json.loads(build_tech_maintenance_keyboard(is_active=False))
     m_labels_off = [btn["action"]["label"] for row in kb_maint_off["buttons"] for btn in row]
-    assert "🔴 Включить техработы" in m_labels_off
+    assert "Включить техработы" in m_labels_off
 
     kb_maint_on = json.loads(build_tech_maintenance_keyboard(is_active=True))
     m_labels_on = [btn["action"]["label"] for row in kb_maint_on["buttons"] for btn in row]
-    assert "🟢 Отключить техработы" in m_labels_on
+    assert "Отключить техработы" in m_labels_on
 
     kb_logs = json.loads(build_tech_logs_keyboard(["app", "db"]))
     l_labels = [btn["action"]["label"] for row in kb_logs["buttons"] for btn in row]
-    assert "📋 Логи app" in l_labels
+    assert "Логи app" in l_labels
 
 
 @pytest.mark.asyncio
@@ -132,11 +132,11 @@ async def test_main_keyboard_for_passes_tech_admin(db_session_maker):
 
     kb_tech = json.loads(await _main_keyboard_for(TECH_ADMIN_ID))
     labels_tech = [btn["action"]["label"] for row in kb_tech["buttons"] for btn in row]
-    assert "🔧 Тех-админ" in labels_tech
+    assert "Тех-админ" in labels_tech
 
     kb_student = json.loads(await _main_keyboard_for(OTHER_USER_ID))
     labels_student = [btn["action"]["label"] for row in kb_student["buttons"] for btn in row]
-    assert "🔧 Тех-админ" not in labels_student
+    assert "Тех-админ" not in labels_student
 
 
 # === 3. Тесты обработчиков панели тех-админа ===
@@ -152,8 +152,7 @@ async def test_tech_panel_access_denied(db_session_maker):
 
     await tech_panel_handler(msg)
 
-    msg.answer.assert_called_once()
-    assert "⛔ Доступ запрещён" in msg.answer.call_args[0][0]
+    msg.answer.assert_not_called()
 
 
 @pytest.mark.asyncio

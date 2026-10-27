@@ -8,7 +8,7 @@ from datetime import datetime
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch.rules.base import RegexRule
 
-from bots.vk.common import _REPORT_PERIOD_PATTERN, ReportStates, _main_keyboard_for
+from bots.vk.common import _REPORT_PERIOD_PATTERN, ReportStates
 from bots.vk.keyboards import (
     build_admin_cancel_keyboard,
     build_admin_keyboard,
@@ -39,9 +39,6 @@ async def report_menu_handler(message: Message):
     """Выбор периода для формирования отчёта: за сегодня, за определённое число, за период."""
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
-        )
         return
 
     from bots.vk.bot import vk_bot
@@ -63,9 +60,6 @@ async def report_today_handler(message: Message):
     """Формирование и отправка отчёта за сегодняшний день."""
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
-        )
         return
 
     from bots.vk.bot import vk_bot
@@ -112,10 +106,6 @@ async def report_today_handler(message: Message):
 async def report_by_date(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "⛔️ Эта команда доступна только администраторам.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
         return
 
     from bots.vk.bot import vk_bot
@@ -137,9 +127,6 @@ async def report_by_date_input(message: Message):
         from bots.vk.bot import vk_bot
 
         await vk_bot.state_dispenser.delete(message.from_id)
-        await message.answer(
-            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
-        )
         return
 
     parsed = parse_report_date(message.text)
@@ -192,10 +179,6 @@ async def report_by_date_input(message: Message):
 async def report_by_period_handler(message: Message):
     user = await BotCore.get_or_create_user(vk_id=message.from_id)
     if not await BotCore.is_admin(user):
-        await message.answer(
-            "⛔️ Эта команда доступна только администраторам.",
-            keyboard=await _main_keyboard_for(message.from_id),
-        )
         return
 
     from bots.vk.bot import vk_bot
@@ -218,9 +201,6 @@ async def report_by_period_input(message: Message):
         from bots.vk.bot import vk_bot
 
         await vk_bot.state_dispenser.delete(message.from_id)
-        await message.answer(
-            "⛔️ У вас нет доступа к отчетам.", keyboard=await _main_keyboard_for(message.from_id)
-        )
         return
 
     match = re.match(_REPORT_PERIOD_PATTERN, message.text or "")

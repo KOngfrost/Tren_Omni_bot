@@ -77,10 +77,7 @@ async def test_broadcast_start_non_admin_forbidden(setup_vk_test_data):
 
     await broadcast_start_handler(message)
 
-    message.answer.assert_called_once()
-    reply = message.answer.call_args[0][0]
-    assert "У вас нет доступа" in reply
-    _assert_no_emoji(reply)
+    message.answer.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -93,10 +90,7 @@ async def test_broadcast_start_dept_admin_forbidden(setup_vk_test_data):
 
     await broadcast_start_handler(message)
 
-    message.answer.assert_called_once()
-    reply = message.answer.call_args[0][0]
-    assert "доступна только суперадминистраторам" in reply
-    _assert_no_emoji(reply)
+    message.answer.assert_not_called()
 
 
 @pytest.mark.asyncio
