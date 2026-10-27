@@ -149,6 +149,7 @@ services:
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
+      - TECH_ADMIN_VK_ID=${TECH_ADMIN_VK_ID}
     volumes:
       - bot_logs:/app/logs
       - /var/backups/oss_bot:/var/backups/oss_bot
@@ -212,11 +213,12 @@ services:
     container_name: oss_bot_web
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 640m
-    memswap_limit: 640m
+    mem_limit: 512m
+    memswap_limit: 1024m
     env_file:
       - .env
     environment:
+      - WEB_WORKERS=${WEB_WORKERS:-1}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
