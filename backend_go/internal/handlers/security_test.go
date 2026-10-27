@@ -352,7 +352,7 @@ func TestTelegramWebAppAuthRejectsEmptyInitData(t *testing.T) {
 // а не 500. Фронтенд полагается на этот контракт при проверке входа.
 func TestAuthMeWithoutSessionIsNotAuthenticated(t *testing.T) {
 	app := fiber.New()
-	app.Get("/api/v1/auth/me", AuthMe)
+	app.Get("/api/v1/auth/me", AuthMe(nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 

@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import threading
 import time
@@ -38,6 +39,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from core.config import settings
 from core.models import Log
 
 logger = logging.getLogger(__name__)
@@ -204,12 +206,48 @@ class AuditMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def is_trusted_proxy(ip_str: str | None) -> bool:
+    """Проверить, является ли IP-адрес доверенным прокси-сервером."""
+    if not ip_str or ip_str == "unknown":
+        return False
+    if ip_str in settings.TRUSTED_PROXIES:
+        return True
+    try:
+        address = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    if address.is_loopback:
+        return True
+    for trusted in settings.TRUSTED_PROXIES:
+        if not trusted:
+            continue
+        try:
+            if "/" in trusted:
+                if address in ipaddress.ip_network(trusted, strict=False):
+                    return True
+            elif address == ipaddress.ip_address(trusted):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def get_client_ip(request: Request) -> str:
+    """Безопасно получить IP клиента с валидацией доверенных прокси."""
+    client_ip = request.client.host if request.client else "unknown"
+    if is_trusted_proxy(client_ip):
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            candidate = forwarded.split(",")[0].strip()[:64]
+            if candidate:
+                return candidate
+    return client_ip
+
+
 def _client_ip(request: Request) -> str | None:
-    """IP клиента с учётом обратного прокси (X-Forwarded-For)."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:64]
-    return request.client.host if request.client else None
+    """IP клиента с учётом проверки доверенного обратного прокси."""
+    ip = get_client_ip(request)
+    return None if ip == "unknown" else ip
 
 
 # ==========================================
@@ -286,6 +324,10 @@ async def flush_audit_queue() -> int:
         return len(events)
     except Exception:
         logger.warning("Не удалось записать пачку аудита (%d событий)", len(events), exc_info=True)
+        with _queue_lock:
+            for event in reversed(events):
+                if len(_audit_queue) < AUDIT_QUEUE_MAX:
+                    _audit_queue.appendleft(event)
         return 0
 
 
@@ -313,6 +355,8 @@ __all__ = [
     "drain_audit_queue",
     "enqueue_audit",
     "flush_audit_queue",
+    "get_client_ip",
+    "is_trusted_proxy",
     "pending_audit_count",
     "record_action",
     "reset_audit_queue",

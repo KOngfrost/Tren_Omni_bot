@@ -26,6 +26,7 @@ from bots.vk.common import (
     _main_reply_text,
     _operator_can_access,
 )
+from bots.vk.handlers.tech_admin import tech_admin_labeler
 from bots.vk.handlers.admin import (
     admin_labeler,
     admin_panel,
@@ -130,6 +131,12 @@ class VKMaintenanceMiddleware(BaseMiddleware[Message]):
     """Перехват входящих сообщений VK при активном режиме технических работ."""
 
     async def pre(self) -> None:
+        from core.bot_core import BotCore
+
+        user_id = getattr(self.event, "from_id", None)
+        if BotCore.is_tech_admin_vk_id(user_id):
+            return  # Тех-админ имеет доступ даже во время техработ для управления сервером
+
         if await is_maintenance_mode():
             touch_heartbeat()
             # Отвечаем сообщением о техработах ТОЛЬКО на триггерные слова или нажатия кнопок
@@ -156,6 +163,7 @@ vk_bot.labeler.load(faq_labeler)
 vk_bot.labeler.load(knowledge_labeler)
 vk_bot.labeler.load(events_labeler)
 vk_bot.labeler.load(student_labeler)
+vk_bot.labeler.load(tech_admin_labeler)
 vk_bot.labeler.load(admin_labeler)
 vk_bot.labeler.load(reports_labeler)
 # Пагинация списков подключается последней: кнопки «Ещё ➡️» / «⬅️ Назад»

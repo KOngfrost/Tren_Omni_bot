@@ -44,13 +44,25 @@ func main() {
 	// Инициализация Fiber приложения с оптимизацией
 	app := fiber.New(fiber.Config{
 		AppName:               "OSS Bot High-Performance Go Fiber Gateway",
-		ServerHeader:          "GoFiber",
+		ServerHeader:          "",
 		StrictRouting:         false,
 		CaseSensitive:         false,
 		BodyLimit:             15 * 1024 * 1024, // 15MB
 		ReadTimeout:           10 * time.Second,
 		WriteTimeout:          10 * time.Second,
 		DisableStartupMessage: false,
+	})
+
+	// Security Headers
+	app.Use(func(c *fiber.Ctx) error {
+		c.Set("X-Content-Type-Options", "nosniff")
+		c.Set("X-Frame-Options", "DENY")
+		c.Set("X-XSS-Protection", "0")
+		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		if cfg.AppEnv == "production" {
+			c.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		return c.Next()
 	})
 
 	// Middleware
@@ -101,7 +113,7 @@ func main() {
 	api.Get("/tickets/", handlers.RequireOperator(cfg), handlers.GetTickets)
 
 	// Аутентификация: централизована в FastAPI (Argon2id, 2FA, lockout, logs)
-	api.Get("/auth/me", handlers.AuthMe)
+	api.Get("/auth/me", handlers.AuthMe(cfg))
 	api.Post("/auth/login", func(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"detail": "Аутентификация через Go API отключена в целях безопасности. Используйте веб-панель /auth/login.",

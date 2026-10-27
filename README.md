@@ -1,10 +1,10 @@
-# OSS Bot v0.9.6 🎓
+# OSS Bot v0.9.7.1 🎓
 
 [![CI](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml/badge.svg)](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Go 1.23](https://img.shields.io/badge/go-1.23-00ADD8.svg)](https://golang.org/)
-[![Tests](https://img.shields.io/badge/tests-615%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-707%20passed-brightgreen.svg)](tests/)
 [![Security Audited](https://img.shields.io/badge/security-SEC--01..12%20passed-success.svg)](SECURITY.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 

@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import contextlib
 import gzip
 import json
 import logging
@@ -43,6 +44,8 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
     filepath = None
 
     Path(ARCHIVE_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(OSError):
+        os.chmod(ARCHIVE_OUTPUT_DIR, 0o700)
 
     async with async_session_maker() as session:
         try:
@@ -97,6 +100,9 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
                 json.dump(records, f, default=str, ensure_ascii=False)
                 f.flush()
 
+            with contextlib.suppress(OSError):
+                os.chmod(filepath, 0o600)
+
             if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
                 raise RuntimeError(f"Archival failed: File {filepath} not written successfully")
 
@@ -123,6 +129,8 @@ async def archive_and_delete_logs(now: datetime) -> tuple[int, str | None]:
     filepath = None
 
     Path(ARCHIVE_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(OSError):
+        os.chmod(ARCHIVE_OUTPUT_DIR, 0o700)
 
     async with async_session_maker() as session:
         try:
@@ -158,6 +166,9 @@ async def archive_and_delete_logs(now: datetime) -> tuple[int, str | None]:
 
             with gzip.open(filepath, "wt", encoding="utf-8") as f:
                 json.dump(records, f, default=str, ensure_ascii=False)
+
+            with contextlib.suppress(OSError):
+                os.chmod(filepath, 0o600)
 
             ids_to_delete = [r["id"] for r in records]
             for i in range(0, len(ids_to_delete), CHUNK_SIZE):

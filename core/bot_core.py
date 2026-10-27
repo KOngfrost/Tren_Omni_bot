@@ -70,6 +70,12 @@ class BotCore:
             return db_user
 
     @staticmethod
+    def is_tech_admin_vk_id(vk_id: int | None) -> bool:
+        if not vk_id or not settings.TECH_ADMIN_VK_ID:
+            return False
+        return vk_id == settings.TECH_ADMIN_VK_ID
+
+    @staticmethod
     def is_admin_vk_id(vk_id: int | None) -> bool:
         return vk_id in settings.ADMIN_VK_IDS
 

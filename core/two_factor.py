@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -23,7 +24,24 @@ from core.redis_client import get_redis_client
 logger = logging.getLogger(__name__)
 
 TWO_FACTOR_REDIS_KEY = "oss_bot:system:2fa_enabled"
-TWO_FACTOR_FALLBACK_FILE = os.path.join(tempfile.gettempdir(), "oss_bot_2fa_state.json")
+
+
+def _get_two_factor_fallback_path() -> str:
+    """Безопасный путь к локальному fallback-файлу статуса 2FA."""
+    custom_path = os.getenv("TWO_FACTOR_STATE_FILE")
+    if custom_path:
+        return custom_path
+    uid_suffix = f"_{os.getuid()}" if hasattr(os, "getuid") else ""
+    base_dir = os.getenv("DATA_DIR") or os.path.join(
+        tempfile.gettempdir(), f"oss_bot_secure{uid_suffix}"
+    )
+    os.makedirs(base_dir, mode=0o700, exist_ok=True)
+    with contextlib.suppress(OSError):
+        os.chmod(base_dir, 0o700)
+    return os.path.join(base_dir, "oss_bot_2fa_state.json")
+
+
+TWO_FACTOR_FALLBACK_FILE = _get_two_factor_fallback_path()
 
 # Локальный кеш в оперативной памяти процесса (TTL 2 секунды)
 _cached_state: dict[str, Any] | None = None
@@ -32,21 +50,35 @@ _CACHE_TTL_SECONDS: float = 2.0
 
 
 def _read_local_fallback() -> dict[str, Any] | None:
-    """Прочитать состояние из резервного файла на диске."""
+    """Прочитать состояние из резервного файла на диске с проверкой безопасности."""
     try:
         if os.path.exists(TWO_FACTOR_FALLBACK_FILE):
             with open(TWO_FACTOR_FALLBACK_FILE, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                # В production запрещаем отключать 2FA через fallback-файл, если в config задано TWO_FACTOR_ENABLED=True
+                if (
+                    settings.IS_PRODUCTION
+                    and settings.TWO_FACTOR_ENABLED
+                    and not data.get("enabled", True)
+                ):
+                    logger.warning(
+                        "Попытка отключения 2FA через локальный fallback в production заблокирована"
+                    )
+                    return None
+                return data
     except Exception as e:
         logger.debug("Не удалось прочитать локальный fallback-файл 2FA: %s", e)
     return None
 
 
 def _write_local_fallback(data: dict[str, Any]) -> None:
-    """Атомарно записать состояние в резервный файл на диске."""
+    """Атомарно записать состояние в защищённый резервный файл на диске с правами 0600."""
     try:
         tmp_path = TWO_FACTOR_FALLBACK_FILE + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        mode = 0o600
+        fd = os.open(tmp_path, flags, mode)
+        with open(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, TWO_FACTOR_FALLBACK_FILE)
     except Exception as e:

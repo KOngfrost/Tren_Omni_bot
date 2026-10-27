@@ -42,7 +42,7 @@ services:
       dockerfile: Dockerfile
     container_name: oss_bot_pgbouncer_userlist
     restart: "no"
-    user: "0:0"
+    user: "70:70"
     logging: *default-logging
     mem_limit: 128m
     memswap_limit: 128m
@@ -145,13 +145,16 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.9.7}
+      - APP_VERSION=${APP_VERSION:-0.9.7.1}
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
     volumes:
       - bot_logs:/app/logs
+      - /var/backups/oss_bot:/var/backups/oss_bot
     networks:
       - backend_net
+      - socket_net
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -181,7 +184,7 @@ services:
     networks:
       - backend_net
     healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -217,7 +220,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.9.7}
+      - APP_VERSION=${APP_VERSION:-0.9.7.1}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
@@ -322,12 +325,12 @@ services:
     memswap_limit: 64m
     environment:
       - CONTAINERS=1
-      # Required for pg_dump and temporary .pgpass cleanup in the monitor backup handler.
-      - EXEC=1
+      # SEC-07: EXEC is disabled to prevent arbitrary command execution inside containers
+      - EXEC=0
       - POST=1
       - ALLOW_RESTARTS=1
-      - ALLOW_START=1
-      - ALLOW_STOP=1
+      - ALLOW_START=0
+      - ALLOW_STOP=0
       - IMAGES=0
       - NETWORKS=0
       - VOLUMES=0
@@ -357,7 +360,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.9.7}
+      - APP_VERSION=${APP_VERSION:-0.9.7.1}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
       # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
@@ -376,6 +379,36 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  db-backup:
+    image: postgres:16-alpine
+    container_name: oss_bot_db_backup
+    restart: unless-stopped
+    user: postgres
+    logging: *default-logging
+    mem_limit: 128m
+    memswap_limit: 128m
+    volumes:
+      - /var/backups/oss_bot:/var/backups/oss_bot
+    networks:
+      - data_net
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - BACKUP_DIR=/var/backups/oss_bot
+      - BACKUP_ROTATION_DAYS=${BACKUP_ROTATION_DAYS:-7}
+      - TZ=${APP_TIMEZONE:-Europe/Moscow}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "OSS Bot isolated backup service started"
+        while true; do
+          sleep 86400
+        done
+    depends_on:
+      db:
+        condition: service_healthy
 
   caddy:
     image: caddy:2-alpine

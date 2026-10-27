@@ -569,10 +569,9 @@ class ProbeFilterMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
         if SUSPICIOUS_PROBE_REGEX.search(path):
-            ip = request.client.host if request.client else "unknown"
-            forwarded = request.headers.get("x-forwarded-for")
-            if forwarded:
-                ip = forwarded.split(",")[0].strip()
+            from core.audit import get_client_ip
+
+            ip = get_client_ip(request)
 
             logger.warning("MALICIOUS PROBE BLOCKED: path=%s ip=%s", path, ip)
             from core.security_alerts import send_security_alert

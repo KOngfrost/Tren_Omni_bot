@@ -58,6 +58,7 @@ ALL_MODULE_NAMES = (
     "bots.vk.bot",
     "bots.vk.common",
     "bots.vk.handlers.admin",
+    "bots.vk.handlers.tech_admin",
     "bots.vk.handlers.events",
     "bots.vk.handlers.faq",
     "bots.vk.handlers.knowledge",
