@@ -67,7 +67,7 @@ func LoadConfig() *Config {
 		TelegramAdminID:  tgAdminID,
 		TwoFactorEnabled: twoFactorEnabled,
 		CORSOrigins:      corsOrigins,
-		AppVersion:       getEnv("APP_VERSION", "0.9.7.1"),
+		AppVersion:       getEnv("APP_VERSION", "0.9.7.5"),
 		AppEnv:           appEnv,
 	}
 }

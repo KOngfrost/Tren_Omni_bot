@@ -79,7 +79,7 @@ def _remaining_ttl(state: dict[str, Any]) -> int:
     return max(1, int(float(state.get("expires_at", 0.0)) - time.time()))
 
 
-_consumed_tokens: set[str] = set()
+_consumed_tokens: dict[str, float] = {}
 _token_attempts: dict[str, int] = {}
 
 
@@ -118,8 +118,15 @@ async def _destroy(request: Any, state: dict[str, Any] | None, redis: Any) -> No
     request.session.pop(SESSION_KEY, None)
     if state and state.get("token"):
         token_str = str(state["token"])
-        _consumed_tokens.add(token_str)
+        now_ts = time.time()
+        _consumed_tokens[token_str] = now_ts
         _token_attempts.pop(token_str, None)
+        # Очистка устаревших токенов для предотвращения утечки памяти (храним не более 1 часа)
+        if len(_consumed_tokens) > 500:
+            cutoff = now_ts - 3600
+            for k in list(_consumed_tokens.keys()):
+                if _consumed_tokens[k] < cutoff:
+                    _consumed_tokens.pop(k, None)
         if redis is not None:
             try:
                 await redis.delete(_redis_key(token_str))

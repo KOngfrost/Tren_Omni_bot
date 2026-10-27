@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import selectinload
 
+from core.config import settings
 from core.database import async_session_maker
 from core.models import PartnershipRequest, Ticket, TicketStatus
 from core.time_utils import day_start_app_tz, format_app_datetime
@@ -409,6 +410,29 @@ async def _process_ws_incoming_text(websocket: WebSocket, text: str) -> None:
 
 
 async def _authenticate_ws(websocket: WebSocket):
+    # SEC-01: Валидация заголовка Origin для защиты от Cross-Site WebSocket Hijacking (CSWSH)
+    origin = websocket.headers.get("origin")
+    if origin:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(origin)
+        origin_host = (parsed.hostname or "").lower()
+        allowed_hosts = {"localhost", "127.0.0.1", "testserver"}
+        domain = (settings.DOMAIN or "").strip().lower()
+        if domain:
+            allowed_hosts.add(domain.split(":")[0])
+        for cors_orig in settings.CORS_ORIGINS:
+            if cors_orig:
+                host_item = urlparse(cors_orig).hostname
+                if host_item:
+                    allowed_hosts.add(host_item.lower())
+        if origin_host not in allowed_hosts:
+            logger.warning(
+                "CSWSH: Отклонено WebSocket-подключение с недоверенного Origin: %s", origin
+            )
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return None
+
     session_data = websocket.scope.get("session", {})
     user = session_data.get("user")
     if not user:

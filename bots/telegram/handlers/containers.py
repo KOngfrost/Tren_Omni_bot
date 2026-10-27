@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 
@@ -14,6 +15,24 @@ from bots.telegram.keyboards import get_reboot_confirmation_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router(name="containers")
+
+
+def _restart_priority(name: str) -> int:
+    """Топологический приоритет перезапуска (инфраструктура -> сервисы -> шлюз)."""
+    n = name.lower()
+    if "db" in n and "backup" not in n:
+        return 10
+    if "redis" in n and "exporter" not in n:
+        return 20
+    if "pgbouncer" in n:
+        return 30
+    if "web" in n or "go_api" in n:
+        return 40
+    if "app" in n or "bot" in n:
+        return 50
+    if "caddy" in n:
+        return 90
+    return 60
 
 
 @router.message(Command("restart"))
@@ -70,15 +89,25 @@ async def callback_restart_all(
         )
 
     containers = await docker_client.list_containers(all=True)
+
+    sorted_project = sorted(
+        [
+            c
+            for c in containers
+            if c.is_project_container and "migrate" not in c.name and "userlist" not in c.name
+        ],
+        key=lambda c: _restart_priority(c.name),
+    )
+
     restarted: list[str] = []
     failed: list[str] = []
-    for c in containers:
-        if c.is_project_container and "migrate" not in c.name:
-            ok, _ = await docker_client.restart_container(c.name)
-            if ok:
-                restarted.append(c.name)
-            else:
-                failed.append(c.name)
+    for c in sorted_project:
+        ok, _ = await docker_client.restart_container(c.name)
+        if ok:
+            restarted.append(c.name)
+        else:
+            failed.append(c.name)
+        await asyncio.sleep(0.5)
 
     parts: list[str] = []
     if restarted:

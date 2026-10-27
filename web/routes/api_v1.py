@@ -54,6 +54,10 @@ from web.schemas import (
 )
 from web.security import otp_store
 from web.security.csrf import get_csrf_token
+from web.security.login_rate_limiter import (
+    LOGIN_VELOCITY_MAX_ATTEMPTS,
+    record_login_request_velocity,
+)
 from web.security.middleware import sanitize_html
 
 logger = logging.getLogger(__name__)
@@ -96,7 +100,8 @@ def _validate_telegram_init_data(init_data: str, bot_token: str) -> dict[str, st
     except (ValueError, TypeError):
         auth_date = 0
 
-    if time.time() - auth_date > 86400:
+    now_ts = time.time()
+    if auth_date > now_ts + 60 or (now_ts - auth_date) > 86400:
         raise HTTPException(status_code=401, detail="Init data expired")
 
     return vals
@@ -298,6 +303,7 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
             )
 
     await otp_store.cancel(request)
+    request.scope["session_rotate"] = True
     request.session["user"] = user_data
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     client_ip = _get_client_ip(request)
@@ -321,6 +327,13 @@ async def v1_auth_telegram_webapp(
     payload: TelegramAuthRequest, request: Request
 ) -> dict[str, Any]:
     """Бесшовный вход для Telegram-администратора через Telegram.WebApp.initData."""
+    client_ip = _get_client_ip(request)
+    if await record_login_request_velocity(client_ip) > LOGIN_VELOCITY_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много попыток входа. Пожалуйста, подождите минуту.",
+        )
+
     if not settings.TELEGRAM_BOT_TOKEN or settings.TELEGRAM_ADMIN_ID <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram интеграция не настроена"

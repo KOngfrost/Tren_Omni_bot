@@ -233,14 +233,26 @@ def is_trusted_proxy(ip_str: str | None) -> bool:
 
 
 def get_client_ip(request: Request) -> str:
-    """Безопасно получить IP клиента с валидацией доверенных прокси."""
+    """Безопасно получить IP клиента с валидацией доверенных прокси.
+
+    SEC-07: Разбирает цепочку X-Forwarded-For справа налево, пропуская доверенные прокси,
+    и берёт первый недоверенный IP (настоящий IP клиента), защищая от спуфинга заголовков.
+    """
     client_ip = request.client.host if request.client else "unknown"
     if is_trusted_proxy(client_ip):
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
-            candidate = forwarded.split(",")[0].strip()[:64]
-            if candidate:
-                return candidate
+            ips = [p.strip() for p in forwarded.split(",") if p.strip()]
+            for cand in reversed(ips):
+                cand_clean = cand[:64]
+                try:
+                    ipaddress.ip_address(cand_clean)
+                except ValueError:
+                    continue
+                if not is_trusted_proxy(cand_clean):
+                    return cand_clean
+            if ips:
+                return ips[0][:64]
     return client_ip
 
 

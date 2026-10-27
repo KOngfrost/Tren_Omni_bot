@@ -1,4 +1,5 @@
 import contextlib
+import os
 import secrets
 import tempfile
 from pathlib import Path
@@ -39,7 +40,10 @@ def _load_or_create_dev_secret() -> str:
             return value
     value = secrets.token_urlsafe(64)
     with contextlib.suppress(OSError):
-        _DEV_SECRET_FILE.write_text(value, encoding="utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(str(_DEV_SECRET_FILE), flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(value)
     return value
 
 

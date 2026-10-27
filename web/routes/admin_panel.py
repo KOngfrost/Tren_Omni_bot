@@ -260,6 +260,20 @@ def _resolve_expiry(form, admin_type: str):
     return now_app_tz() + timedelta(hours=hours), None
 
 
+def _validate_creator_permissions(
+    user: dict, can_partnerships: bool, can_broadcast: bool, can_logs: bool
+) -> str | None:
+    """Защита от эскалации привилегий (SEC-03): создатель не может передавать права выше своих."""
+    if not is_superadmin(user):
+        if can_partnerships and not bool(user.get("can_access_partnerships")):
+            return "У вас нет прав для предоставления доступа к разделу «Партнёрство»"
+        if can_broadcast and not bool(user.get("can_access_broadcast")):
+            return "У вас нет прав для предоставления доступа к массовой рассылке"
+        if can_logs and not bool(user.get("can_access_logs")):
+            return "У вас нет прав для предоставления доступа к журналу аудита"
+    return None
+
+
 @router.post("/")
 async def add_admin(request: Request, user=Depends(require_auth)):
     """Добавление нового администратора (с VK ID или временного/QA с настраиваемым сроком).
@@ -312,6 +326,11 @@ async def add_admin(request: Request, user=Depends(require_auth)):
     can_partnerships = bool(form.get("can_access_partnerships"))
     can_broadcast = bool(form.get("can_access_broadcast"))
     can_logs = bool(form.get("can_access_logs"))
+
+    perm_err = _validate_creator_permissions(user, can_partnerships, can_broadcast, can_logs)
+    if perm_err:
+        request.session["flash_error"] = perm_err
+        return RedirectResponse(url="/admin/admins/", status_code=302)
 
     try:
         async with async_session_maker() as session:

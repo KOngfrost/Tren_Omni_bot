@@ -103,10 +103,10 @@ func main() {
 	// эндпоинтах (double-submit cookie), генерация токена на безопасных методах.
 	api.Use(handlers.CSRFProtect())
 	api.Get("/health", handlers.HealthCheck)
-	api.Get("/stats", handlers.GetStats(cfg))
+	api.Get("/stats", handlers.RequireOperator(cfg), handlers.GetStats(cfg))
 
 	// Отделы
-	api.Get("/departments/", handlers.GetDepartments)
+	api.Get("/departments/", handlers.RequireOperator(cfg), handlers.GetDepartments)
 	api.Post("/departments/", handlers.RequireSuperadmin(cfg), handlers.CreateDepartment)
 
 	// Тикеты
@@ -121,6 +121,16 @@ func main() {
 	})
 	api.Post("/auth/telegram-webapp", handlers.TelegramWebAppAuth(cfg))
 	api.Post("/auth/logout", func(c *fiber.Ctx) error {
+		sessionCookie := c.Cookies("session")
+		if sessionCookie != "" && appRedis.Client != nil {
+			ctx := c.UserContext()
+			sessID := sessionCookie
+			if len(sessID) > 128 {
+				sessID = sessID[:128]
+			}
+			_ = appRedis.Client.Del(ctx, "session:"+sessID).Err()
+		}
+		c.ClearCookie("session")
 		return c.JSON(fiber.Map{"success": true})
 	})
 

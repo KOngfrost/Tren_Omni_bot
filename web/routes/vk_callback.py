@@ -157,7 +157,19 @@ async def vk_callback_webhook(request: Request) -> Response:
 
     event_type = data.get("type")
 
-    # 1. Проверка рукопожатия подтверждения сервера VK (confirmation)
+    # 1. Валидация (до раскрытия confirmation токена) секретного ключа Callback API
+    if settings.VK_CALLBACK_SECRET:
+        secret_received = data.get("secret")
+        if not secrets.compare_digest(str(secret_received or ""), settings.VK_CALLBACK_SECRET):
+            logger.warning("Отклонен запрос Callback API: неверный секретный ключ secret")
+            return Response(content="forbidden", status_code=403, media_type="text/plain")
+    elif settings.IS_PRODUCTION:
+        logger.error(
+            "Запрос Callback API в production отклонен: VK_CALLBACK_SECRET не настроен в .env"
+        )
+        return Response(content="secret_not_configured", status_code=403, media_type="text/plain")
+
+    # 2. Проверка рукопожатия подтверждения сервера VK (confirmation)
     if event_type == "confirmation":
         token = settings.VK_CONFIRMATION_TOKEN
         if not token:
@@ -171,18 +183,6 @@ async def vk_callback_webhook(request: Request) -> Response:
             )
         logger.info("Успешное подтверждение Callback API адреса серверам VK")
         return Response(content=token, status_code=200, media_type="text/plain")
-
-    # 2. Валидация секретного ключа Callback API
-    if settings.VK_CALLBACK_SECRET:
-        secret_received = data.get("secret")
-        if not secrets.compare_digest(str(secret_received or ""), settings.VK_CALLBACK_SECRET):
-            logger.warning("Отклонен запрос Callback API: неверный секретный ключ secret")
-            return Response(content="forbidden", status_code=403, media_type="text/plain")
-    elif settings.IS_PRODUCTION:
-        logger.error(
-            "Запрос Callback API в production отклонен: VK_CALLBACK_SECRET не настроен в .env"
-        )
-        return Response(content="secret_not_configured", status_code=403, media_type="text/plain")
 
     if not event_type:
         return Response(content="ok", status_code=200, media_type="text/plain")
