@@ -325,14 +325,19 @@ def build_tech_containers_keyboard(containers: list[str] | None = None) -> str:
     c_list = containers or [
         "oss_bot_app",
         "oss_bot_web",
-        "oss_bot_redis",
-        "oss_bot_pgbouncer",
+        "oss_bot_tg_monitor",
         "oss_bot_go_api",
         "oss_bot_caddy",
+        "oss_bot_db",
+        "oss_bot_redis",
+        "oss_bot_pgbouncer",
+        "oss_bot_docker_proxy",
+        "oss_bot_db_backup",
+        "oss_bot_prometheus",
+        "oss_bot_redis_exporter",
     ]
-    rows: list[list[tuple[str, str]]] = [
-        [(f"Перезапуск {name}", "secondary")] for name in c_list[:6]
-    ]
+    buttons = [(f"Перезапуск {name}", "secondary") for name in c_list]
+    rows = _chunk_buttons(buttons, 2)
     rows.append([("Тех-меню", "secondary"), ("Главное меню", "secondary")])
     return _format_keyboard(rows, one_time=False)
 
@@ -349,7 +354,21 @@ def build_tech_maintenance_keyboard(is_active: bool) -> str:
 
 def build_tech_logs_keyboard(containers: list[str] | None = None) -> str:
     """Клавиатура выбора сервиса для просмотра последних логов."""
-    c_list = containers or ["oss_bot_app", "oss_bot_web", "oss_bot_redis", "oss_bot_db"]
-    rows: list[list[tuple[str, str]]] = [[(f"Логи {name}", "secondary")] for name in c_list[:4]]
+    c_list = containers or [
+        "oss_bot_app",
+        "oss_bot_web",
+        "oss_bot_tg_monitor",
+        "oss_bot_go_api",
+        "oss_bot_caddy",
+        "oss_bot_db",
+        "oss_bot_redis",
+        "oss_bot_pgbouncer",
+        "oss_bot_docker_proxy",
+        "oss_bot_db_backup",
+        "oss_bot_prometheus",
+        "oss_bot_redis_exporter",
+    ]
+    buttons = [(f"Логи {name}", "secondary") for name in c_list]
+    rows = _chunk_buttons(buttons, 2)
     rows.append([("Тех-меню", "secondary"), ("Главное меню", "secondary")])
     return _format_keyboard(rows, one_time=False)

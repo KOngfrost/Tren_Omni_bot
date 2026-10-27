@@ -83,6 +83,74 @@ def save_backup_file(data: bytes, filename: str, backup_dir: str | None = None) 
     return path
 
 
+def _run_network_pg_dump(
+    host: str,
+    port: str,
+    user: str,
+    db: str,
+    password: str,
+    filename: str,
+    backup_dir: str | None = None,
+) -> tuple[bool, bytes | None, str, str | None] | None:
+    """Выполнить сетевой вызов pg_dump при наличии бинарника в окружении."""
+    pg_dump_bin = shutil.which("pg_dump")
+    if not pg_dump_bin:
+        return None
+    env = os.environ.copy()
+    if password:
+        env["PGPASSWORD"] = password
+    try:
+        cmd = [
+            pg_dump_bin,
+            "-h",
+            host,
+            "-p",
+            str(port),
+            "-U",
+            user,
+            "-d",
+            db,
+            "--no-owner",
+            "--clean",
+            "--if-exists",
+        ]
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = proc.communicate(timeout=60)
+        if proc.returncode == 0 and stdout:
+            compressed = gzip.compress(stdout)
+            save_backup_file(compressed, filename, backup_dir)
+            digest = compute_sha256(compressed)
+            return True, compressed, filename, digest
+        err_msg = (
+            stderr.decode("utf-8", errors="replace").strip()
+            or f"pg_dump exit code {proc.returncode}"
+        )
+        logger.warning("Сетевой pg_dump завершился с ошибкой: %s", err_msg)
+    except Exception as e:
+        logger.warning("Не удалось выполнить локальный/сетевой pg_dump: %s", e)
+    return None
+
+
+def _try_sqlite_backup(
+    stamp: str, backup_dir: str | None = None
+) -> tuple[bool, bytes | None, str, str | None] | None:
+    """Резервное копирование локальной SQLite базы (для тестов/разработки)."""
+    for sqlite_file in ("test_db.sqlite3", "dev.db", "student_bot.db"):
+        if os.path.exists(sqlite_file):
+            with open(sqlite_file, "rb") as f:
+                compressed = gzip.compress(f.read())
+            sqlite_filename = f"oss_bot_backup_{stamp}.sqlite.gz"
+            save_backup_file(compressed, sqlite_filename, backup_dir)
+            digest = compute_sha256(compressed)
+            return True, compressed, sqlite_filename, digest
+    return None
+
+
 async def perform_isolated_database_backup(
     docker_client: Any | None = None,
     cfg: Any | None = None,
@@ -100,49 +168,18 @@ async def perform_isolated_database_backup(
     user = conf.DB_USER or os.getenv("POSTGRES_USER", "oss_bot")
     db = conf.DB_NAME or os.getenv("POSTGRES_DB", "oss_bot")
     password = conf.DB_PASS or os.getenv("POSTGRES_PASSWORD", "")
-    host = conf.DB_HOST or os.getenv("DB_HOST", "db")
-    port = conf.DB_PORT or os.getenv("DB_PORT", "5432")
+    configured_host = conf.DB_HOST or os.getenv("DB_HOST", "db")
+    if configured_host == "pgbouncer":
+        host = os.getenv("DB_DUMP_HOST", "db")
+        port = os.getenv("DB_DUMP_PORT", "5432")
+    else:
+        host = os.getenv("DB_DUMP_HOST", configured_host)
+        port = str(os.getenv("DB_DUMP_PORT", conf.DB_PORT or "5432"))
 
-    # 1. Попытка сетевого вызова pg_dump, если утилита доступна в PATH
-    pg_dump_bin = shutil.which("pg_dump")
-    if pg_dump_bin:
-        env = os.environ.copy()
-        if password:
-            env["PGPASSWORD"] = password
-        try:
-            cmd = [
-                pg_dump_bin,
-                "-h",
-                host,
-                "-p",
-                str(port),
-                "-U",
-                user,
-                "-d",
-                db,
-                "--no-owner",
-                "--clean",
-                "--if-exists",
-            ]
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env,
-            )
-            stdout, stderr = proc.communicate(timeout=60)
-            if proc.returncode == 0 and stdout:
-                compressed = gzip.compress(stdout)
-                save_backup_file(compressed, filename, backup_dir)
-                digest = compute_sha256(compressed)
-                return True, compressed, filename, digest
-            err_msg = (
-                stderr.decode("utf-8", errors="replace").strip()
-                or f"pg_dump exit code {proc.returncode}"
-            )
-            logger.warning("Сетевой pg_dump завершился с ошибкой: %s", err_msg)
-        except Exception as e:
-            logger.warning("Не удалось выполнить локальный/сетевой pg_dump: %s", e)
+    # 1. Попытка прямого вызова pg_dump
+    net_res = _run_network_pg_dump(host, port, user, db, password, filename, backup_dir)
+    if net_res is not None:
+        return net_res
 
     # 2. Если передан docker_client и доступен контейнер базы данных (совместимость)
     if docker_client is not None:
@@ -169,14 +206,9 @@ async def perform_isolated_database_backup(
             logger.debug("Docker fallback не удался: %s", exc)
 
     # 3. SQLite / тестовый фоллбек
-    for sqlite_file in ("test_db.sqlite3", "dev.db", "student_bot.db"):
-        if os.path.exists(sqlite_file):
-            with open(sqlite_file, "rb") as f:
-                compressed = gzip.compress(f.read())
-            sqlite_filename = f"oss_bot_backup_{stamp}.sqlite.gz"
-            save_backup_file(compressed, sqlite_filename, backup_dir)
-            digest = compute_sha256(compressed)
-            return True, compressed, sqlite_filename, digest
+    sqlite_res = _try_sqlite_backup(stamp, backup_dir)
+    if sqlite_res is not None:
+        return sqlite_res
 
     # 4. Если ничего не сработало, в production возвращаем явную ошибку
     if settings.IS_PRODUCTION:

@@ -156,6 +156,7 @@ services:
     networks:
       - backend_net
       - socket_net
+      - data_net
     command: python main.py
     healthcheck:
       test: ["CMD", "python", "scripts/healthcheck_bot.py"]
@@ -374,6 +375,7 @@ services:
     networks:
       - backend_net
       - socket_net
+      - data_net
     command: python scripts/run_tg_monitor.py
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; ok = 'run_tg_monitor.py' in open('/proc/1/cmdline').read(); sys.exit(0 if ok else 1)"]

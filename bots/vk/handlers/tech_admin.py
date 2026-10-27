@@ -96,7 +96,11 @@ async def tech_status_handler(message: Message) -> None:
         containers = await docker_client.list_containers(all=True)
         if containers:
             for c in containers:
-                icon = "[UP]" if "up" in c.status.lower() else "[DOWN]"
+                icon = (
+                    "[UP]"
+                    if "up" in c.status.lower()
+                    else ("[DONE]" if "exited (0)" in c.status.lower() else "[DOWN]")
+                )
                 container_lines.append(f"{icon} {c.name} ({c.status})")
         else:
             container_lines.append("Контейнеры не обнаружены или сокет недоступен")
@@ -207,7 +211,10 @@ async def tech_backup_handler(message: Message) -> None:
         return
 
     await message.answer("Запуск создания резервной копии базы данных...")
-    ok, data, filename_or_err, digest = await perform_isolated_database_backup()
+    docker_client = DockerClient()
+    ok, data, filename_or_err, digest = await perform_isolated_database_backup(
+        docker_client=docker_client
+    )
 
     if ok:
         size_str = f"{len(data) / 1024:.1f} КБ" if data else "Н/Д"
@@ -285,7 +292,12 @@ async def tech_containers_handler(message: Message) -> None:
     names = []
     try:
         containers = await docker_client.list_containers(all=True)
-        names = [c.name for c in containers if c.name]
+        # Показываем все рабочие сервисы, исключая разовые завершенные скрипты миграций
+        names = [
+            c.name
+            for c in containers
+            if c.name and not c.name.endswith("_migrate") and not c.name.endswith("_userlist")
+        ]
     except Exception as exc:
         logger.debug("Не удалось получить список контейнеров: %s", exc)
 
@@ -293,10 +305,16 @@ async def tech_containers_handler(message: Message) -> None:
         names = [
             "oss_bot_app",
             "oss_bot_web",
-            "oss_bot_redis",
-            "oss_bot_pgbouncer",
+            "oss_bot_tg_monitor",
             "oss_bot_go_api",
             "oss_bot_caddy",
+            "oss_bot_db",
+            "oss_bot_redis",
+            "oss_bot_pgbouncer",
+            "oss_bot_docker_proxy",
+            "oss_bot_db_backup",
+            "oss_bot_prometheus",
+            "oss_bot_redis_exporter",
         ]
 
     text = "Управление контейнерами:\n\nВыберите сервис для перезапуска:"
@@ -401,8 +419,20 @@ async def tech_logs_menu_handler(message: Message) -> None:
     if not await _check_access(message):
         return
 
+    docker_client = DockerClient()
+    names = []
+    try:
+        containers = await docker_client.list_containers(all=True)
+        names = [
+            c.name
+            for c in containers
+            if c.name and not c.name.endswith("_migrate") and not c.name.endswith("_userlist")
+        ]
+    except Exception as exc:
+        logger.debug("Не удалось получить список контейнеров для логов: %s", exc)
+
     text = "Просмотр логов:\n\nВыберите сервис для чтения последних строк вывода:"
-    await message.answer(text, keyboard=build_tech_logs_keyboard())
+    await message.answer(text, keyboard=build_tech_logs_keyboard(names if names else None))
 
 
 @tech_admin_labeler.private_message(
