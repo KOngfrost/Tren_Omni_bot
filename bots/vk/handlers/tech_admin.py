@@ -65,10 +65,10 @@ async def tech_panel_handler(message: Message) -> None:
 
     now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     text = (
-        "🔧 <b>Панель Технического Администратора</b>\n\n"
-        f"🕒 Текущее время: <code>{now_str}</code>\n"
-        f"🏷 Версия: <code>v{settings.APP_VERSION}</code>\n"
-        f"🛡 Доступ подтверждён для VK ID: <code>{message.from_id}</code>\n\n"
+        "Панель Технического Администратора\n\n"
+        f"Текущее время: {now_str}\n"
+        f"Версия: v{settings.APP_VERSION}\n"
+        f"Доступ подтверждён для VK ID: {message.from_id}\n\n"
         "Выберите раздел для мониторинга или управления сервисами:"
     )
     await message.answer(text, keyboard=build_tech_admin_keyboard())
@@ -96,22 +96,22 @@ async def tech_status_handler(message: Message) -> None:
         containers = await docker_client.list_containers(all=True)
         if containers:
             for c in containers:
-                icon = "🟢" if "up" in c.status.lower() else "🔴"
-                container_lines.append(f"{icon} <code>{c.name}</code> ({c.status})")
+                icon = "[UP]" if "up" in c.status.lower() else "[DOWN]"
+                container_lines.append(f"{icon} {c.name} ({c.status})")
         else:
-            container_lines.append("⚠️ Контейнеры не обнаружены или сокет недоступен")
+            container_lines.append("Контейнеры не обнаружены или сокет недоступен")
     except Exception as exc:
-        container_lines.append(f"⚠️ Ошибка опроса Docker: {exc}")
+        container_lines.append(f"Ошибка опроса Docker: {exc}")
 
     containers_block = "\n".join(container_lines) if container_lines else "Н/Д"
 
     text = (
-        "📊 <b>Состояние сервера и инфраструктуры:</b>\n\n"
-        f"⏱ <b>Uptime:</b> <code>{uptime}</code>\n\n"
-        f"🖥 <b>CPU:</b> {render_progress_bar(cpu_pct)} <code>{cpu_pct:.1f}%</code>\n"
-        f"🧠 <b>RAM:</b> {render_progress_bar(ram_pct)} <code>{ram_used} / {ram_total} ({ram_pct:.1f}%)</code>\n"
-        f"💾 <b>Диск:</b> {render_progress_bar(disk_pct)} <code>{disk_used} / {disk_total} ({disk_pct:.1f}%)</code>\n\n"
-        f"📦 <b>Контейнеры:</b>\n{containers_block}"
+        "Состояние сервера и инфраструктуры:\n\n"
+        f"Uptime: {uptime}\n\n"
+        f"CPU: {render_progress_bar(cpu_pct)} {cpu_pct:.1f}%\n"
+        f"RAM: {render_progress_bar(ram_pct)} {ram_used} / {ram_total} ({ram_pct:.1f}%)\n"
+        f"Диск: {render_progress_bar(disk_pct)} {disk_used} / {disk_total} ({disk_pct:.1f}%)\n\n"
+        f"Контейнеры:\n{containers_block}"
     )
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
@@ -129,7 +129,7 @@ async def tech_metrics_handler(message: Message) -> None:
     completed = 0
     outbox_pending = 0
     outbox_failed = 0
-    db_status = "🟢 OK"
+    db_status = "OK"
 
     try:
         async with async_session_maker() as session:
@@ -169,31 +169,31 @@ async def tech_metrics_handler(message: Message) -> None:
                 or 0
             )
     except Exception as exc:
-        db_status = f"🔴 Ошибка ({exc})"
+        db_status = f"Ошибка ({exc})"
 
     # 2. Redis статус
-    redis_status = "🔴 Отключен"
+    redis_status = "Отключен"
     try:
         redis_client = await get_redis_client()
         if redis_client:
             pong = await redis_client.ping()
             if pong:
-                redis_status = "🟢 OK"
+                redis_status = "OK"
     except Exception as exc:
-        redis_status = f"🔴 Ошибка ({exc})"
+        redis_status = f"Ошибка ({exc})"
 
     text = (
-        "📈 <b>Показатели сервиса:</b>\n\n"
-        f"🐘 <b>PostgreSQL:</b> {db_status}\n"
-        f"⚡ <b>Redis:</b> {redis_status}\n\n"
-        f"🎫 <b>Обращения студентов:</b>\n"
-        f"• Всего создано: <b>{total_tickets}</b>\n"
-        f"• Новых (ждут ответа): <b>{new_tickets}</b>\n"
-        f"• В работе у операторов: <b>{in_progress}</b>\n"
-        f"• Завершено: <b>{completed}</b>\n\n"
-        f"📬 <b>Очередь Outbox:</b>\n"
-        f"• Ожидают отправки: <b>{outbox_pending}</b>\n"
-        f"• Ошибки доставки (Dead Letter): <b>{outbox_failed}</b>"
+        "Показатели сервиса:\n\n"
+        f"PostgreSQL: {db_status}\n"
+        f"Redis: {redis_status}\n\n"
+        "Обращения студентов:\n"
+        f"• Всего создано: {total_tickets}\n"
+        f"• Новых (ждут ответа): {new_tickets}\n"
+        f"• В работе у операторов: {in_progress}\n"
+        f"• Завершено: {completed}\n\n"
+        "Очередь Outbox:\n"
+        f"• Ожидают отправки: {outbox_pending}\n"
+        f"• Ошибки доставки (Dead Letter): {outbox_failed}"
     )
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
@@ -206,21 +206,21 @@ async def tech_backup_handler(message: Message) -> None:
     if not await _check_access(message):
         return
 
-    await message.answer("⏳ Запуск создания резервной копии базы данных...")
+    await message.answer("Запуск создания резервной копии базы данных...")
     ok, data, filename_or_err, digest = await perform_isolated_database_backup()
 
     if ok:
         size_str = f"{len(data) / 1024:.1f} КБ" if data else "Н/Д"
         text = (
-            "✅ <b>Резервная копия базы данных успешно создана!</b>\n\n"
-            f"📁 <b>Файл:</b> <code>{filename_or_err}</code>\n"
-            f"📦 <b>Размер:</b> <code>{size_str}</code>\n"
-            f"🔐 <b>SHA-256:</b> <code>{digest}</code>\n"
-            "🗂 <b>Каталог:</b> <code>/var/backups/oss_bot</code> (права 0600)\n\n"
-            "ℹ️ <i>Дамп базы сохранён на сервере и не передаётся во внешние чаты (SEC-07 / 152-ФЗ).</i>"
+            "Резервная копия базы данных успешно создана.\n\n"
+            f"Файл: {filename_or_err}\n"
+            f"Размер: {size_str}\n"
+            f"SHA-256: {digest}\n"
+            "Каталог: /var/backups/oss_bot (права 0600)\n\n"
+            "Дамп базы сохранён на сервере и не передаётся во внешние чаты (SEC-07 / 152-ФЗ)."
         )
     else:
-        text = f"❌ <b>Ошибка резервного копирования:</b>\n{filename_or_err}"
+        text = f"Ошибка резервного копирования:\n{filename_or_err}"
 
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
@@ -235,12 +235,12 @@ async def tech_maintenance_handler(message: Message) -> None:
 
     active = await is_maintenance_mode()
     status_text = (
-        "🔴 <b>ВКЛЮЧЁН</b> (студенты получают заглушку 503)"
+        "ВКЛЮЧЁН (студенты получают заглушку 503)"
         if active
-        else "🟢 <b>ОТКЛЮЧЁН</b> (система работает в штатном режиме)"
+        else "ОТКЛЮЧЁН (система работает в штатном режиме)"
     )
     text = (
-        f"🚧 <b>Режим технического обслуживания:</b>\n\n"
+        "Режим технического обслуживания:\n\n"
         f"Текущий статус: {status_text}\n\n"
         "Нажмите кнопку ниже для переключения режима:"
     )
@@ -266,9 +266,9 @@ async def tech_maintenance_toggle_handler(message: Message) -> None:
     new_state = not current
     await set_maintenance_mode(new_state)
 
-    state_str = "включён 🔴" if new_state else "отключён 🟢"
+    state_str = "включён" if new_state else "отключён"
     await message.answer(
-        f"✅ Режим технических работ успешно {state_str}!",
+        f"Режим технических работ успешно {state_str}.",
         keyboard=build_tech_admin_keyboard(),
     )
 
@@ -299,7 +299,7 @@ async def tech_containers_handler(message: Message) -> None:
             "oss_bot_caddy",
         ]
 
-    text = "🔄 <b>Управление контейнерами:</b>\n\nВыберите сервис для перезапуска:"
+    text = "Управление контейнерами:\n\nВыберите сервис для перезапуска:"
     await message.answer(text, keyboard=build_tech_containers_keyboard(names))
 
 
@@ -313,17 +313,17 @@ async def tech_restart_container_handler(message: Message) -> None:
     if not restart_match:
         return
     c_name = restart_match.group(1).strip()
-    await message.answer(f"⏳ Перезапуск контейнера <code>{c_name}</code>...")
+    await message.answer(f"Перезапуск контейнера {c_name}...")
     docker_client = DockerClient()
     ok, res_msg = await docker_client.restart_container(c_name)
     if ok:
         await message.answer(
-            f"✅ Контейнер <code>{c_name}</code> успешно перезапущен!",
+            f"Контейнер {c_name} успешно перезапущен.",
             keyboard=build_tech_admin_keyboard(),
         )
     else:
         await message.answer(
-            f"❌ Ошибка перезапуска <code>{c_name}</code>:\n{res_msg}",
+            f"Ошибка перезапуска {c_name}:\n{res_msg}",
             keyboard=build_tech_admin_keyboard(),
         )
 
@@ -344,7 +344,7 @@ async def tech_logs_container_handler(message: Message) -> None:
     if not clean_logs.strip():
         clean_logs = "(Логи пусты)"
     await message.answer(
-        f"📋 <b>Последние логи {c_name}:</b>\n\n<pre>{clean_logs}</pre>",
+        f"Последние логи {c_name}:\n\n{clean_logs}",
         keyboard=build_tech_admin_keyboard(),
     )
 
@@ -369,7 +369,7 @@ async def tech_kickall_handler(message: Message) -> None:
     redis_client = await get_redis_client()
     if not redis_client:
         await message.answer(
-            "⚠️ Redis недоступен, сброс сессий невозможен.", keyboard=build_tech_admin_keyboard()
+            "Redis недоступен, сброс сессий невозможен.", keyboard=build_tech_admin_keyboard()
         )
         return
 
@@ -383,12 +383,12 @@ async def tech_kickall_handler(message: Message) -> None:
             count = 0
 
         text = (
-            f"🚪 <b>Сброс активных сессий завершён!</b>\n\n"
-            f"Удалено активных сессий: <b>{count}</b>\n"
+            "Сброс активных сессий завершён.\n\n"
+            f"Удалено активных сессий: {count}\n"
             "Всем операторам и администраторам потребуется повторный вход."
         )
     except Exception as exc:
-        text = f"❌ Ошибка при сбросе сессий в Redis: {exc}"
+        text = f"Ошибка при сбросе сессий в Redis: {exc}"
 
     await message.answer(text, keyboard=build_tech_admin_keyboard())
 
@@ -401,7 +401,7 @@ async def tech_logs_menu_handler(message: Message) -> None:
     if not await _check_access(message):
         return
 
-    text = "📋 <b>Просмотр логов:</b>\n\nВыберите сервис для чтения последних строк вывода:"
+    text = "Просмотр логов:\n\nВыберите сервис для чтения последних строк вывода:"
     await message.answer(text, keyboard=build_tech_logs_keyboard())
 
 
@@ -414,12 +414,12 @@ async def tech_2fa_handler(message: Message) -> None:
         return
 
     state_str = (
-        "🟢 Включена (обязательна в продакшене)" if settings.TWO_FACTOR_ENABLED else "🟡 Отключена"
+        "Включена (обязательна в продакшене)" if settings.TWO_FACTOR_ENABLED else "Отключена"
     )
     text = (
-        f"🔐 <b>Двухфакторная аутентификация (2FA):</b>\n\n"
-        f"Глобальный статус: <b>{state_str}</b>\n"
-        f"Служба доставки кодов: личные сообщения VK / Telegram\n"
+        "Двухфакторная аутентификация (2FA):\n\n"
+        f"Глобальный статус: {state_str}\n"
+        "Служба доставки кодов: личные сообщения VK / Telegram\n"
         "Время жизни одноразового пароля (OTP): 180 секунд"
     )
     await message.answer(text, keyboard=build_tech_admin_keyboard())
