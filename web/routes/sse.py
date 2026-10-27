@@ -415,7 +415,7 @@ async def _authenticate_ws(websocket: WebSocket):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None
 
-    from core.database import get_session_context
+    from core.database import async_session_maker
     from core.models import WebUser
     from web.routes.auth import bootstrap_session_still_valid
 
@@ -427,7 +427,7 @@ async def _authenticate_ws(websocket: WebSocket):
         return None
 
     try:
-        async with get_session_context() as db_session:
+        async with async_session_maker() as db_session:
             web_user = await db_session.get(WebUser, web_user_id)
             if web_user is None or not web_user.is_active:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

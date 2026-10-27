@@ -76,6 +76,10 @@ def async_session_maker(*args, **kwargs):
     return _session_maker(*args, **kwargs)
 
 
+# Совместимый алиас для контекстного менеджера сессий
+get_session_context = async_session_maker
+
+
 async def get_db() -> AsyncIterator[AsyncSession]:
     """Dependency для FastAPI эндпоинтов: yield AsyncSession."""
     async with async_session_maker() as session:
