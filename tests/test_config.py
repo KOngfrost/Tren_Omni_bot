@@ -193,3 +193,20 @@ def test_config_aliases_secret_key_and_tg_monitor(monkeypatch):
     assert fresh.TG_MONITOR_BOT_TOKEN == "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
     assert fresh.TELEGRAM_ADMIN_ID == 987654321
     assert fresh.TG_MONITOR_CHAT_ID == 987654321
+
+
+def test_app_version_is_synced():
+    """TDD: Проверка синхронизации версии 0.9.7.1 во всех ключевых точках."""
+    import tomllib
+    from pathlib import Path
+
+    import core
+
+    pyproject_file = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    with open(pyproject_file, "rb") as f:
+        data = tomllib.load(f)
+    toml_version = data["project"]["version"]
+
+    assert toml_version == "0.9.7.1"
+    assert core.APP_VERSION == "0.9.7.1"
+    assert core.__version__ == "0.9.7.1"

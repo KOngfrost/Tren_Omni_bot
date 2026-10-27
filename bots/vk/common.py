@@ -82,7 +82,8 @@ async def _main_keyboard_for(vk_id: int) -> str:
     """Сформировать главную клавиатуру с учетом прав пользователя."""
     user = await BotCore.get_or_create_user(vk_id=vk_id)
     departments = await _get_department_names()
-    return build_main_keyboard(await BotCore.is_admin(user), departments)
+    is_tech = BotCore.is_tech_admin_vk_id(vk_id)
+    return build_main_keyboard(await BotCore.is_admin(user), departments, is_tech_admin=is_tech)
 
 
 async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
@@ -94,9 +95,10 @@ async def _operator_can_access(vk_id: int, ticket_id: int) -> bool:
             return False
         if is_super:
             return True
-        # Общие обращения (department_id is None) доступны для ответа всем
-        if ticket.department_id is None:
-            return True
+        # Пользователь без прав суперадминистратора и без привязки к отделу не имеет доступа
         if dept_id is None:
             return False
+        # Общие обращения (department_id is None) доступны для ответа всем назначенным операторам
+        if ticket.department_id is None:
+            return True
         return ticket.department_id == dept_id

@@ -79,7 +79,7 @@ async def check_users():
                 print(f"  {u.username}")
                 print(f"      Роль: {u.role.value}")
                 print(f"      Статус: {status}")
-                print(f"      Хеш пароля: {u.password_hash[:50]}...")
+                print(f"      Хеш пароля: {'задан' if u.password_hash else 'отсутствует'}")
                 print()
 
             return result
@@ -122,7 +122,7 @@ async def fix_users(username: str, password: str, role: str = "SUPERADMIN"):
                 await session.commit()
                 print(f"  [OK] Создан новый пользователь: {new_user.username}")
                 print(f"      Роль: {role}")
-                print(f"      Пароль: {password}")
+                print("      Пароль: [установлен, скрыт в целях безопасности]")
                 return
 
             for user in users:

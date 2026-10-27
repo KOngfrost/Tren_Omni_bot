@@ -31,7 +31,7 @@ except ImportError:
     HAS_ARGON2 = False
     ALGORITHM = "pbkdf2_sha256"
 
-PBKDF2_ITERATIONS = 100_000
+PBKDF2_ITERATIONS = 600_000
 
 
 def hash_password(password: str) -> str:

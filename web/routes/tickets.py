@@ -16,6 +16,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import selectinload
 
+from core.audit import get_client_ip
 from core.database import async_session_maker
 from core.models import Department, Ticket, TicketStatus, User
 from core.ticket_service import (
@@ -268,13 +269,7 @@ async def _load_ticket_for_user(
         and ticket.department_id is not None
         and (dept_id is None or ticket.department_id != dept_id)
     ):
-        ip = "unknown"
-        if request:
-            forwarded = request.headers.get("x-forwarded-for")
-            if forwarded:
-                ip = forwarded.split(",")[0].strip()
-            elif request.client:
-                ip = request.client.host
+        ip = get_client_ip(request) if request else "unknown"
 
         username = user.get("username", "unknown")
         logger.warning(

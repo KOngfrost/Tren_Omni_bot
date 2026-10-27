@@ -184,13 +184,29 @@ async def test_cross_department_idor_protection(db_session_maker):
             description="Секретная информация отдела Б",
             status=TicketStatus.NEW,
         )
-        session.add_all([op_a_admin, ticket_b])
+        ticket_no_dept = Ticket(
+            user_id=student.id,
+            department_id=None,
+            topic="Общий вопрос",
+            description="Вопрос без отдела",
+            status=TicketStatus.NEW,
+        )
+        session.add_all([op_a_admin, ticket_b, ticket_no_dept])
         await session.commit()
         ticket_b_id = ticket_b.id
+        ticket_no_dept_id = ticket_no_dept.id
 
     # Проверяем _operator_can_access: оператор А НЕ имеет доступа к заявке отдела Б
     has_access = await _operator_can_access(vk_id=444001, ticket_id=ticket_b_id)
     assert has_access is False
+
+    # SEC-CRIT-01: Обычный студент НЕ должен иметь доступа к общей заявке (dept_id=None)
+    student_has_access = await _operator_can_access(vk_id=444002, ticket_id=ticket_no_dept_id)
+    assert student_has_access is False
+
+    # Назначенный оператор отдела А ИМЕЕТ доступ к общей заявке без отдела
+    operator_has_access = await _operator_can_access(vk_id=444001, ticket_id=ticket_no_dept_id)
+    assert operator_has_access is True
 
     # Проверяем, что хендлер смены статуса отклоняет несанкционированное изменение
     msg = MagicMock()

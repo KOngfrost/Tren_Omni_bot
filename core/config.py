@@ -95,8 +95,8 @@ class Settings(BaseSettings):
     DB_HOST: str | None = None
     DB_PORT: str = "5432"
 
-    DB_POOL_SIZE: int = 15
-    DB_MAX_OVERFLOW: int = 15
+    DB_POOL_SIZE: int = 30
+    DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
     DB_POOL_PRE_PING: bool = True
@@ -133,6 +133,9 @@ class Settings(BaseSettings):
     VK_CALLBACK_SECRET: str = ""
     VK_BOT_TOKEN: str | None = None
     ADMIN_VK_IDS: set[int] = Field(default_factory=set)
+    TECH_ADMIN_VK_ID: int = Field(
+        default=0, validation_alias=AliasChoices("TECH_ADMIN_VK_ID", "VK_TECH_ADMIN_ID")
+    )
     VK_REPORT_ADMIN_ID: int = 0
     REPORT_TIME: str = "09:00"
     APP_TIMEZONE: str = "Europe/Moscow"
@@ -312,6 +315,16 @@ class Settings(BaseSettings):
         if isinstance(v, list | tuple):
             return {int(x) for x in v if str(x).isdigit()}
         return set()
+
+    @field_validator("TECH_ADMIN_VK_ID", mode="before")
+    @classmethod
+    def _parse_tech_admin_vk_id(cls, v: Any) -> int:
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            digits = [x.strip() for x in v.split(",") if x.strip().isdigit()]
+            return int(digits[0]) if digits else 0
+        return 0
 
     @field_validator("VK_REPORT_ADMIN_ID", mode="before")
     @classmethod

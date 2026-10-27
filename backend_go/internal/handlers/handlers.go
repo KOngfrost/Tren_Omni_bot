@@ -109,6 +109,7 @@ func currentCSRFToken(c *fiber.Ctx) string {
 		log.Printf("SEC-02: не удалось сгенерировать CSRF-токен: %v", err)
 		return ""
 	}
+	isSecure := c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 	c.Cookie(&fiber.Cookie{
 		Name:     csrfCookieName,
 		Value:    token,
@@ -116,6 +117,7 @@ func currentCSRFToken(c *fiber.Ctx) string {
 		MaxAge:   csrfCookieMaxAgeSeconds,
 		SameSite: "Lax",
 		HTTPOnly: false,
+		Secure:   isSecure,
 	})
 	return token
 }
@@ -215,14 +217,16 @@ func HealthCheck(c *fiber.Ctx) error {
 	if database.Pool == nil {
 		dbStatus = "unavailable"
 	} else if err := database.Pool.Ping(ctx); err != nil {
-		dbStatus = "error: " + err.Error()
+		log.Printf("HealthCheck DB error: %v", err)
+		dbStatus = "unavailable"
 	}
 
 	redisStatus := "ok"
 	if appRedis.Client == nil {
 		redisStatus = "unavailable"
 	} else if err := appRedis.Client.Ping(ctx).Err(); err != nil {
-		redisStatus = "error: " + err.Error()
+		log.Printf("HealthCheck Redis error: %v", err)
+		redisStatus = "unavailable"
 	}
 
 	if dbStatus != "ok" || redisStatus != "ok" {
@@ -697,17 +701,19 @@ func RequireOperator(cfg *config.Config) fiber.Handler {
 	}
 }
 
-func AuthMe(c *fiber.Ctx) error {
-	user, err := GetUserFromSession(c, nil)
-	if err != nil || user == nil {
-		return c.JSON(fiber.Map{"authenticated": false, "user": nil, "csrf_token": currentCSRFToken(c)})
-	}
+func AuthMe(cfg *config.Config) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		user, err := GetUserFromSession(c, cfg)
+		if err != nil || user == nil {
+			return c.JSON(fiber.Map{"authenticated": false, "user": nil, "csrf_token": currentCSRFToken(c)})
+		}
 
-	return c.JSON(fiber.Map{
-		"authenticated": true,
-		"user":          user,
-		"csrf_token":    currentCSRFToken(c),
-	})
+		return c.JSON(fiber.Map{
+			"authenticated": true,
+			"user":          user,
+			"csrf_token":    currentCSRFToken(c),
+		})
+	}
 }
 
 func TelegramWebAppAuth(cfg *config.Config) fiber.Handler {
@@ -812,6 +818,7 @@ func TelegramWebAppAuth(cfg *config.Config) fiber.Handler {
 						log.Printf("Не удалось сохранить сессию Telegram WebApp в Redis: %v", err)
 					} else if cfg != nil && cfg.SessionSecretKey != "" {
 						signedCookie := signItsdangerous(sessionID, cfg.SessionSecretKey)
+						isSecure := c.Protocol() == "https" || c.Get("X-Forwarded-Proto") == "https"
 						c.Cookie(&fiber.Cookie{
 							Name:     "session",
 							Value:    signedCookie,
@@ -819,6 +826,7 @@ func TelegramWebAppAuth(cfg *config.Config) fiber.Handler {
 							HTTPOnly: true,
 							SameSite: "Lax",
 							MaxAge:   7 * 24 * 3600,
+							Secure:   isSecure,
 						})
 					}
 				}

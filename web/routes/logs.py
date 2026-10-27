@@ -122,16 +122,20 @@ async def export_logs(user=Depends(require_logs_access)):
     # журнал не отвечает на вопрос «кто и откуда это сделал».
     for log in logs:
         if log.actor_name:
-            actor: str = escape_for_csv(log.actor_name)
+            actor = escape_for_csv(sanitize_csv_field(log.actor_name))
         else:
-            actor = escape_for_csv((log.user.full_name or "Аноним") if log.user else "Аноним")
-        action: str = escape_for_csv(log.action or "")
+            raw_actor = (log.user.full_name or "Аноним") if log.user else "Аноним"
+            actor = escape_for_csv(sanitize_csv_field(raw_actor))
+        action: str = escape_for_csv(sanitize_csv_field(log.action or ""))
         details: str = escape_for_csv(sanitize_csv_field(log.details or ""))
+        actor_type_val = escape_for_csv(sanitize_csv_field(log.actor_type or ""))
+        path_val = escape_for_csv(sanitize_csv_field(log.path or ""))
+        ip_val = escape_for_csv(sanitize_csv_field(log.ip_address or ""))
         date_str: str = format_datetime(log.created_at, "%Y-%m-%d %H:%M") if log.created_at else ""
         csv_content += (
-            f"{log.id},{date_str},{escape_for_csv(log.actor_type or '')},{actor},{action},"
-            f"{escape_for_csv(log.http_method or '')},{escape_for_csv(log.path or '')},"
-            f"{escape_for_csv(log.ip_address or '')},{log.status_code or ''},"
+            f"{log.id},{date_str},{actor_type_val},{actor},{action},"
+            f"{escape_for_csv(log.http_method or '')},{path_val},"
+            f"{ip_val},{log.status_code or ''},"
             f"{log.duration_ms if log.duration_ms is not None else ''},{details}\n"
         )
 

@@ -4,7 +4,6 @@ Login throttling находится в ``web.security.login_rate_limiter``; фу
 оставлены здесь как aliases для совместимости существующих callers/tests.
 """
 
-import ipaddress
 import logging
 import re
 import secrets
@@ -18,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core import database as core_db
+from core.audit import get_client_ip
 from core.config import settings
 from core.models import Log, WebRole, WebUser
 from core.two_factor import is_two_factor_enabled
@@ -121,40 +121,8 @@ def _mask_vk_id(vk_admin_id: object) -> str:
     return f"***{digits[-4:]}" if digits else "***"
 
 
-def is_trusted_proxy(ip_str: str) -> bool:
-    if not ip_str or ip_str == "unknown":
-        return False
-    if ip_str in settings.TRUSTED_PROXIES:
-        return True
-    try:
-        address = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    if address.is_loopback:
-        return True
-    for trusted in settings.TRUSTED_PROXIES:
-        if not trusted:
-            continue
-        try:
-            if "/" in trusted:
-                if address in ipaddress.ip_network(trusted, strict=False):
-                    return True
-            elif address == ipaddress.ip_address(trusted):
-                return True
-        except ValueError:
-            continue
-    return False
-
-
 def _get_client_ip(request: Request) -> str:
-    client_ip = request.client.host if request.client else "unknown"
-    if is_trusted_proxy(client_ip):
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            candidate = forwarded.split(",")[0].strip()
-            if candidate:
-                return candidate
-    return client_ip
+    return get_client_ip(request)
 
 
 # ==========================================

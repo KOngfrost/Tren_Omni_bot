@@ -70,6 +70,7 @@ archives/*
 backups/
 !backups/.gitkeep
 *.dump
+*.sql
 *.tar.gz
 *.sql.gz
 *.json.gz

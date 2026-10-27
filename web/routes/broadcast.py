@@ -63,13 +63,19 @@ def _parse_post_attachment(raw_post_url: str) -> tuple[str | None, str | None]:
     return attachment, None
 
 
+MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB limit to prevent OOM DoS
+
+
 async def _process_image_attachment(image_field: Any) -> tuple[str | None, str | None]:
-    """Загрузить изображение в ВК и вернуть (attachment, error_msg)."""
+    """Загрузить изображение в ВК и вернуть (attachment, error_msg) с валидацией размера."""
     if not isinstance(image_field, UploadFile) or not image_field.filename:
         return None, None
-    content = await image_field.read()
+    # Читаем не более MAX_IMAGE_SIZE_BYTES + 1 для защиты от исчерпания памяти (DoS)
+    content = await image_field.read(MAX_IMAGE_SIZE_BYTES + 1)
     if not content:
         return None, None
+    if len(content) > MAX_IMAGE_SIZE_BYTES:
+        return None, "Размер изображения превышает максимально допустимый (10 МБ)."
     try:
         attachment = await upload_photo_for_messages(content, filename=image_field.filename)
         return attachment, None
