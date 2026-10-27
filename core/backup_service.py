@@ -131,9 +131,10 @@ def _run_network_pg_dump(
             or f"pg_dump exit code {proc.returncode}"
         )
         logger.warning("Сетевой pg_dump завершился с ошибкой: %s", err_msg)
+        return False, None, f"Ошибка pg_dump: {err_msg}", None
     except Exception as e:
         logger.warning("Не удалось выполнить локальный/сетевой pg_dump: %s", e)
-    return None
+        return False, None, f"Ошибка pg_dump: {e}", None
 
 
 def _try_sqlite_backup(
@@ -178,7 +179,7 @@ async def perform_isolated_database_backup(
 
     # 1. Попытка прямого вызова pg_dump
     net_res = _run_network_pg_dump(host, port, user, db, password, filename, backup_dir)
-    if net_res is not None:
+    if net_res is not None and (net_res[0] or settings.IS_PRODUCTION):
         return net_res
 
     # 2. Если передан docker_client и доступен контейнер базы данных (совместимость)
