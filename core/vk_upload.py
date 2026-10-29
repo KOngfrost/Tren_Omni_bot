@@ -28,6 +28,19 @@ GET_MESSAGES_UPLOAD_SERVER_URL = "https://api.vk.com/method/photos.getMessagesUp
 SAVE_MESSAGES_PHOTO_URL = "https://api.vk.com/method/photos.saveMessagesPhoto"
 
 
+def _convert_webp_to_jpeg(file_bytes: bytes) -> bytes:
+    """Конвертировать изображение WebP в JPEG для совместимости с upload-сервером VK."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(file_bytes)) as img:
+        rgb_img = img.convert("RGB")
+        out_buf = io.BytesIO()
+        rgb_img.save(out_buf, format="JPEG", quality=92)
+        return out_buf.getvalue()
+
+
 def detect_image_type(data: bytes) -> str | None:
     """Определить MIME-тип изображения по magic bytes."""
     if len(data) < 12:
@@ -67,6 +80,18 @@ async def upload_photo_for_messages(
     Возвращает строку attachment вида photo{owner_id}_{id}.
     """
     mime_type = validate_image_data(file_bytes, filename=filename)
+
+    if mime_type == "image/webp":
+        try:
+            file_bytes = _convert_webp_to_jpeg(file_bytes)
+            mime_type = "image/jpeg"
+            safe_name_base = (
+                filename.rsplit(".", 1)[0] if filename and "." in filename else "upload"
+            )
+            filename = f"{safe_name_base}.jpg"
+            logger.info("Изображение WebP автоматически сконвертировано в JPEG для VK.")
+        except Exception as conv_err:
+            logger.warning("Не удалось автоматически сконвертировать WebP в JPEG: %s", conv_err)
 
     if not settings.VK_BOT_TOKEN:
         raise ValueError("VK_BOT_TOKEN не задан в конфигурации системы.")
@@ -110,6 +135,11 @@ async def upload_photo_for_messages(
     server_param = upload_data.get("server")
     hash_param = upload_data.get("hash")
     if not photo_param or photo_param == "[]" or server_param is None or hash_param is None:
+        logger.error(
+            "VK upload server вернул некорректный ответ: status=%s, payload=%s",
+            upload_resp.status_code,
+            upload_data,
+        )
         raise RuntimeError("Сервер загрузки VK вернул некорректный ответ.")
 
     # Шаг 3: Сохранение фотографии

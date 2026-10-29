@@ -648,13 +648,39 @@ def _parse_single_attachment(att: Any) -> str | None:
 
 
 def _extract_from_attachment_list(attachments: Any) -> str | None:
-    """Извлечь первое подходящее вложение из списка вложений."""
+    """Извлечь первое подходящее вложение из списка вложений (приоритет wall над photo)."""
     if attachments and isinstance(attachments, list):
+        # 1. Сначала ищем запись со стены (wall)
+        for att in attachments:
+            parsed = _parse_single_attachment(att)
+            if parsed and parsed.startswith("wall"):
+                return parsed
+        # 2. Если поста нет, ищем фото
         for att in attachments:
             parsed = _parse_single_attachment(att)
             if parsed:
                 return parsed
     return None
+
+
+def _extract_forwarded_text(message: Message | Any) -> str:
+    """Извлечь текст из пересланных или цитируемых сообщений."""
+    fwd_messages = getattr(message, "fwd_messages", None)
+    if fwd_messages and isinstance(fwd_messages, list):
+        for fwd in fwd_messages:
+            val = getattr(fwd, "text", None) or (
+                fwd.get("text") if isinstance(fwd, dict) else None
+            )
+            if val and isinstance(val, str) and val.strip():
+                return val.strip()
+    reply = getattr(message, "reply_message", None)
+    if reply and not callable(reply):
+        val = getattr(reply, "text", None) or (
+            reply.get("text") if isinstance(reply, dict) else None
+        )
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
 
 
 def _extract_from_submessage(submsg: Any) -> str | None:
@@ -801,6 +827,41 @@ async def broadcast_count_handler(message: Message):
         if count <= 0:
             raise ValueError
     except ValueError:
+        early_attachment = _extract_wall_attachment(message)
+        fwd_text = _extract_forwarded_text(message)
+        if early_attachment or fwd_text:
+            async with async_session_maker() as session:
+                total_in_system = await get_total_users_count(session)
+            default_count = total_in_system if total_in_system > 0 else 1
+            async with async_session_maker() as session:
+                users = await get_recent_users(session, limit=default_count)
+            recipients = [
+                {"id": u.id, "vk_id": u.vk_id, "name": u.full_name or f"id{u.vk_id}"}
+                for u in users
+            ]
+            content_desc = (
+                f"пост: {early_attachment}" if early_attachment else f"текст: «{fwd_text[:80]}...»"
+            )
+            await vk_bot.state_dispenser.set(
+                message.from_id,
+                BroadcastStates.WAITING_CONFIRM,
+                count=len(recipients),
+                recipients=recipients,
+                excluded_ids=[],
+                attachment=early_attachment,
+                text=fwd_text if not early_attachment else "",
+            )
+            msg_text = (
+                f"Распознан контент для рассылки ({content_desc}).\n\n"
+                f"Получателей: {len(recipients)} (все пользователи в системе).\n\n"
+                "Подтвердить отправку всем пользователям или отменить?"
+            )
+            await message.answer(
+                msg_text,
+                keyboard=build_broadcast_confirm_keyboard(),
+            )
+            return
+
         await message.answer(
             "Пожалуйста, введите положительное целое число получателей (например, 10 или 50) "
             "или нажмите «Отмена»:",

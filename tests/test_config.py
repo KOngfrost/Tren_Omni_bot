@@ -196,7 +196,7 @@ def test_config_aliases_secret_key_and_tg_monitor(monkeypatch):
 
 
 def test_app_version_is_synced():
-    """TDD: Проверка синхронизации версии 0.9.7.5 во всех ключевых точках."""
+    """TDD: Проверка синхронизации версии 0.9.7.6 во всех ключевых точках."""
     import tomllib
     from pathlib import Path
 
@@ -207,6 +207,6 @@ def test_app_version_is_synced():
         data = tomllib.load(f)
     toml_version = data["project"]["version"]
 
-    assert toml_version == "0.9.7.5"
-    assert core.APP_VERSION == "0.9.7.5"
-    assert core.__version__ == "0.9.7.5"
+    assert toml_version == "0.9.7.6"
+    assert core.APP_VERSION == "0.9.7.6"
+    assert core.__version__ == "0.9.7.6"

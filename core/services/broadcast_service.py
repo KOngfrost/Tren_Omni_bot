@@ -45,6 +45,32 @@ def parse_vk_post_reference(input_str: str | None) -> str | None:
     return None
 
 
+def format_post_url(post_ref: str | None) -> str | None:
+    """Сформировать канонический URL поста ВКонтакте вида https://vk.com/wall-XXX_YYY."""
+    if not post_ref:
+        return None
+    ref = post_ref.strip()
+    if ref.startswith("http://") or ref.startswith("https://"):
+        return ref
+    if ref.startswith("wall"):
+        return f"https://vk.com/{ref}"
+    parsed = parse_vk_post_reference(ref)
+    return f"https://vk.com/{parsed}" if parsed else None
+
+
+def compose_broadcast_message_text(text: str, post_ref: str | None) -> str:
+    """Объединить пользовательский текст и ссылку на пост ВКонтакте."""
+    clean_text = text.strip() if text else ""
+    post_url = format_post_url(post_ref)
+    if not post_url:
+        return clean_text
+    if not clean_text:
+        return post_url
+    if post_url in clean_text:
+        return clean_text
+    return f"{clean_text}\n\n{post_url}"
+
+
 @dataclass(frozen=True)
 class BroadcastResult:
     """Результат постановки рассылки в очередь."""

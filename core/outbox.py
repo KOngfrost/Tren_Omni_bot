@@ -202,15 +202,21 @@ async def deliver_pending_messages(
     backoff_base = getattr(settings, "OUTBOX_BACKOFF_BASE_SECONDS", 5)
 
     async with async_session_maker() as session:
-        stale = (
-            await session.scalars(
-                select(VkOutbox)
-                .where(VkOutbox.status == "sending")
-                .where(VkOutbox.claimed_at.is_not(None))
-                .where(VkOutbox.claimed_at < stale_before)
-                .with_for_update(skip_locked=True)
-            )
-        ).all()
+        bind = (
+            session.get_bind() if hasattr(session, "get_bind") else getattr(session, "bind", None)
+        )
+        dialect_name = str(getattr(bind, "dialect", None) and bind.dialect.name or "").lower()
+        is_postgres = "postgres" in dialect_name or "asyncpg" in dialect_name
+
+        stale_query = (
+            select(VkOutbox)
+            .where(VkOutbox.status == "sending")
+            .where(VkOutbox.claimed_at.is_not(None))
+            .where(VkOutbox.claimed_at < stale_before)
+        )
+        if is_postgres:
+            stale_query = stale_query.with_for_update(skip_locked=True)
+        stale = (await session.scalars(stale_query)).all()
         _reclaim_stale_sending_messages(list(stale), now, backoff_base)
         await session.flush()
 
@@ -219,11 +225,11 @@ async def deliver_pending_messages(
             pending_query = pending_query.where(
                 (VkOutbox.next_retry_at.is_(None)) | (VkOutbox.next_retry_at <= now)
             )
-        pending_query = (
-            pending_query.order_by(VkOutbox.created_at.asc(), VkOutbox.id.asc())
-            .limit(batch_size)
-            .with_for_update(skip_locked=True)
+        pending_query = pending_query.order_by(VkOutbox.created_at.asc(), VkOutbox.id.asc()).limit(
+            batch_size
         )
+        if is_postgres:
+            pending_query = pending_query.with_for_update(skip_locked=True)
         pending = (await session.scalars(pending_query)).all()
 
         to_send: list[tuple[int, int, str, int, str | None, str | None]] = []
