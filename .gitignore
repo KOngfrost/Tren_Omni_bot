@@ -106,8 +106,9 @@ audit/
 screenshots/
 скриншоты/
 
-# Local agent dialogues and transcripts
+# Local agent dialogues, rules and transcripts
 .agy/
+AGENTS.md
 
 # Local test scratch outputs
 mypy_output.txt

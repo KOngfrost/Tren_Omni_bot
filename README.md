@@ -1,6 +1,6 @@
 # Student Support Platform v1.0.0 🎓
 
-[![CI](<REPOSITORY_URL>/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
+[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Go 1.23](https://img.shields.io/badge/go-1.23-00ADD8.svg)](https://golang.org/)
