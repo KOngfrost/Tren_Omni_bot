@@ -95,6 +95,7 @@ async def _handle_vk_event_async(event: dict[str, Any], inbox_id: int | None = N
 
 async def process_pending_inbox_events(batch_size: int = 50) -> int:
     """Обработать зависшие события inbox (например, после перезапуска сервиса)."""
+    to_process: list[tuple[int, dict[str, Any]]] = []
     async with async_session_maker() as session:
         pending = (
             await session.scalars(
@@ -105,7 +106,12 @@ async def process_pending_inbox_events(batch_size: int = 50) -> int:
                 .with_for_update(skip_locked=True)
             )
         ).all()
-        to_process = [(entry.id, json.loads(entry.payload)) for entry in pending if entry.payload]
+        for entry in pending:
+            if entry.payload:
+                entry.status = "processing"
+                to_process.append((entry.id, json.loads(entry.payload)))
+        if to_process:
+            await session.commit()
 
     for item_id, payload in to_process:
         await _handle_vk_event_async(payload, inbox_id=item_id)

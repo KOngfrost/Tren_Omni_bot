@@ -15,6 +15,7 @@
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -154,10 +155,22 @@ async def _send_batch_messages(
     to_send: (
         list[tuple[int, int, str, int, str | None, str | None]] | list[tuple[int, int, str, int]]
     ),
+    max_duration_seconds: float | None = None,
 ) -> list[tuple[int, int, bool, str | None]]:
-    """Выполнить отправку сообщений пачки через VK API."""
+    """Выполнить отправку сообщений пачки через VK API (с защитой от превышения lease timeout)."""
     results: list[tuple[int, int, bool, str | None]] = []
+    started = time.monotonic()
     for item in to_send:
+        if (
+            max_duration_seconds is not None
+            and (time.monotonic() - started) >= max_duration_seconds
+        ):
+            logger.warning(
+                "Outbox: достигнут лимит времени пачки (%.0fs), оставшиеся %d сообщений вернутся в pending",
+                max_duration_seconds,
+                len(to_send) - len(results),
+            )
+            break
         if len(item) >= 6:
             msg_id, vk_id, text, stable_random_id, attachment, forward = item[:6]
         else:
@@ -189,6 +202,22 @@ async def _send_batch_messages(
         if len(to_send) > 1:
             await asyncio.sleep(0.05)
     return results
+
+
+async def _release_unsent_messages(
+    session,
+    to_send: list[tuple[int, int, str, int, str | None, str | None]],
+    processed_ids: set[int],
+) -> None:
+    """Вернуть в pending сообщения, которые не успели отправиться до лимита пачки."""
+    for item in to_send:
+        msg_id = item[0]
+        if msg_id in processed_ids:
+            continue
+        entry = await session.get(VkOutbox, msg_id)
+        if entry is not None and entry.status == "sending":
+            entry.status = "pending"
+            entry.claimed_at = None
 
 
 async def deliver_pending_messages(
@@ -255,7 +284,9 @@ async def deliver_pending_messages(
     if not to_send:
         return 0
 
-    results = await _send_batch_messages(to_send)
+    lease_budget = max(10.0, OUTBOX_CLAIM_TIMEOUT_SECONDS * 0.7)
+    results = await _send_batch_messages(to_send, max_duration_seconds=lease_budget)
+    processed_ids = {msg_id for msg_id, _vk_id, _ok, _err in results}
 
     async with async_session_maker() as session:
         for msg_id, _vk_id, ok, err in results:
@@ -266,6 +297,7 @@ async def deliver_pending_messages(
                 and _handle_single_result(result, ok, err, backoff_base)
             ):
                 delivered += 1
+        await _release_unsent_messages(session, to_send, processed_ids)
         await session.commit()
     return delivered
 

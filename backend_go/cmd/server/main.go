@@ -123,12 +123,10 @@ func main() {
 	api.Post("/auth/logout", func(c *fiber.Ctx) error {
 		sessionCookie := c.Cookies("session")
 		if sessionCookie != "" && appRedis.Client != nil {
-			ctx := c.UserContext()
-			sessID := sessionCookie
-			if len(sessID) > 128 {
-				sessID = sessID[:128]
+			sessID := handlers.ExtractSessionID(sessionCookie, cfg.SessionSecretKey)
+			if sessID != "" {
+				_ = appRedis.Client.Del(c.UserContext(), "session:"+sessID).Err()
 			}
-			_ = appRedis.Client.Del(ctx, "session:"+sessID).Err()
 		}
 		c.ClearCookie("session")
 		return c.JSON(fiber.Map{"success": true})

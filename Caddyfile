@@ -13,10 +13,10 @@
     }
 }
 
-# Перманентный бан выявленных атакующих сканеров (PHPUnit RCE и GCP credential scraper)
+# Перманентный бан IP-адресов сканеров (список задаётся через BANNED_CLIENT_IPS в .env)
 (banned_ips) {
     @banned_remote_ips {
-        client_ip 159.89.160.109 35.219.250.1
+        client_ip {$BANNED_CLIENT_IPS:192.0.2.254}
     }
     abort @banned_remote_ips
 }
@@ -24,7 +24,7 @@
 # Дроп запросов без валидного доменного имени (прямой доступ по IP-адресу)
 (enforce_host) {
     @invalid_host {
-        not host {$DOMAIN:localhost}
+        not host {$DOMAIN:localhost} localhost 127.0.0.1
     }
     abort @invalid_host
 }
@@ -74,9 +74,6 @@
     handle @admin_departments {
         reverse_proxy web-admin:8000 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -86,9 +83,6 @@
     handle @admin_sensitive_api {
         reverse_proxy web-admin:8000 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -96,9 +90,6 @@
     handle /api/v1/* {
         reverse_proxy go-api:8080 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 
@@ -106,15 +97,12 @@
     handle {
         reverse_proxy web-admin:8000 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
         }
     }
 }
 
-# Основной защищённый домен (HTTPS с автоматическим SSL-сертификатом)
-{$DOMAIN:localhost} {
+# Домен за Tailscale Funnel / Reverse Proxy (HTTP режим без бесконечного редиректа 308)
+http://{$DOMAIN:localhost}, :80 {
     import security_headers
     import banned_ips
     import enforce_host

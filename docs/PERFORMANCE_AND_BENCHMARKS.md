@@ -1,8 +1,8 @@
-# ⚡ Отчёт о нагрузочном тестировании и производительности (v0.9.7.6)
+# ⚡ Отчёт о нагрузочном тестировании и производительности (v1.0.0)
 
-> **Версия системы:** 0.9.7.6  
+> **Версия системы:** 1.0.0  
 > **Инструмент тестирования:** [Locust 2.31+](https://locust.io/) (`tests/load/locustfile.py`)  
-> **Конфигурация тестового стенда:** 4 vCPU (AMD EPYC), 8 GB RAM, NVMe SSD, Docker Compose c PgBouncer и Redis 7.
+> **Конфигурация тестового стенда:** 4 vCPU, 8 GB RAM, NVMe SSD, Docker Compose c PgBouncer и Redis 7.
 
 ---
 
@@ -48,11 +48,11 @@
 pip install -r requirements-dev.txt
 
 # 2. Запуск базового теста (100 пользователей, 10 пользователей/сек в течение 2 минут)
-locust -f tests/load/locustfile.py --headless -u 100 -r 10 -t 2m --host http://localhost:8000
+locust -f tests/load/locustfile.py --headless -u 100 -r 10 -t 2m --host http://<LOCAL_HOST>:<APP_PORT>
 
 # 3. Запуск интерактивного UI с визуализацией графиков в реальном времени
-locust -f tests/load/locustfile.py --host http://localhost:8000
-# Откройте в браузере: http://localhost:8089
+locust -f tests/load/locustfile.py --host http://<LOCAL_HOST>:<APP_PORT>
+# Откройте веб-интерфейс Locust на локальном хосте и выбранном порту
 ```
 
 

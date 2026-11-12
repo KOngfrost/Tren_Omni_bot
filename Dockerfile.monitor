@@ -17,8 +17,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Создаём непривилегированного пользователя appuser (безопасность контейнера)
-RUN groupadd -g 988 docker 2>/dev/null || true \
+# Создаём непривилегированного пользователя appuser (безопасность контейнера).
+# Используем официальный PGDG-репозиторий для postgresql-client-16, чтобы версия
+# pg_dump соответствовала контейнеру postgres:16-alpine (Debian bookworm по умолчанию
+# ставит 15.x, которая отклоняет дамп сервера PostgreSQL 16).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get purge -y --auto-remove curl gnupg \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 988 docker 2>/dev/null || true \
     && useradd --create-home --shell /bin/bash -u 1000 appuser \
     && usermod -aG docker appuser 2>/dev/null || true
 

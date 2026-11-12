@@ -1,6 +1,6 @@
-# 🛡️ Эксплуатация, регламент резервного копирования и аварийное восстановление (v0.9.7.6)
+# 🛡️ Эксплуатация, регламент резервного копирования и аварийное восстановление (v1.0.0)
 
-> **Версия документа:** 0.9.7.6  
+> **Версия документа:** 1.0.0  
 > **Целевая аудитория:** Системные администраторы, инженеры эксплуатации (SRE), DevOps.
 
 ---
@@ -22,20 +22,20 @@
 ### 🗄️ Регулярность создания резервных копий:
 | Тип бэкапа | Периодичность | Инструмент | Срок хранения (Retention) | Место хранения |
 |---|---|---|---|---|
-| **Полный дамп PostgreSQL** | Ежедневно в 03:00 UTC | `scripts/backup.sh` (`pg_dump -Fc`) | 14 дней | Локально `/var/backups/oss_bot` + Удалённое S3-хранилище |
+| **Полный дамп PostgreSQL** | Ежедневно (по расписанию) | `scripts/backup.sh` (`pg_dump`) | 14 дней | Локально `${BACKUP_DIR}` + Удалённое хранилище |
 | **Еженедельный архив** | Каждое воскресенье | `scripts/backup.sh` | 8 недель | Защищённое холодное хранилище |
 | **Снапшот Redis (RDB + AOF)** | Каждый час | Redis `BGSAVE` + AOF (everysec) | 48 часов | Каталог `redis_data` на NVMe |
-| **Файлы конфигурации и сертификаты** | При каждом изменении / раз в сутки | `tar` архивация `/opt/oss_bot/.env` и `caddy_data` | 30 дней | Зашифрованный архив |
+| **Файлы конфигурации и сертификаты** | При каждом изменении / раз в сутки | `tar` архивация `/opt/<project_dir>/.env` и `caddy_data` | 30 дней | Зашифрованный архив |
 
 ### 🛠️ Автоматизация через Crontab:
 ```bash
-# Добавить в crontab суперпользователя на сервере (crontab -e):
-0 3 * * * /opt/oss_bot/scripts/backup.sh >> /var/log/oss_bot_backup.log 2>&1
+# Добавить в crontab (crontab -e):
+0 3 * * * /opt/<project_dir>/scripts/backup.sh >> /var/log/backup.log 2>&1
 ```
 
 Ручной запуск бэкапа:
 ```bash
-cd /opt/oss_bot
+cd /opt/<project_dir>
 bash scripts/backup.sh
 ```
 
@@ -51,21 +51,21 @@ bash scripts/backup.sh
 2. Посмотрите последние логи упавшего сервиса:
    ```bash
    docker compose logs --tail=100 bot
-   docker compose logs --tail=100 web
+   docker compose logs --tail=100 web-admin
    ```
 3. Перезапустите проблемный сервис:
    ```bash
-   docker compose restart web bot
+   docker compose restart web-admin bot
    ```
 
 ### Сценарий 2: Повреждение базы данных PostgreSQL
 1. Остановите сервисы, производящие запись, для предотвращения дальнейших повреждений:
    ```bash
-   docker compose stop bot web backend_go
+   docker compose stop bot web-admin go-api
    ```
 2. Запустите скрипт восстановления из последней резервной копии:
    ```bash
-   bash scripts/restore.sh /var/backups/oss_bot/oss_bot_backup_YYYYMMDD_HHMMSS.sql.gz
+   bash scripts/restore.sh <BACKUP_DIR>/<BACKUP_FILE>.sql.gz
    ```
 3. Проверьте целостность таблиц и миграций:
    ```bash
@@ -81,8 +81,8 @@ bash scripts/backup.sh
 2. Установите Docker и Docker Compose (см. [DEPLOYMENT.md](DEPLOYMENT.md)).
 3. Клонируйте репозиторий:
    ```bash
-   git clone https://github.com/KOngfrost/Student_bot.git /opt/oss_bot
-   cd /opt/oss_bot
+   git clone <REPOSITORY_URL> /opt/<project_dir>
+   cd /opt/<project_dir>
    ```
 4. Восстановите `.env` из резервной копии.
 5. Запустите контейнеры СУБД: `docker compose up -d db redis pgbouncer`.
@@ -96,13 +96,13 @@ bash scripts/backup.sh
 Система мониторинга состоит из трёх уровней:
 1. **Prometheus**: сбор системных метрик (`/metrics`) с интервалом скрейпа 15 секунд.
 2. **Docker Healthchecks**: непрерывный опрос состояния здоровья контейнеров (`scripts/healthcheck_bot.py`, `curl /health`).
-3. **Telegram Monitor Bot (`oss_bot_tg_monitor`)**:
+3. **Сервис мониторинга (`tg-monitor`)**:
    - Автоматически отслеживает падения контейнеров.
-   - Мгновенно отправляет оповещения дежурным администраторам в Telegram при возникновении критических событий.
-   - Позволяет администраторам включать режим технического обслуживания в один клик.
+   - Мгновенно отправляет оповещения дежурному инженеру при возникновении критических событий.
+   - Позволяет включать режим технического обслуживания в один клик.
 
 ### Критические алерты (Alerting Rules):
-- **ServiceDown**: Недоступность контейнера `web`, `bot` или `db` более 60 секунд.
+- **ServiceDown**: Недоступность контейнера `web-admin`, `bot` или `db` более 60 секунд.
 - **High5xxErrorRate**: Доля ошибок 5xx превышает 1% за 5 минут.
 - **HighLatency**: Время ответа p95 превышает 1 секунду.
 - **OutboxQueueLag**: В очереди Transactional Outbox скопилось более 50 неотправленных сообщений (признак недоступности VK/Telegram API).
@@ -116,7 +116,7 @@ bash scripts/backup.sh
 
 1. **Создайте контрольную резервную копию**:
    ```bash
-   cd /opt/oss_bot
+   cd /opt/<project_dir>
    bash scripts/backup.sh
    ```
 
@@ -134,23 +134,23 @@ bash scripts/backup.sh
 4. **Выполните поочерёдный перезапуск сервисов**:
    ```bash
    # Сборка и перезапуск без разрыва соединений
-   docker compose up -d --build --no-deps web
+   docker compose up -d --build --no-deps web-admin
    docker compose up -d --build --no-deps bot
-   docker compose up -d --build --no-deps backend_go
+   docker compose up -d --build --no-deps go-api
    docker compose up -d --build --no-deps tg-monitor
    ```
 
 5. **Проверьте работоспособность**:
    ```bash
    docker compose ps
-   curl -f http://127.0.0.1:8000/health
+   curl -f http://<LOCAL_HOST>:<APP_PORT>/health
    ```
 
 ### Процедура отката (Rollback Procedure):
 В случае обнаружения критической регрессии в новой версии:
 1. Верните Git-репозиторий к предыдущему релизному тегу/коммиту:
    ```bash
-   git checkout v0.8.7
+   git checkout <PREVIOUS_TAG>
    ```
 2. Откатите миграции схемы БД (при необходимости):
    ```bash

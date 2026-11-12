@@ -3,6 +3,26 @@
 Все ключевые изменения проекта документируются в этом файле.  
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/), проект придерживается [семантического версионирования (SemVer)](https://semver.org/).
 
+## [1.0.0] - 2026-11-12
+
+### Релиз 1.0.0: Стабилизация, аудит безопасности, перенос параметров периметра в `.env` и совместимость резервного копирования
+
+- **Reverse Proxy, PgBouncer и Go API (`Caddyfile`, `backend_go/`, `docker-compose.yml`)**:
+  - Исправлен матчер `enforce_host` в `Caddyfile` и удалено принудительное перезаписывание заголовков `X-Real-IP`, `X-Forwarded-For` и `X-Forwarded-Proto`.
+  - Список блокируемых IP-адресов в `Caddyfile` и опциональный исходящий прокси для `tg-monitor` вынесены в переменные окружения `.env` (`BANNED_CLIENT_IPS`, `TG_MONITOR_PROXY`, `TG_MONITOR_NO_PROXY`).
+  - В Go API включён `pgx.QueryExecModeSimpleProtocol` для корректной работы через transaction-пулинг PgBouncer и экранирование учётных данных в DSN.
+  - Удалён статический dev-fallback секрета в `backend_go/internal/config/config.go` (в development-режиме генерируется криптографически случайный ключ, в production по-прежнему требуется `SESSION_SECRET_KEY`).
+  - В Go API реализована проверка активности и срока действия учётных записей `web_users`, ролей и корректный обработчик `/api/v1/auth/logout`.
+- **Резервное копирование и зависимости (`Dockerfile.monitor`, `bots/telegram/`, `requirements.in`)**:
+  - В `Dockerfile.monitor` добавлен `postgresql-client-16` из официального репозитория PGDG для полной совместимости `pg_dump` с PostgreSQL 16.
+  - В `bots/telegram/handlers/backup.py` реализован прямой `pg_dump` по внутренней сети БД с временным `.pgpass` (`0600`) при отключённом `EXEC=0` на `docker-socket-proxy`; улучшена обработка ошибок `DockerClient`.
+  - В `docker-compose.yml` сервис `db-backup` переведён на атомарный флаг сжатия `pg_dump -Z 6 -f`; добавлена зависимость `Pillow>=10.0.0` и перенос конвертации WebP→JPEG в `asyncio.to_thread`.
+- **Сессии, гонки и целостность данных (`web/`, `core/`, `tests/`)**:
+  - Добавлена проверка срока действия учётных записей (`web_user.is_expired`) при валидации активных сессий и 2FA.
+  - Исключены гонки и блокировки транзакций в VK Callback (`status="processing"`) и при создании тикетов (вынос сетевых запросов за пределы транзакции, nested savepoint на создании пользователя).
+  - Улучшены выделенный Redis Pub/Sub клиент и очистка задач в SSE/WebSocket (`web/routes/sse.py`), бюджет времени и откат незавершённых lease в `core/outbox.py`, лимитирование выборки в `core/archival.py`, маскирование IP и логинов в логах `api_v1.py`, ротация сессий и атомарность создания админов в `web/routes/admin_panel.py`.
+  - Добавлен набор регрессионных тестов `tests/test_security_and_reliability_fixes.py`.
+
 ## [0.9.7.6] - 2026-10-29
 
 ### Релиз 0.9.7.6: Надёжная доставка массовых рассылок, автоконвертация WebP в VK Upload, умный FSM бота и синхронизация
@@ -222,7 +242,7 @@
 
 - **Безопасность и устранение критических уязвимостей (Security Hardening)**:
   - **SEC-001 (CRITICAL)**: Внедрена fail-closed валидация секрета сессий в Go API (`backend_go/internal/config/config.go`): при запуске в `APP_ENV=production` с пустым или дефолтным секретом процесс немедленно завершается аварийно (`log.Fatal`).
-  - **SEC-002 (HIGH)**: Устранена уязвимость подмены клиентских IP-адресов в `Dockerfile.web`: параметр `--forwarded-allow-ips='*'` заменён на строгий CIDR доверенных прокси `${FORWARDED_ALLOW_IPS:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}`.
+  - **SEC-002 (HIGH)**: Устранена уязвимость подмены клиентских IP-адресов в `Dockerfile.web`: параметр `--forwarded-allow-ips='*'` заменён на список доверенных подсетей через переменную окружения `FORWARDED_ALLOW_IPS`.
   - **SEC-003 (HIGH)**: Изолирован Docker Socket в сервисе мониторинга: прямое монтирование `/var/run/docker.sock` в `tg-monitor` заменено на защитный сайдкар `tecnativa/docker-socket-proxy:0.2.0` с исключительно read-only правами (`CONTAINERS=1`, `POST=0`) во внутренней сети `socket_net`.
   - **SEC-004 (HIGH)**: Закрыта утечка системных данных в `/health` (`web/main.py`): логин bootstrap-администратора скрыт из публичного ответа, а детальный отчёт о состоянии доступен строго по авторизованному эндпоинту `/health/detailed` (`require_superadmin`).
   - **SEC-005 (HIGH)**: Закрыт публичный доступ к метрикам Prometheus: в `Caddyfile` добавлено правило WAF, блокирующее внешние запросы к `/metrics*` (код 403), сбор метрик контейнером Prometheus изолирован внутри Docker-сети.
@@ -455,9 +475,9 @@
   - Заменён сервис `tailscale` на `netbird` (`netbirdio/netbird:latest`) с авторизацией по ключу `NETBIRD_SETUP_KEY`.
   - Удалены устаревшие файлы Tailscale (`Dockerfile.tailscale`, `scripts/tailscale-entrypoint.sh`).
 - **Закрытие веб-панели от публичного интернета (Zero Public Attack Surface)**:
-  - `Caddyfile`: настроено ограничение доступа — соединения разрешены только через приватный оверлей NetBird (`100.64.0.0/10`) и доверенные локальные сети; любые публичные запросы из интернета немедленно сбрасываются (`abort`).
+  - `Caddyfile`: настроено ограничение доступа — соединения разрешены только через приватную оверлейную сеть и доверенные локальные подсети; любые публичные запросы из интернета немедленно сбрасываются (`abort`).
 - **Устранение критических уязвимостей**:
-  - `core/config.py`: исправлен метод `ensure_production_config()` (проверка `oss_bot`, запрет слабых паролей `admin123` и паролей короче 10 символов).
+  - `core/config.py`: исправлен метод `ensure_production_config()` (проверка системного имени пользователя БД, запрет слабых паролей и паролей короче 10 символов).
   - `core/config.py`: возвращено безопасное значение `SameSite=Lax` по умолчанию.
   - `web/security/middleware.py`: добавлен заголовок HSTS (`Strict-Transport-Security: max-age=31536000`), отключён устаревший `X-XSS-Protection: 0`.
   - `web/security/middleware.py`: усилена защита от CSV-инъекций (экранирование формул через апостроф).
@@ -487,7 +507,7 @@
   - Кнопка `📱 Веб-панель` на главной клавиатуре и в карточках команд `/start`, `/help`, `/status`, `/panel`.
   - `web/security/middleware.py`: обновлены CSP и заголовки фреймов (`frame-ancestors 'self' https://*.telegram.org https://telegram.org;`), позволяющие Telegram Web и WebView встраивать веб-панель без блокировок.
   - `web/templates/base.html`: подключен Telegram WebApp JS SDK с автоматическим разворачиванием окна (`ready()`, `expand()`).
-  - `Caddyfile` & `docker-compose.yml`: добавлен сервис Caddy с автоматическим получением и продлением Let's Encrypt SSL-сертификатов на портах 80/443.
+  - `Caddyfile` & `docker-compose.yml`: добавлен сервис Caddy с автоматическим получением и продлением Let's Encrypt SSL-сертификатов.
 - **Очистка и регистрация меню слэш-команд**:
   - `setup_bot_commands`: автоматический сброс старых команд из кэша Telegram (`delete_my_commands`) и регистрация строгого набора команд (`status`, `panel`, `restart`, `logs`, `backup`, `maintenance`, `2fa`, `help`) с русскоязычными описаниями в области чата администратора.
 
@@ -562,8 +582,8 @@
   - `bots/vk/handlers/student.py`: поддержан поиск заявки студента сначала по глобальному номеру `Ticket.id` (который бот присылает при создании и в ответах оператора), с fallback на локальный порядковый номер в списке последних заявок. Устранена ошибка «Заявка не найдена» и отправка ответа не в тот тикет.
   - `core/ticket_service.py`: добавлена функция `get_user_ticket_by_id(vk_id, ticket_id)` с проверкой прав владения тикетом.
 - **PgBouncer интеграция**:
-  - `docker-compose.yml`: сервисы `bot` и `web-admin` переведены на подключение через `pgbouncer:6432` (`migrate` сохранён на прямой порт `db:5432`).
-  - `core/config.py`: свойства `db_host` и `db_port` автоматически возвращают `pgbouncer:6432` при включенном `DB_USE_PGBOUNCER=true`.
+  - `docker-compose.yml`: сервисы `bot` и `web-admin` переведены на подключение через пул `pgbouncer` (`migrate` сохранён на прямое подключение к `db`).
+  - `core/config.py`: свойства `db_host` и `db_port` автоматически переключаются на `pgbouncer` при включенном `DB_USE_PGBOUNCER=true`.
 - **Rate limiting за прокси и mesh-сетью Tailscale**:
   - `web/routes/auth.py`: добавлена функция `is_trusted_proxy` с поддержкой проверки CIDR-подсетей и loopback-адресов. Заголовок `X-Forwarded-For` корректно обрабатывается от доверенных прокси, устраняя риск общей блокировки всех администраторов.
 - **Telegram Monitor — безопасность и управление**:

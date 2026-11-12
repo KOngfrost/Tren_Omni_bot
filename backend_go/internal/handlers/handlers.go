@@ -640,7 +640,30 @@ func GetUserFromSession(c *fiber.Ctx, cfg *config.Config) (*UserSession, error) 
 			User *UserSession `json:"user"`
 		}
 		if err := json.Unmarshal([]byte(val), &sessionData); err == nil && sessionData.User != nil {
-			return sessionData.User, nil
+			u := sessionData.User
+			if u.WebUserID != nil {
+				if database.Pool == nil {
+					return nil, errors.New("база данных недоступна для проверки сессии")
+				}
+				var role string
+				var deptID *int64
+				var isActive bool
+				var expiresAt *time.Time
+				q := `SELECT role, department_id, is_active, expires_at FROM web_users WHERE id = $1`
+				if err := database.Pool.QueryRow(ctx, q, *u.WebUserID).Scan(&role, &deptID, &isActive, &expiresAt); err != nil {
+					return nil, errors.New("учётная запись не найдена")
+				}
+				if !isActive || (expiresAt != nil && expiresAt.Before(time.Now().UTC())) {
+					return nil, errors.New("учётная запись отключена или истекла")
+				}
+				u.Role = role
+				u.DepartmentID = deptID
+			} else if u.TelegramID != 0 {
+				if cfg == nil || cfg.TelegramAdminID <= 0 || u.TelegramID != cfg.TelegramAdminID {
+					return nil, errors.New("доступ Telegram-сессии отозван")
+				}
+			}
+			return u, nil
 		}
 	}
 
@@ -863,9 +886,6 @@ func Login(c *fiber.Ctx) error {
 	query := `SELECT id, role, password_hash, department_id, is_active FROM web_users WHERE username = $1`
 	err := database.Pool.QueryRow(ctx, query, body.Username).Scan(&userID, &role, &hash, &deptID, &isActive)
 	if err != nil {
-		// SEC-03: пользователь не найден — выполняем фиктивное сравнение
-		// пароля с постоянным хешем, чтобы время отклика не раскрывало
-		// существование логина (timing attack / перечисление логинов).
 		dummyPasswordCompare(body.Password)
 		return c.Status(401).JSON(fiber.Map{"detail": "Неверный логин или пароль"})
 	}

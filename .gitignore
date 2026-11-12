@@ -106,6 +106,9 @@ audit/
 screenshots/
 скриншоты/
 
+# Local agent dialogues and transcripts
+.agy/
+
 # Local test scratch outputs
 mypy_output.txt
 results.txt

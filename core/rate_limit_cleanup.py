@@ -63,21 +63,8 @@ async def purge_stale_attempts(now: datetime | None = None) -> dict[str, int]:
                 logger.warning("Rate-limit cleanup: ошибка очистки %s", table, exc_info=True)
                 deleted[table] = 0
 
-        # DATA-001: Очистка старых логов аудита (>90 дней)
-        try:
-            log_cutoff = current_time - timedelta(days=AUDIT_LOG_RETENTION_DAYS)
-            result = await session.execute(
-                text("DELETE FROM logs WHERE created_at < :cutoff"),
-                {"cutoff": log_cutoff},
-            )
-            deleted["logs"] = getattr(result, "rowcount", 0)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            logger.warning("Retention cleanup: ошибка очистки logs", exc_info=True)
-            deleted["logs"] = 0
-
         # DATA-003: Очистка доставленных сообщений Outbox (>14 дней)
+        # Примечание: очистка logs выполняется только в core/archival.py после экспорта в архив.
         try:
             outbox_cutoff = current_time - timedelta(days=OUTBOX_SENT_RETENTION_DAYS)
             result = await session.execute(

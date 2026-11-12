@@ -62,7 +62,7 @@ jobs:
 
             if [ ! -d .git ]; then
               echo "Git repository not initialized in $PROD_DIR. Initializing..."
-              git clone https://github.com/KOngfrost/Tren_Omni_bot.git .
+              git clone "${{ github.server_url }}/${{ github.repository }}.git" .
             fi
 
             echo "=== [2/6] Synchronizing Git repository with origin/master ==="
@@ -79,7 +79,7 @@ jobs:
 
             # Автоматическая синхронизация версии приложения из pyproject.toml
             if command -v python3 &>/dev/null && [ -f pyproject.toml ]; then
-              NEW_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || echo "0.9.7.6")
+              NEW_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || echo "1.0.0")
               sed -i "s/^APP_VERSION=.*/APP_VERSION=${NEW_VERSION}/" .env || true
             fi
 

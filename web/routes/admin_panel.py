@@ -74,6 +74,7 @@ async def admins_page(request: Request, user=Depends(require_auth)):
     ключей admin:heartbeat:* в Redis и полей WebUser.last_login_at/expires_at.
     """
     admins: list[Admin] = []
+    qa_users: list[WebUser] = []
     departments: list[Department] = []
     db_error: bool = False
 
@@ -525,11 +526,10 @@ async def _create_admin_records(
     if not db_user:
         db_user = User(vk_id=vk_id, full_name=full_name or None)
         session.add(db_user)
-        await session.commit()
-        await session.refresh(db_user)
+        await session.flush()
     elif full_name:
         db_user.full_name = full_name
-        await session.commit()
+        await session.flush()
 
     # Проверяем уникальность администратора
     existing: Admin | None = await session.scalar(select(Admin).where(Admin.user_id == db_user.id))

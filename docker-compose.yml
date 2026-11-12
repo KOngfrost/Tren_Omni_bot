@@ -10,8 +10,8 @@ services:
     container_name: oss_bot_db
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 512m
-    memswap_limit: 512m
+    mem_limit: 768m
+    memswap_limit: 768m
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -44,8 +44,8 @@ services:
     restart: "no"
     user: "70:70"
     logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     env_file:
       - .env
     environment:
@@ -66,8 +66,8 @@ services:
     container_name: oss_bot_pgbouncer
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 64m
-    memswap_limit: 64m
+    mem_limit: 96m
+    memswap_limit: 96m
     # Свой pgbouncer.ini с auth_query (SEC-12). При наличии смонтированного
     # файла автогенерация конфига в entrypoint НЕ выполняется, поэтому все
     # параметры пула обязаны быть заданы явно — они и заданы в pgbouncer/.
@@ -136,8 +136,8 @@ services:
     container_name: oss_bot_app
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 384m
-    memswap_limit: 768m
+    mem_limit: 512m
+    memswap_limit: 1024m
     env_file:
       - .env
     environment:
@@ -145,7 +145,7 @@ services:
       - HEARTBEAT_FILE=/tmp/oss_bot_heartbeat
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.9.7.6}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       # Системные логи контейнера бота — по APP_TIMEZONE (МСК), а не UTC.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
@@ -178,9 +178,9 @@ services:
     container_name: oss_bot_redis
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 384m
-    memswap_limit: 384m
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    mem_limit: 512m
+    memswap_limit: 512m
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 384mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
@@ -196,8 +196,8 @@ services:
     container_name: oss_bot_redis_exporter
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 64m
-    memswap_limit: 64m
+    mem_limit: 96m
+    memswap_limit: 96m
     environment:
       - REDIS_ADDR=redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -214,8 +214,8 @@ services:
     container_name: oss_bot_web
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 512m
-    memswap_limit: 1024m
+    mem_limit: 768m
+    memswap_limit: 1536m
     env_file:
       - .env
     environment:
@@ -223,7 +223,7 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - APP_VERSION=${APP_VERSION:-0.9.7.6}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1,172.16.0.0/12,10.0.0.0/8}
       # Системные логи веб-панели и таймстемпы ответов — по APP_TIMEZONE (МСК).
@@ -257,8 +257,8 @@ services:
     container_name: oss_bot_go_api
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     env_file:
       - .env
     environment:
@@ -291,8 +291,8 @@ services:
     container_name: oss_bot_prometheus
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     networks:
       - backend_net
     volumes:
@@ -324,8 +324,8 @@ services:
     container_name: oss_bot_docker_proxy
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 64m
-    memswap_limit: 64m
+    mem_limit: 96m
+    memswap_limit: 96m
     environment:
       - CONTAINERS=1
       # SEC-07: EXEC is disabled to prevent arbitrary command execution inside containers
@@ -357,16 +357,24 @@ services:
     container_name: oss_bot_tg_monitor
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 384m
-    memswap_limit: 384m
+    mem_limit: 512m
+    memswap_limit: 512m
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-      - APP_VERSION=${APP_VERSION:-0.9.7.6}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
       # Метрики /metrics отдают время в APP_TIMEZONE — TZ должен совпадать.
       - TZ=${APP_TIMEZONE:-Europe/Moscow}
+      - HTTP_PROXY=${TG_MONITOR_PROXY:-}
+      - HTTPS_PROXY=${TG_MONITOR_PROXY:-}
+      - http_proxy=${TG_MONITOR_PROXY:-}
+      - https_proxy=${TG_MONITOR_PROXY:-}
+      - NO_PROXY=${TG_MONITOR_NO_PROXY:-localhost,127.0.0.1,docker-socket-proxy,redis,db,pgbouncer,web-admin,go-api}
+      - no_proxy=${TG_MONITOR_NO_PROXY:-localhost,127.0.0.1,docker-socket-proxy,redis,db,pgbouncer,web-admin,go-api}
     volumes:
       - /var/backups/oss_bot:/var/backups/oss_bot
     depends_on:
@@ -390,8 +398,8 @@ services:
     restart: unless-stopped
     user: postgres
     logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     volumes:
       - /var/backups/oss_bot:/var/backups/oss_bot
     networks:
@@ -412,7 +420,7 @@ services:
           DATE=$$(date +%Y-%m-%d_%H-%M-%S)
           FILE="$${BACKUP_DIR:-/var/backups/oss_bot}/oss_bot_backup_$${DATE}.sql.gz"
           echo "[$${DATE}] Starting automated database dump..."
-          if PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" --no-owner --clean --if-exists | gzip > "$${FILE}"; then
+          if PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" --no-owner --clean --if-exists -Z 6 -f "$${FILE}"; then
             chmod 600 "$${FILE}" 2>/dev/null || true
             echo "[$${DATE}] Database backup successfully saved: $${FILE}"
             find "$${BACKUP_DIR:-/var/backups/oss_bot}" -type f -name "oss_bot_backup_*.sql.gz" -mtime +$${BACKUP_ROTATION_DAYS:-7} -delete 2>/dev/null || true
@@ -431,8 +439,8 @@ services:
     container_name: oss_bot_caddy
     restart: unless-stopped
     logging: *default-logging
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 192m
+    memswap_limit: 192m
     env_file:
       - .env
     environment:

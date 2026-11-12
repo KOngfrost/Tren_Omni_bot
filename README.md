@@ -1,15 +1,15 @@
-# OSS Bot v0.9.7.6 🎓
+# Student Support Platform v1.0.0 🎓
 
-[![CI](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml/badge.svg)](https://github.com/KOngfrost/Student_bot/actions/workflows/ci.yml)
+[![CI](<REPOSITORY_URL>/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Go 1.23](https://img.shields.io/badge/go-1.23-00ADD8.svg)](https://golang.org/)
-[![Tests](https://img.shields.io/badge/tests-707%20passed-brightgreen.svg)](tests/)
-[![Security Audited](https://img.shields.io/badge/security-SEC--01..12%20passed-success.svg)](SECURITY.md)
+[![Tests](https://img.shields.io/badge/tests-718%20passed-brightgreen.svg)](tests/)
+[![Security Audited](https://img.shields.io/badge/security-SEC--01..16%20passed-success.svg)](SECURITY.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-> **OSS Bot** — современная омниканальная платформа для приёма, маршрутизации и обработки обращений студентов университета.  
-> Объединяет интерфейсы общения для студентов (ВКонтакте, Telegram), защищённую веб-панель для операторов и сервисы мониторинга в единую надёжную экосистему.
+> **Student Support Platform** — омниканальная платформа для приёма, маршрутизации и обработки обращений пользователей.  
+> Объединяет интерфейсы общения в мессенджерах (ВКонтакте, Telegram), защищённую веб-панель для операторов и сервисы мониторинга в единую надёжную экосистему.
 
 ---
 
@@ -35,7 +35,7 @@
   - Распределённое ограничение частоты запросов (DBRateLimiter против брутфорса).
   - Защитный шлюз Caddy с веб-файрволом (WAF), автоматическими HTTPS-сертификатами Let's Encrypt и HSTS.
   - Startup Guard — автоматическая блокировка запуска при небезопасных стандартных паролях.
-- 🏢 **Разделение по отделам**: Студсовет, Жилищно-бытовой, Культурно-массовый, Информационный, Корпоративный отделы видят только свои профильные заявки.
+- 🏢 **Разделение по отделам**: профильные подразделения видят только свои заявки и базы знаний.
 - 🎭 **Анонимные обращения**: возможность для студентов задавать деликатные вопросы без раскрытия личных данных.
 - 📅 **Афиша мероприятий**: публикация событий с лимитами мест и мгновенной записью прямо из чата бота.
 - 📊 **Журнал аудита и аналитика**: полное логирование действий операторов, экспорт в CSV, метрики для Prometheus.
@@ -67,15 +67,15 @@ flowchart TD
     end
 
     subgraph DataLayer["Данные и очереди"]
-        PgBouncer["🔀 PgBouncer (порт 6432)"]
-        PostgreSQL[("🐘 PostgreSQL 16 (порт 5432)")]
+        PgBouncer["🔀 PgBouncer (Transaction Pooling)"]
+        PostgreSQL[("🐘 PostgreSQL 16 (внутренняя сеть)")]
         Redis[("⚡ Redis 7 (Сессии, Кэш, 2FA, Блокировки)")]
         Prometheus["📈 Prometheus (Метрики)"]
     end
 
     VK <-->|LongPoll / Webhook| BotVK
     TG -.->|aiogram| WebAdmin
-    Browser <-->|HTTPS 443| Caddy
+    Browser <-->|HTTPS| Caddy
     DevOps <-->|Telegram Bot API| TGMonitor
 
     Caddy -->|/api/*| GoAPI
@@ -101,8 +101,8 @@ flowchart TD
 ### Вариант А. Автоматический запуск в 1 команду (Рекомендуется)
 Скрипт автоматически проверит Docker, создаст `.env` с криптостойкими паролями, применит миграции и поднимет все сервисы:
 ```bash
-git clone https://github.com/KOngfrost/Student_bot.git /opt/oss_bot
-cd /opt/oss_bot
+git clone <REPOSITORY_URL> /opt/<project_dir>
+cd /opt/<project_dir>
 bash scripts/quickstart.sh
 ```
 
@@ -110,11 +110,11 @@ bash scripts/quickstart.sh
 
 #### Шаг 1. Клонирование и настройка окружения
 ```bash
-git clone https://github.com/KOngfrost/Student_bot.git /opt/oss_bot
-cd /opt/oss_bot
+git clone <REPOSITORY_URL> /opt/<project_dir>
+cd /opt/<project_dir>
 cp .env.example .env
 ```
-Отредактируйте `.env`: укажите токен сообщества VK, секретные ключи и надёжные пароли.
+Отредактируйте `.env`: укажите токены интеграций, секретные ключи, домен и надёжные пароли.
 
 #### Шаг 2. Запуск сервисов и применение миграций
 ```bash
@@ -128,9 +128,9 @@ docker compose up -d --build
 #### Шаг 3. Проверка здоровья
 ```bash
 docker compose ps
-curl -s http://127.0.0.1:8000/health
+curl -s http://<LOCAL_HOST>:<APP_PORT>/health
 ```
-После старта веб-панель доступна по адресу `https://ваш-домен/` (или `http://localhost:8000` при локальной разработке).
+После старта веб-панель доступна по адресу `https://<YOUR_DOMAIN>/` (или `http://<LOCAL_HOST>:<APP_PORT>` при локальной разработке).
 
 ### Обновление Python-зависимостей
 Редактируйте исходный список `requirements.in`, затем в окружении Python 3.11 выполните:
@@ -146,24 +146,24 @@ pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-versi
 
 | Роль | Основной инструмент | Что доступно |
 |---|---|---|
-| **Студент** | VK-бот (`@oss_bot`) | Подача заявок (открытых и анонимных), отслеживание статуса, FAQ, запись на мероприятия. |
+| **Пользователь** | Чат-бот (`<ваш_бот>`) | Подача заявок (открытых и анонимных), отслеживание статуса, FAQ, запись на мероприятия. |
 | **Оператор отдела** | Веб-панель (`/admin`) | Ответы на заявки своего отдела, управление вопросами FAQ своего отдела, статьи базы знаний. |
 | **Суперадминистратор** | Веб-панель (`/admin`) | Управление всеми заявками, переназначение отделов, создание пользователей, аудит, системные настройки. |
-| **Инженер мониторинга** | Telegram-бот инженера | Оповещения о сбоях, просмотр статуса контейнеров, управление режимом техработ. |
+| **Дежурный инженер** | Бот мониторинга | Оповещения о сбоях, просмотр статуса контейнеров, управление режимом техработ. |
 
 ---
 
 ## 🛠️ Технологический стек
 
-- **Основной бэкенд**: Python 3.14, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2.
+- **Основной бэкенд**: Python 3.11+, FastAPI, SQLAlchemy 2.0 (async), Pydantic v2.
 - **Высоконагруженный API**: Go 1.23, Fiber v2 (в каталоге `backend_go/`).
 - **Интерфейс бота ВК**: `vkbottle` 4.x (поддержка Long Poll и Callback API).
 - **Бот мониторинга**: Python, `aiogram` 3.x.
-- **База данных**: PostgreSQL 16 + пул транзакций **PgBouncer** (порт 6432).
+- **База данных**: PostgreSQL 16 + пул транзакций **PgBouncer**.
 - **Кэш и сессии**: Redis 7 (хранение сессий, Argon2id OTP-кодов 2FA, распределённых блокировок).
 - **Сетевой шлюз и безопасность**: Caddy 2 (TLS Let's Encrypt, HTTP/3, WAF, Security Headers).
 - **Веб-интерфейс**: Jinja2, Tailwind CSS, HTMX.
-- **Тестирование**: `pytest` (449+ тестов: unit, integration, smoke) + `Playwright` (браузерные E2E).
+- **Тестирование**: `pytest` (718+ тестов: unit, integration, smoke) + `Playwright` (браузерные E2E) + `go test`.
 
 ---
 
@@ -192,7 +192,7 @@ pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-versi
 
 - **Фаза 3 (В разработке)**: Запуск официального студенческого Telegram-бота с единым ядром обращений.
 - **Фаза 4**: Telegram Mini App (TMA на React) для моментального ответа операторов с телефонов.
-- **Фаза 5**: Нативное Android-приложение для операторов и дежурных студсовета (Kotlin / Jetpack Compose).
+- **Фаза 5**: Нативное Android-приложение для операторов (Kotlin / Jetpack Compose).
 - **Фаза 6**: Интеллектуальная автомаршрутизация заявок с помощью нейросетевой классификации и WebSocket-чаты в реальном времени.
 
 ---
@@ -200,8 +200,8 @@ pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-versi
 ## 🤝 Сообщество, контрибьютинг и защита от Bus Factor
 
 Проект разрабатывается открытым сообществом с распределёнными ролями, исключающими зависимость от одного человека (*Bus factor mitigation*):
-- 🐛 **Сообщить об ошибке**: Создайте тикет в [GitHub Issues](https://github.com/KOngfrost/Student_bot/issues) по готовому шаблону.
-- 💡 **Предложить идею**: Опишите предложение через [Feature Request](https://github.com/KOngfrost/Student_bot/issues/new?template=feature_request.md).
+- 🐛 **Сообщить об ошибке**: Создайте тикет в разделе Issues репозитория по шаблону `.github/ISSUE_TEMPLATE/bug_report.md`.
+- 💡 **Предложить идею**: Опишите предложение через шаблон `.github/ISSUE_TEMPLATE/feature_request.md`.
 - 🚀 **Внести свой код**: Ознакомьтесь с [Руководством контрибьютора (CONTRIBUTING.md)](CONTRIBUTING.md) — описан запуск тестов, проверка линтерами (`ruff`, `mypy`) и правила оформления Pull Request.
 
 ---
@@ -209,7 +209,7 @@ pip-compile --generate-hashes --resolver=backtracking --pip-args="--python-versi
 ## 📄 Лицензия
 
 Исходный код распространяется под свободной и открытой лицензией **[MIT](LICENSE)**.  
-Вы можете свободно использовать, модифицировать и разворачивать систему в своём вузе или организации.
+Вы можете свободно использовать, модифицировать и разворачивать систему в своей организации.
 
-*Проект поддерживается объединённой командой Студенческого совета университета. Версия 0.9.7.6.*
+*Версия выпуска 1.0.0.*
 

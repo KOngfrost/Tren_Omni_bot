@@ -95,7 +95,7 @@ async def _verify_web_user(
         )
         raise _service_unavailable() from exc
 
-    if web_user is None or not web_user.is_active:
+    if web_user is None or not web_user.is_active or web_user.is_expired:
         _deny_session(request, is_api)
 
     # Отметка присутствия: ключ admin:heartbeat:{id} с TTL 15 минут.

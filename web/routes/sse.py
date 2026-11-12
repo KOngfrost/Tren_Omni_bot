@@ -289,15 +289,25 @@ async def _redis_pubsub_listener() -> None:
     from core.events import REDIS_TICKET_EVENTS_CHANNEL
 
     while True:
+        pubsub = None
+        pubsub_client = None
         try:
-            from core.redis_client import get_redis_client
-
-            redis = await get_redis_client()
-            if redis is None:
-                await asyncio.sleep(2.0)
+            if not settings.REDIS_URL:
+                await asyncio.sleep(5.0)
                 continue
 
-            pubsub = redis.pubsub()
+            import redis.asyncio as aioredis  # type: ignore[import-untyped]
+
+            # Для долгоживущего Pub/Sub нельзя задавать socket_timeout=0.5,
+            # иначе listen() падает каждые 0.5с при отсутствии сообщений.
+            pubsub_client = aioredis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=2.0,
+                socket_timeout=None,
+                health_check_interval=30,
+            )
+            pubsub = pubsub_client.pubsub()
             await pubsub.subscribe(REDIS_TICKET_EVENTS_CHANNEL)
             logger.info("SSE воркер подписан на канал %s", REDIS_TICKET_EVENTS_CHANNEL)
             async for message in pubsub.listen():
@@ -308,6 +318,13 @@ async def _redis_pubsub_listener() -> None:
         except Exception as exc:
             logger.debug("Ошибка в подписчике Redis Pub/Sub для SSE: %s", exc)
             await asyncio.sleep(2.0)
+        finally:
+            if pubsub is not None:
+                with contextlib.suppress(Exception):
+                    await pubsub.close()
+            if pubsub_client is not None:
+                with contextlib.suppress(Exception):
+                    await pubsub_client.close()
 
 
 def start_sse_redis_listener() -> asyncio.Task[None]:
@@ -480,6 +497,15 @@ async def _handle_ws_incoming(websocket: WebSocket, receive_task: asyncio.Task) 
         return True
 
 
+async def _cancel_pending_ws_tasks(*tasks: asyncio.Task | None) -> None:
+    """Аккуратно отменить и дождаться завершения незакрытых WS-задач."""
+    for task in tasks:
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+
 @router.websocket("/ws")
 async def websocket_stream(websocket: WebSocket):
     """Двусторонний real-time WebSocket поток обновлений заявок и счётчиков."""
@@ -490,26 +516,32 @@ async def websocket_stream(websocket: WebSocket):
     await websocket.accept()
     event = asyncio.Event()
     _subscribers.add(event)
+    receive_task: asyncio.Task[str] | None = None
+    wait_event_task: asyncio.Task[bool] | None = None
     try:
         data = await fetch_counters_and_dashboard(user)
         await websocket.send_json({"type": "counters", "data": data})
+        loop = asyncio.get_running_loop()
+        last_auth_check = loop.time()
 
         while True:
-            receive_task = asyncio.create_task(websocket.receive_text())
-            wait_event_task = asyncio.create_task(event.wait())
+            if receive_task is None or receive_task.done():
+                receive_task = asyncio.create_task(websocket.receive_text())
+            if wait_event_task is None or wait_event_task.done():
+                wait_event_task = asyncio.create_task(event.wait())
 
-            done, pending = await asyncio.wait(
+            done, _pending = await asyncio.wait(
                 [receive_task, wait_event_task],
                 timeout=25.0,
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
-            for task in pending:
-                task.cancel()
-
-            user = await _authenticate_ws(websocket)
-            if not user:
-                break
+            now = loop.time()
+            if done or (now - last_auth_check) >= 30.0:
+                user = await _authenticate_ws(websocket)
+                if not user:
+                    break
+                last_auth_check = now
 
             if receive_task in done and not await _handle_ws_incoming(websocket, receive_task):
                 break
@@ -527,4 +559,5 @@ async def websocket_stream(websocket: WebSocket):
     except Exception as exc:
         logger.debug("WebSocket connection closed/error: %s", exc)
     finally:
+        await _cancel_pending_ws_tasks(receive_task, wait_event_task)
         _subscribers.discard(event)

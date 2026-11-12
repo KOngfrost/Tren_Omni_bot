@@ -58,7 +58,7 @@ from web.security.login_rate_limiter import (
     LOGIN_VELOCITY_MAX_ATTEMPTS,
     record_login_request_velocity,
 )
-from web.security.middleware import sanitize_html
+from web.security.middleware import mask_ip_for_logs, sanitize_html
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +132,14 @@ async def v1_auth_me(request: Request) -> dict[str, Any]:
 async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, Any]:
     """Вход администратора по логину и паролю."""
     client_ip = _get_client_ip(request)
+    masked_ip = mask_ip_for_logs(client_ip)
     username = payload.username.strip()
     password = payload.password
+    masked_user = (
+        f"{username[0]}***{username[-1]}"
+        if len(username) > 2
+        else ("***" if username else "<empty>")
+    )
 
     from web.security.login_rate_limiter import record_login_request_velocity
 
@@ -141,9 +147,7 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
 
     async with async_session_maker() as session:
         if await _is_rate_limited(session, client_ip):
-            details = (
-                f"Блокировка IP {client_ip}: превышен лимит попыток входа (username={username!r})"
-            )
+            details = f"Блокировка IP {masked_ip}: превышен лимит попыток входа (username={masked_user!r})"
             await _log_action("web_login_blocked", details)
             await _notify_superadmin(details)
             from core.security_alerts import send_security_alert
@@ -152,8 +156,8 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
                 event_type="login_bruteforce",
                 title="Превышение лимита запросов / Брутфорс входа (API)",
                 details={
-                    "ip": client_ip,
-                    "username": username or "<empty>",
+                    "ip": masked_ip,
+                    "username": masked_user,
                     "path": "/api/v1/auth/login",
                     "reason": "IP временно заблокирован из-за превышения лимита попыток входа",
                 },
@@ -167,7 +171,7 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
         if user_data is None:
             failed_count = await _record_failed_attempt(client_ip)
             await _log_action(
-                "web_login_failed", f"Неудачный вход с IP {client_ip} (username={username!r})"
+                "web_login_failed", f"Неудачный вход с IP {masked_ip} (username={masked_user!r})"
             )
             if failed_count >= 3:
                 from core.security_alerts import send_security_alert
@@ -176,8 +180,8 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
                     event_type="multiple_failed_logins",
                     title="Серия неудачных попыток входа (API)",
                     details={
-                        "ip": client_ip,
-                        "username": username or "<empty>",
+                        "ip": masked_ip,
+                        "username": masked_user,
                         "path": "/api/v1/auth/login",
                         "reason": f"Зафиксировано {failed_count} неудачных попыток ввода пароля подряд",
                     },
@@ -230,12 +234,13 @@ async def v1_auth_login(payload: LoginRequest, request: Request) -> dict[str, An
             }
 
         await _clear_attempts(client_ip)
+        request.scope["session_rotate"] = True
         request.session["user"] = user_data
         request.session["csrf_token"] = secrets.token_urlsafe(32)
 
     await _log_action(
         "web_login_success",
-        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
+        f"Успешный вход {user_data['username']} (роль {user_data['role']}) с IP {masked_ip}",
     )
     return {
         "success": True,
@@ -310,7 +315,7 @@ async def v1_auth_verify_2fa(payload: Verify2FARequest, request: Request) -> dic
     await _clear_attempts(client_ip)
     await _log_action(
         "web_login_2fa_success",
-        f"Успешный 2FA-вход {user_data['username']} (роль {user_data['role']}) с IP {client_ip}",
+        f"Успешный 2FA-вход {user_data['username']} (роль {user_data['role']}) с IP {mask_ip_for_logs(client_ip)}",
     )
     return {
         "success": True,
@@ -369,11 +374,13 @@ async def v1_auth_telegram_webapp(
         "department_id": None,
         "telegram_id": tg_user_id,
     }
+    request.scope["session_rotate"] = True
     request.session["user"] = user_data
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     client_ip = _get_client_ip(request)
     await _log_action(
-        "web_login_tg_success", f"Вход через Telegram WebApp ID={tg_user_id} с IP {client_ip}"
+        "web_login_tg_success",
+        f"Вход через Telegram WebApp ID={tg_user_id} с IP {mask_ip_for_logs(client_ip)}",
     )
 
     return {

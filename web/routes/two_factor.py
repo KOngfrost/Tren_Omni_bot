@@ -43,7 +43,7 @@ async def _verified_user_data(
             .options(selectinload(WebUser.admin).selectinload(Admin.user))
             .where(WebUser.id == user_data["web_user_id"])
         )
-        if web_user is None or not web_user.is_active:
+        if web_user is None or not web_user.is_active or web_user.is_expired:
             await otp_store.cancel(request)
             request.session["flash_error"] = "Учётка недоступна. Обратитесь к администратору."
             return RedirectResponse(url="/auth/login", status_code=302)

@@ -1,7 +1,7 @@
-# 🛠️ Руководство администратора БД и системной безопасности (v0.9.7.6)
+# 🛠️ Руководство администратора БД и системной безопасности (v1.0.0)
 
 > **Для кого:** Системные администраторы, DevOps и инженеры баз данных.  
-> **Окружение:** PostgreSQL 16, PgBouncer (6432), Redis 7, Caddy 2 WAF/TLS.
+> **Окружение:** PostgreSQL 16, PgBouncer, Redis 7, Caddy 2 WAF/TLS.
 
 В этом руководстве описаны внутренняя архитектура данных, процедуры обслуживания СУБД, управление учётными записями через CLI, резервное копирование и диагностика.
 
@@ -20,13 +20,13 @@
 
 ## 1. Доступ к инфраструктуре данных
 
-- **PostgreSQL 16**: слушает внутренний порт `5432` в Docker-сети `oss_bot_net`. Наружу на хост порт не публикуется для исключения несанкционированного доступа.
-- **PgBouncer**: легковесный пул соединений, слушает внутренний порт `6432`. Приложение и воркеры подключаются к БД исключительно через PgBouncer.
-- **Redis 7**: слушает порт `6379` внутри сети Docker.
+- **PostgreSQL 16**: слушает внутренний порт БД в изолированной Docker-сети `data_net`. Наружу на хост не публикуется для исключения несанкционированного доступа.
+- **PgBouncer**: легковесный пул соединений, работает во внутренней Docker-сети. Приложение и воркеры подключаются к БД исключительно через PgBouncer.
+- **Redis 7**: доступен только внутри приватной сети `backend_net`.
 
 ### Подключение к PostgreSQL через Docker:
 ```bash
-docker compose exec db psql -U student_user -d student_db
+docker compose exec db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
 ```
 
 ---
@@ -39,16 +39,16 @@ docker compose exec db psql -U student_user -d student_db
 ```bash
 # Создание постоянного суперадминистратора
 docker compose exec bot python scripts/create_web_user.py \
-  --username admin \
+  --username <ADMIN_USERNAME> \
   --role SUPERADMIN \
-  --vk-id 123456789
+  --vk-id <USER_VK_ID>
 
-# Создание оператора отдела (например, Жилищно-бытового)
+# Создание оператора отдела
 docker compose exec bot python scripts/create_web_user.py \
-  --username operator_zhilbyt \
+  --username <OPERATOR_USERNAME> \
   --role DEPARTMENT_ADMIN \
-  --department "Жилбыт" \
-  --vk-id 987654321
+  --department "<DEPARTMENT_NAME>" \
+  --vk-id <OPERATOR_VK_ID>
 ```
 
 > [!NOTE]
@@ -58,8 +58,8 @@ docker compose exec bot python scripts/create_web_user.py \
 VK-суперадминистраторы получают ежедневные отчёты бота и имеют доступ к управлению прямо в диалоге ВКонтакте:
 ```bash
 docker compose exec bot python scripts/init_superadmin.py \
-  --vk-id 123456789 \
-  --name "Главный Администратор"
+  --vk-id <ADMIN_VK_ID> \
+  --name "<DISPLAY_NAME>"
 ```
 
 ---
@@ -72,7 +72,7 @@ docker compose exec bot python scripts/init_superadmin.py \
 1. **Режим пулинга**: `transaction` (транзакционный). Соединение к Postgres удерживается ровно на время выполнения транзакции и возвращается в пул.
 2. **Кэш выражений**: в `core/database.py` отключен кэш подготовленных выражений (`statement_cache_size = 0`) для полной совместимости с транзакционным пулингом asyncpg.
 3. **Авторизация**: PgBouncer использует функцию `pgbouncer.get_auth(p_usename)` для прозрачной аутентификации пользователей базы данных.
-4. **Миграции**: контейнер `migrate` выполняет DDL-запросы напрямую к PostgreSQL на порт `5432`, минуя PgBouncer.
+4. **Миграции**: контейнер `migrate` выполняет DDL-запросы напрямую к PostgreSQL, минуя PgBouncer.
 
 ---
 
@@ -132,7 +132,7 @@ docker compose exec bot python -m alembic revision --autogenerate -m "add_new_co
 ### 6.2. Восстановление данных
 ```bash
 # Восстановление из выбранного архива
-./scripts/restore.sh /var/backups/oss_bot/oss_bot_2026-09-26.sql.gz
+./scripts/restore.sh <BACKUP_DIR>/<BACKUP_FILE>.sql.gz
 
 # Запуск сервисов после восстановления
 docker compose start bot web-admin go-api
@@ -148,7 +148,7 @@ docker compose start bot web-admin go-api
 docker compose ps
 
 # JSON-ответ healthcheck веб-панели и синхронизации времени
-curl -s http://127.0.0.1:8000/health | jq .
+curl -s http://<LOCAL_HOST>:<APP_PORT>/health | jq .
 ```
 
 ### 7.2. Чтение логов в реальном времени

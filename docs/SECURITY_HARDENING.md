@@ -7,9 +7,9 @@
 
 ## 1. Встроенный Caddy WAF (Docker)
 
-Защита периметра работает непосредственно в контейнере `caddy` на портах 80 и 443 (см. [Caddyfile](../../Caddyfile)):
+Защита периметра работает непосредственно в контейнере `caddy` на публичных веб-портах (см. [Caddyfile](../../Caddyfile)):
 - **Перманентный бан IP-адресов:**
-  IP-адреса `159.89.160.109` (DigitalOcean PHPUnit RCE) и `35.219.250.1` (GCP scraper) сбрасываются директивой `abort` без ответа.
+  IP-адреса из переменной окружения `BANNED_CLIENT_IPS` сбрасываются директивой `abort` без ответа.
 - **Защита от прямого доступа по IP:**
   Запросы, у которых заголовок `Host` не совпадает с переменной `DOMAIN` из `.env`, немедленно сбрасываются.
 - **WAF-фильтрация системных путей и эксплойтов:**
@@ -23,8 +23,7 @@
 
 ```bash
 # Блокировка выявленных IP-сканеров
-sudo ufw insert 1 deny from 159.89.160.109 to any comment 'Banned: PHPUnit RCE probe'
-sudo ufw insert 1 deny from 35.219.250.1 to any comment 'Banned: GCP credentials probe'
+sudo ufw insert 1 deny from <SUSPICIOUS_IP> to any comment 'Banned scanner'
 
 # Проверка статуса правил
 sudo ufw status numbered
@@ -39,8 +38,8 @@ sudo ufw status numbered
 ```nginx
 # 1. Дроп прямого доступа по IP-адресу
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen <HTTP_PORT> default_server;
+    listen [::]:<HTTP_PORT> default_server;
     server_name _;
     return 444;
 }
@@ -49,11 +48,10 @@ server {
 limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
 
 server {
-    server_name your-domain.duckdns.org;
+    server_name <YOUR_DOMAIN>;
 
     # Блокировка атакующих IP
-    deny 159.89.160.109;
-    deny 35.219.250.1;
+    deny <SUSPICIOUS_IP>;
 
     # Блокировка системных файлов и скриптов
     location ~ /\.(env|git|svn|htaccess|aws|config) {
@@ -69,12 +67,12 @@ server {
     # Лимитирование входа
     location = /auth/login {
         limit_req zone=login_limit burst=2 nodelay;
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://<LOCAL_HOST>:<APP_PORT>;
         include proxy_params;
     }
 
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://<LOCAL_HOST>:<APP_PORT>;
         include proxy_params;
     }
 }

@@ -2,6 +2,8 @@
 
 from collections.abc import Callable
 
+from sqlalchemy.exc import IntegrityError
+
 from core.events import notify_ticket_change
 from core.formatters.ticket_formatter import mask_anonymous_data
 from core.models import Log, MessageAuthorType, Ticket, TicketStatus, User
@@ -26,21 +28,31 @@ async def create_ticket(
     delivery_callback: Callable[[], None] | None = None,
 ) -> Ticket:
     """Создать обращение студента и поставить уведомления в outbox."""
+    prefetched_name: str | None = None
+    if keep_identity and vk_id is not None:
+        # Внешний HTTP-запрос к VK API выполняем до открытия транзакции БД.
+        async with ticket_transaction() as read_session:
+            existing_user = await TicketRepository(read_session).user_by_vk_id(vk_id)
+            need_name = existing_user is None or not existing_user.full_name
+        if need_name:
+            prefetched_name = await fetch_vk_user_name(vk_id)
+
     async with ticket_transaction() as session:
         repository = TicketRepository(session)
         user = None
         if keep_identity and vk_id is not None:
             user = await repository.user_by_vk_id(vk_id)
             if user is None:
-                full_name = await fetch_vk_user_name(vk_id)
-                user = User(vk_id=vk_id, full_name=full_name)
-                repository.add(user)
+                try:
+                    async with session.begin_nested():
+                        user = User(vk_id=vk_id, full_name=prefetched_name)
+                        repository.add(user)
+                        await repository.flush()
+                except IntegrityError:
+                    user = await repository.user_by_vk_id(vk_id)
+            elif not user.full_name and prefetched_name:
+                user.full_name = prefetched_name
                 await repository.flush()
-            elif not user.full_name:
-                full_name = await fetch_vk_user_name(vk_id)
-                if full_name:
-                    user.full_name = full_name
-                    await repository.flush()
 
         department = await _resolve_department(session, department_name)
         ticket = Ticket(

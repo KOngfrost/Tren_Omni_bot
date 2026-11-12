@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import gzip
 import hashlib
 import html
 import logging
 import os
+import shutil
+import tempfile
 import time
 import uuid
 from datetime import UTC, datetime
@@ -171,6 +174,49 @@ exit $rc
             await docker_client.exec_command(db_container, ["rm", "-f", pgpass_path])
 
 
+async def _run_local_pg_dump(
+    host: str,
+    port: str,
+    user: str,
+    db: str,
+    password: str,
+) -> tuple[int, bytes, bytes]:
+    """Выполнить pg_dump напрямую по сети (для tg-monitor при EXEC=0 на socket proxy)."""
+    env = os.environ.copy()
+    pgpass_path: str | None = None
+    try:
+        if password:
+            fd, pgpass_path = tempfile.mkstemp(prefix=".oss_bot_pgpass_", suffix=".conf")
+            os.chmod(pgpass_path, BACKUP_FILE_MODE)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(f"{host}:{port}:{db}:{user}:{password}\n")
+            env["PGPASSFILE"] = pgpass_path
+
+        proc = await asyncio.create_subprocess_exec(
+            "pg_dump",
+            "-h",
+            host,
+            "-p",
+            str(port),
+            "-U",
+            user,
+            "-d",
+            db,
+            "--no-owner",
+            "--clean",
+            "--if-exists",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300.0)
+        return proc.returncode or 0, stdout, stderr
+    finally:
+        if pgpass_path and os.path.exists(pgpass_path):
+            with contextlib.suppress(OSError):
+                os.remove(pgpass_path)
+
+
 async def perform_database_backup(
     docker_client: DockerClient,
     settings: Settings,
@@ -189,7 +235,23 @@ async def perform_database_backup(
     db = settings.DB_NAME or os.getenv("POSTGRES_DB", "oss_bot")
     password = settings.DB_PASS or os.getenv("POSTGRES_PASSWORD", "")
 
-    # 1. Попытка создания бэкапа через Docker (production-стек)
+    # 1. Если tg-monitor работает через docker-socket-proxy (EXEC=0) и установлен pg_dump,
+    # делаем дамп напрямую по внутренней Docker-сети data_net.
+    if isinstance(getattr(docker_client, "base_url", None), str) and shutil.which("pg_dump"):
+        pg_host = os.getenv("BACKUP_PG_HOST", "db")
+        pg_port = os.getenv("BACKUP_PG_PORT", "5432")
+        exit_code, stdout, stderr = await _run_local_pg_dump(
+            host=pg_host, port=pg_port, user=user, db=db, password=password
+        )
+        if exit_code == 0 and stdout:
+            compressed = gzip.compress(stdout)
+            return _store_backup(compressed, filename)
+        err_msg = (
+            stderr.decode("utf-8", errors="replace").strip() or f"pg_dump exit code {exit_code}"
+        )
+        return False, None, f"Ошибка pg_dump ({pg_host}:{pg_port}): {err_msg}"
+
+    # 2. Попытка создания бэкапа через Docker exec (если прямой сокет без EXEC=0)
     containers = await docker_client.list_containers(all=False)
     db_container = _find_db_container(containers)
 

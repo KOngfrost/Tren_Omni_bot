@@ -314,12 +314,14 @@ class DockerClient:
                     f"/exec/{exec_id}/start",
                     json={"Detach": False, "Tty": False},
                 )
+                if start_res.status_code >= 400:
+                    return start_res.status_code, b"", start_res.content
                 raw = start_res.content
 
                 inspect_res = await client.get(f"/exec/{exec_id}/json")
-                exit_code = 0
-                if inspect_res.status_code == 200:
-                    exit_code = inspect_res.json().get("ExitCode", 0)
+                if inspect_res.status_code != 200:
+                    return inspect_res.status_code, b"", inspect_res.content
+                exit_code = inspect_res.json().get("ExitCode", 0)
 
                 # Безопасное демоплексирование: повреждённый заголовок фрейма
                 # не приводит к зависанию (см. demultiplex_stream)

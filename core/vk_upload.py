@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from core.config import settings
@@ -83,7 +84,7 @@ async def upload_photo_for_messages(
 
     if mime_type == "image/webp":
         try:
-            file_bytes = _convert_webp_to_jpeg(file_bytes)
+            file_bytes = await asyncio.to_thread(_convert_webp_to_jpeg, file_bytes)
             mime_type = "image/jpeg"
             safe_name_base = (
                 filename.rsplit(".", 1)[0] if filename and "." in filename else "upload"
@@ -91,7 +92,8 @@ async def upload_photo_for_messages(
             filename = f"{safe_name_base}.jpg"
             logger.info("Изображение WebP автоматически сконвертировано в JPEG для VK.")
         except Exception as conv_err:
-            logger.warning("Не удалось автоматически сконвертировать WebP в JPEG: %s", conv_err)
+            logger.error("Не удалось сконвертировать WebP в JPEG: %s", conv_err)
+            raise RuntimeError(f"Ошибка конвертации WebP в JPEG: {conv_err}") from conv_err
 
     if not settings.VK_BOT_TOKEN:
         raise ValueError("VK_BOT_TOKEN не задан в конфигурации системы.")

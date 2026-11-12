@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.types import (
     BotCommand,
     BotCommandScopeChat,
@@ -160,7 +161,11 @@ def create_telegram_bot(
     if settings.TELEGRAM_ADMIN_ID <= 0:
         raise ValueError("TELEGRAM_ADMIN_ID не задан или некорректен.")
 
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+    import os
+
+    proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    session = AiohttpSession(proxy=proxy) if proxy else AiohttpSession()
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, session=session)
     dp = Dispatcher()
 
     if docker_client is None:

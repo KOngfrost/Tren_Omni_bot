@@ -57,6 +57,8 @@ async def archive_and_delete_tickets(now: datetime) -> tuple[int, str | None]:
                     Ticket.updated_at < cutoff,
                 )
                 .options(selectinload(Ticket.messages))
+                .order_by(Ticket.id.asc())
+                .limit(CHUNK_SIZE)
             )
             result = await session.execute(stmt)
             tickets = list(result.scalars().all())

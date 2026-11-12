@@ -1,7 +1,11 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 )
@@ -27,6 +31,14 @@ func getEnv(key, defaultVal string) string {
 	return defaultVal
 }
 
+func generateDevSecret() string {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		log.Fatal("CRITICAL: не удалось сгенерировать случайный dev-секрет")
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
 func LoadConfig() *Config {
 	port := getEnv("PORT", "8080")
 	dbHost := getEnv("DB_HOST", "pgbouncer")
@@ -35,7 +47,14 @@ func LoadConfig() *Config {
 	dbPass := getEnv("POSTGRES_PASSWORD", "")
 	dbName := getEnv("POSTGRES_DB", "oss_bot")
 
-	dbURL := getEnv("DATABASE_URL", "postgres://"+dbUser+":"+dbPass+"@"+dbHost+":"+dbPort+"/"+dbName+"?sslmode=disable")
+	defaultDBURL := (&url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(dbUser, dbPass),
+		Host:     net.JoinHostPort(dbHost, dbPort),
+		Path:     "/" + dbName,
+		RawQuery: "sslmode=disable",
+	}).String()
+	dbURL := getEnv("DATABASE_URL", defaultDBURL)
 	redisURL := getEnv("REDIS_URL", "redis://oss_bot_redis:6379/0")
 
 	tgAdminID, _ := strconv.ParseInt(getEnv("TELEGRAM_ADMIN_ID", "0"), 10, 64)
@@ -52,7 +71,7 @@ func LoadConfig() *Config {
 			log.Fatal("CRITICAL: SESSION_SECRET_KEY (или SECRET_KEY) не задан, является плейсхолдером или короче 32 символов в production")
 		}
 	} else if sessionSecret == "" {
-		sessionSecret = "dev_fallback_secret_key_minimum_32_chars_local"
+		sessionSecret = generateDevSecret()
 	}
 
 	serviceAPIKey := getEnv("SERVICE_API_KEY", "")
@@ -67,7 +86,7 @@ func LoadConfig() *Config {
 		TelegramAdminID:  tgAdminID,
 		TwoFactorEnabled: twoFactorEnabled,
 		CORSOrigins:      corsOrigins,
-		AppVersion:       getEnv("APP_VERSION", "0.9.7.6"),
+		AppVersion:       getEnv("APP_VERSION", "1.0.0"),
 		AppEnv:           appEnv,
 	}
 }

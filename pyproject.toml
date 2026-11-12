@@ -6,8 +6,8 @@
 # ============================================================
 [project]
 name = "student-bot"
-version = "0.9.7.6"
-description = "OSS Bot: Student Ticket Management System"
+version = "1.0.0"
+description = "Student Support Platform"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
