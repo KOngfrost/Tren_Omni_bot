@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import dataclasses
+import html
 import json
 import logging
 import os
 import signal
 import ssl
 import subprocess
-import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("yen_watchdog")
 
@@ -33,6 +35,7 @@ class WatchdogConfig:
     oss_ssh_target: str = "ossadmin@100.120.28.104"
     oss_web_url: str = "https://oss.tail5d7c2e.ts.net/health"
     state_file: str = "/tmp/yen_watchdog_state.json"
+    admins_file: str = "/home/user/oss_watchdog/server_admins.json"
     ssh_timeout_seconds: int = 10
     http_timeout_seconds: int = 10
     core_containers: tuple[str, ...] = (
@@ -55,6 +58,135 @@ class WatchdogState:
     maintenance_active: bool = False
     last_failure_category: str = "none"  # "none", "server", "container"
     last_check_time: str = ""
+
+
+class ServerAdminStore:
+    """хранилище администраторов бота check_me_up с сохранением в json."""
+
+    def __init__(self, file_path: str, root_admin_id: int = 6665679072) -> None:
+        self.file_path = file_path
+        self.root_admin_id = root_admin_id
+        self._lock = threading.RLock()
+        self._load_or_init()
+
+    def _load_or_init(self) -> dict[str, Any]:
+        with self._lock:
+            if os.path.exists(self.file_path):
+                try:
+                    with open(self.file_path, encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, dict) and "admins" in data:
+                            return data
+                except Exception as exc:
+                    logger.warning(
+                        "ошибка чтения файла администраторов %s: %s", self.file_path, exc
+                    )
+
+            now_iso = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            initial_data: dict[str, Any] = {
+                "root_admin_id": self.root_admin_id,
+                "admins": [
+                    {
+                        "id": self.root_admin_id,
+                        "role": "root",
+                        "note": "главный технический администратор",
+                        "added_at": now_iso,
+                        "added_by": "system",
+                    }
+                ],
+            }
+            self._save_unlocked(initial_data)
+            return initial_data
+
+    def _save_unlocked(self, data: dict[str, Any]) -> None:
+        parent = os.path.dirname(self.file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp = self.file_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, self.file_path)
+
+    def get_admins(self) -> list[int]:
+        """получить список уникальных id администраторов."""
+        data = self._load_or_init()
+        admins = data.get("admins", [])
+        ids = [int(item["id"]) for item in admins if "id" in item and int(item["id"]) > 0]
+        if self.root_admin_id > 0 and self.root_admin_id not in ids:
+            ids.insert(0, self.root_admin_id)
+        return ids
+
+    def get_admin_details(self) -> list[dict[str, Any]]:
+        """получить подробный список администраторов."""
+        data = self._load_or_init()
+        return list(data.get("admins", []))
+
+    def add_admin(self, admin_id: int, note: str = "", added_by: str = "") -> tuple[bool, str]:
+        """добавить нового администратора."""
+        if admin_id <= 0:
+            return False, "некорректный id администратора"
+
+        with self._lock:
+            data = self._load_or_init()
+            admins = data.get("admins", [])
+            for item in admins:
+                if int(item.get("id", 0)) == admin_id:
+                    return False, f"пользователь {admin_id} уже является администратором"
+
+            now_iso = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            admins.append(
+                {
+                    "id": admin_id,
+                    "role": "admin",
+                    "note": note,
+                    "added_at": now_iso,
+                    "added_by": added_by or "unknown",
+                }
+            )
+            data["admins"] = admins
+            try:
+                self._save_unlocked(data)
+                return True, f"администратор {admin_id} успешно добавлен"
+            except Exception as exc:
+                return False, f"ошибка сохранения администратора: {exc}"
+
+    def del_admin(self, admin_id: int, root_id: int = 6665679072) -> tuple[bool, str]:
+        """удалить администратора из списка (главного удалять запрещено)."""
+        effective_root = root_id or self.root_admin_id
+        if admin_id == effective_root or admin_id == self.root_admin_id:
+            return False, "удаление главного администратора запрещено"
+
+        with self._lock:
+            data = self._load_or_init()
+            admins = data.get("admins", [])
+            new_admins = [item for item in admins if int(item.get("id", 0)) != admin_id]
+            if len(new_admins) == len(admins):
+                return False, f"администратор {admin_id} не найден в списке"
+
+            data["admins"] = new_admins
+            try:
+                self._save_unlocked(data)
+                return True, f"администратор {admin_id} успешно удален"
+            except Exception as exc:
+                return False, f"ошибка удаления администратора: {exc}"
+
+
+class StateHolder:
+    """потокобезопасная обертка для хранения актуального состояния."""
+
+    def __init__(self, state: WatchdogState) -> None:
+        self._lock = threading.Lock()
+        self._state = state
+
+    @property
+    def state(self) -> WatchdogState:
+        with self._lock:
+            return self._state
+
+    @state.setter
+    def state(self, value: WatchdogState) -> None:
+        with self._lock:
+            self._state = value
 
 
 def parse_admin_ids(raw_str: str) -> list[int]:
@@ -89,6 +221,7 @@ def load_config_from_env() -> WatchdogConfig:
         oss_ssh_target=os.getenv("OSS_SSH_TARGET", "ossadmin@100.120.28.104"),
         oss_web_url=os.getenv("OSS_WEB_URL", "https://oss.tail5d7c2e.ts.net/health"),
         state_file=os.getenv("STATE_FILE", "/tmp/yen_watchdog_state.json"),
+        admins_file=os.getenv("ADMINS_FILE", "/home/user/oss_watchdog/server_admins.json"),
     )
 
 
@@ -103,10 +236,12 @@ def send_telegram_notification(
         return False
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     success_any = False
-    effective_proxy = proxy_url if proxy_url is not None else os.getenv("TELEGRAM_PROXY", "http://127.0.0.1:10809")
-    proxies = (
-        {"http": effective_proxy, "https": effective_proxy} if effective_proxy else None
+    effective_proxy = (
+        proxy_url
+        if proxy_url is not None
+        else os.getenv("TELEGRAM_PROXY", "http://127.0.0.1:10809")
     )
+    proxies = {"http": effective_proxy, "https": effective_proxy} if effective_proxy else None
 
     try:
         import requests
@@ -326,13 +461,14 @@ def _handle_failure_cycle(
     """обработать сбой проверки (сервер или контейнер)."""
     fails = state.consecutive_failures + 1
     maint_active = state.maintenance_active
+    safe_details = html.escape(details)
 
     if fails == 1:
         if category == "server":
             msg = (
                 f"<b>ВНИМАНИЕ: СЕРВЕР OSS НЕДОСТУПЕН</b>\n\n"
                 f"Статус: <b>проверьте пк</b>\n"
-                f"Диагностика: <code>{details}</code>\n"
+                f"Диагностика: <code>{safe_details}</code>\n"
                 f"Время: {now_iso}\n"
                 f"Сбой: 1/2. Опрос переведен на 5 минут."
             )
@@ -340,7 +476,7 @@ def _handle_failure_cycle(
         else:
             msg = (
                 f"<b>ВНИМАНИЕ: СБОЙ СЕРВИСОВ OSS</b>\n\n"
-                f"Диагностика: <code>{details}</code>\n"
+                f"Диагностика: <code>{safe_details}</code>\n"
                 f"Время: {now_iso}\n"
                 f"Сбой: 1/2. Опрос переведен на 5 минут. Техработы пока не включены."
             )
@@ -352,7 +488,7 @@ def _handle_failure_cycle(
             maintenance_setter(True)
             msg = (
                 f"<b>КРИТИЧЕСКИЙ СБОЙ: ПОВТОРНЫЙ ОТКАЗ СЕРВИСОВ</b>\n\n"
-                f"Диагностика: <code>{details}</code>\n"
+                f"Диагностика: <code>{safe_details}</code>\n"
                 f"Время: {now_iso}\n"
                 f"Сбой: {fails}/{config.fail_threshold_maintenance}. "
                 f"Режим технических работ <b>АКТИВИРОВАН</b>."
@@ -362,7 +498,7 @@ def _handle_failure_cycle(
             msg = (
                 f"<b>КРИТИЧЕСКИЙ СБОЙ: ПОВТОРНАЯ НЕДОСТУПНОСТЬ ХОСТА</b>\n\n"
                 f"Статус: <b>проверьте пк</b>\n"
-                f"Диагностика: <code>{details}</code>\n"
+                f"Диагностика: <code>{safe_details}</code>\n"
                 f"Время: {now_iso}\n"
                 f"Сбой: {fails}/{config.fail_threshold_maintenance}. "
                 f"Режим техработ будет гарантирован при включении питания/связи."
@@ -431,11 +567,9 @@ def process_check_result(
             state, config, category, details, now_iso, notifier, maintenance_setter
         )
 
-    # если всё в порядке, но ранее был сбой или активны техработы — запускаем восстановление
     if state.consecutive_failures > 0 or state.maintenance_active:
         return _handle_recovery_cycle(state, config, now_iso, notifier, maintenance_setter)
 
-    # штатная проверка при нормальной работе
     new_state = WatchdogState(
         consecutive_failures=0,
         maintenance_active=False,
@@ -445,21 +579,27 @@ def process_check_result(
     return new_state, config.check_interval_ok
 
 
+def make_maintenance_setter(target: str) -> Callable[[bool], bool]:
+    """создать функцию-сеттер режима техработ для целевого хоста."""
+
+    def _setter(enable: bool) -> bool:
+        return set_remote_maintenance_ssh(target, enable)
+
+    return _setter
+
+
 def perform_full_check(config: WatchdogConfig) -> tuple[bool, str, str]:
     """выполнить полный шаг диагностики хоста oss, контейнеров и сайта."""
-    # 1. Проверка доступности хоста ПК
     host_ok, host_msg = check_host_ssh(config.oss_ssh_target, config.ssh_timeout_seconds)
     if not host_ok:
         return False, "server", f"хост {config.oss_ssh_target} недоступен: {host_msg}"
 
-    # 2. Проверка docker контейнеров
     cont_ok, cont_msg = check_containers_via_ssh(
         config.oss_ssh_target, config.core_containers, config.ssh_timeout_seconds
     )
     if not cont_ok:
         return False, "container", cont_msg
 
-    # 3. Проверка доступности веб-сайта
     web_ok, web_msg = check_web_endpoint(config.oss_web_url, config.http_timeout_seconds)
     if not web_ok:
         return False, "container", web_msg
@@ -491,42 +631,187 @@ def load_state(path: str) -> WatchdogState:
     return WatchdogState()
 
 
-def fetch_remote_admin_ids(
-    target: str, root_id: int, timeout_sec: int = 10
-) -> list[int]:
-    """получить актуальный список id администраторов с хоста oss."""
-    cmd = [
-        "ssh",
-        "-o",
-        "LogLevel=ERROR",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        f"ConnectTimeout={timeout_sec}",
-        target,
-        "wsl.exe",
-        "-u",
-        "oss",
-        "docker",
-        "exec",
-        "oss_bot_app",
-        "python3",
-        "scripts/manage_admins.py",
-        "list",
-        "--json",
-    ]
+def _handle_start_help() -> str:
+    """вернуть текст справки и перечень команд."""
+    return (
+        "система мониторинга Check_me_up.\n\n"
+        "доступные команды:\n"
+        "/status — текущий статус инфраструктуры и проверок\n"
+        "/admins — список авторизованных администраторов\n"
+        "/addadmin &lt;id&gt; [комментарий] — добавить администратора (только root)\n"
+        "/deladmin &lt;id&gt; — удалить администратора (только root)"
+    )
+
+
+def _handle_status(state: WatchdogState) -> str:
+    """сформировать сводку о текущем состоянии инфраструктуры."""
+    maint_txt = "включен" if state.maintenance_active else "выключен"
+    return (
+        "текущий статус инфраструктуры oss:\n\n"
+        f"последняя проверка: {state.last_check_time or 'еще не проводилась'}\n"
+        f"число последовательных сбоев: {state.consecutive_failures}\n"
+        f"режим техработ: {maint_txt}\n"
+        f"категория последнего сбоя: {state.last_failure_category}"
+    )
+
+
+def _handle_admins(store: ServerAdminStore) -> str:
+    """сформировать список авторизованных администраторов."""
+    details = store.get_admin_details()
+    lines = ["список администраторов бота Check_me_up:"]
+    for item in details:
+        aid = item.get("id")
+        role = item.get("role", "admin")
+        note = item.get("note", "")
+        note_str = f" ({note})" if note else ""
+        lines.append(f"— id: {aid}{note_str} [{role}]")
+    return "\n".join(lines)
+
+
+def _handle_addadmin(
+    text: str,
+    cmd_parts: list[str],
+    user_id: int,
+    config: WatchdogConfig,
+    store: ServerAdminStore,
+) -> str:
+    """обработать команду добавления администратора."""
+    if user_id != config.admin_chat_id and user_id != store.root_admin_id:
+        return "доступ запрещен. только главный технический администратор может добавлять администраторов."
+    if len(cmd_parts) < 2 or not cmd_parts[1].isdigit():
+        return "использование: /addadmin &lt;id&gt; [комментарий]"
+    new_id = int(cmd_parts[1])
+    parts = text.split(maxsplit=2)
+    note = parts[2].strip() if len(parts) > 2 else ""
+    ok, res_msg = store.add_admin(new_id, note=note, added_by=f"telegram:{user_id}")
+    if ok:
+        greeting = (
+            "вы были добавлены в качестве администратора сервера в бот Check_me_up.\n"
+            "сюда будут приходить экстренные оповещения о доступности сервера oss (проверьте пк)."
+        )
+        send_telegram_notification(config.bot_token_server, [new_id], greeting)
+    return res_msg
+
+
+def _handle_deladmin(
+    cmd_parts: list[str],
+    user_id: int,
+    config: WatchdogConfig,
+    store: ServerAdminStore,
+) -> str:
+    """обработать команду удаления администратора."""
+    if user_id != config.admin_chat_id and user_id != store.root_admin_id:
+        return "доступ запрещен. только главный технический администратор может удалять администраторов."
+    if len(cmd_parts) < 2 or not cmd_parts[1].isdigit():
+        return "использование: /deladmin &lt;id&gt;"
+    del_id = int(cmd_parts[1])
+    ok, res_msg = store.del_admin(del_id, root_id=config.admin_chat_id)
+    return res_msg
+
+
+def process_bot_message(
+    msg: dict[str, Any],
+    config: WatchdogConfig,
+    store: ServerAdminStore,
+    state: WatchdogState,
+) -> str | None:
+    """обработать входящее сообщение от администратора в telegram-боте."""
+    from_user = msg.get("from", {})
+    user_id = from_user.get("id")
+    if not user_id:
+        return None
+
+    allowed_admins = set(store.get_admins())
+    if user_id not in allowed_admins:
+        return (
+            "доступ запрещен. данный бот предназначен исключительно для "
+            "авторизованных администраторов инфраструктуры oss."
+        )
+
+    text = msg.get("text", "").strip()
+    if not text:
+        return None
+
+    cmd_parts = text.split()
+    cmd = cmd_parts[0].lower().split("@")[0]
+
+    if cmd in ("/start", "/help"):
+        return _handle_start_help()
+    if cmd == "/status":
+        return _handle_status(state)
+    if cmd == "/admins":
+        return _handle_admins(store)
+    if cmd == "/addadmin":
+        return _handle_addadmin(text, cmd_parts, user_id, config, store)
+    if cmd == "/deladmin":
+        return _handle_deladmin(cmd_parts, user_id, config, store)
+
+    return "неизвестная команда. введите /help для просмотра списка команд."
+
+
+def fetch_telegram_updates(
+    bot_token: str,
+    offset: int,
+    timeout_sec: int = 20,
+    proxy_url: str | None = None,
+) -> tuple[int, list[dict[str, Any]]]:
+    """получить обновления от telegram bot api через getUpdates."""
+    url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+    params = {"offset": offset, "timeout": timeout_sec}
+    effective_proxy = (
+        proxy_url
+        if proxy_url is not None
+        else os.getenv("TELEGRAM_PROXY", "http://127.0.0.1:10809")
+    )
+    proxies = {"http": effective_proxy, "https": effective_proxy} if effective_proxy else None
+
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec + 2)
-        if proc.returncode == 0:
-            stdout_txt = proc.stdout.decode("utf-8", errors="replace").strip()
-            data = json.loads(stdout_txt)
-            ids = [int(x) for x in data.get("admin_ids", []) if int(x) > 0]
-            if root_id > 0 and root_id not in ids:
-                ids.insert(0, root_id)
-            return ids
+        import requests
+
+        resp = requests.get(url, params=params, proxies=proxies, timeout=timeout_sec + 5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok"):
+                updates = data.get("result", [])
+                max_offset = offset
+                for u in updates:
+                    u_id = u.get("update_id", 0)
+                    if u_id >= max_offset:
+                        max_offset = u_id + 1
+                return max_offset, updates
     except Exception as exc:
-        logger.debug("не удалось получить список админов с oss: %s", exc)
-    return [root_id] if root_id > 0 else []
+        logger.debug("ошибка получения обновлений telegram: %s", exc)
+    return offset, []
+
+
+def poll_bot_loop(
+    config: WatchdogConfig,
+    store: ServerAdminStore,
+    state_holder: StateHolder,
+    stop_event: threading.Event,
+) -> None:
+    """фоновый цикл приема и обработки команд в telegram-боте check_me_up."""
+    offset = 0
+    logger.info("фоновый опрос бота check_me_up запущен")
+    while not stop_event.is_set():
+        try:
+            offset, updates = fetch_telegram_updates(
+                config.bot_token_server,
+                offset=offset,
+                timeout_sec=5,
+            )
+            for item in updates:
+                msg = item.get("message")
+                if not msg:
+                    continue
+                chat_id = msg.get("chat", {}).get("id")
+                reply = process_bot_message(msg, config, store, state_holder.state)
+                if reply and chat_id:
+                    send_telegram_notification(config.bot_token_server, [chat_id], reply)
+        except Exception as exc:
+            logger.warning("ошибка в цикле опроса бота: %s", exc)
+            time.sleep(3)
+        time.sleep(1)
 
 
 def main() -> None:
@@ -537,15 +822,26 @@ def main() -> None:
     )
     config = load_config_from_env()
     state = load_state(config.state_file)
+    admin_store = ServerAdminStore(config.admins_file, root_admin_id=config.admin_chat_id)
+    state_holder = StateHolder(state)
+    stop_event = threading.Event()
     is_running = True
 
     def _sig_handler(_sig: int, _frame: object) -> None:
         nonlocal is_running
         logger.info("получен сигнал завершения работы, останавливаем watchdog...")
         is_running = False
+        stop_event.set()
 
     signal.signal(signal.SIGINT, _sig_handler)
     signal.signal(signal.SIGTERM, _sig_handler)
+
+    bot_thread = threading.Thread(
+        target=poll_bot_loop,
+        args=(config, admin_store, state_holder, stop_event),
+        daemon=True,
+    )
+    bot_thread.start()
 
     logger.info(
         "служба yen_watchdog запущена (интервал нормы=%dc, интервал сбоя=%dc, цель=%s)",
@@ -555,17 +851,11 @@ def main() -> None:
     )
 
     while is_running:
+        current_admin_ids = tuple(admin_store.get_admins())
+        config = dataclasses.replace(config, server_alert_admin_ids=current_admin_ids)
+
         is_ok, category, details = perform_full_check(config)
         logger.info("результат проверки: ok=%s category=%s details=%s", is_ok, category, details)
-
-        if is_ok:
-            remote_ids = fetch_remote_admin_ids(
-                config.oss_ssh_target, config.admin_chat_id, config.ssh_timeout_seconds
-            )
-            if remote_ids:
-                config = dataclasses.replace(
-                    config, server_alert_admin_ids=tuple(remote_ids)
-                )
 
         state, sleep_sec = process_check_result(
             state=state,
@@ -574,16 +864,18 @@ def main() -> None:
             category=category,
             details=details,
             notifier=send_telegram_notification,
-            maintenance_setter=lambda en: set_remote_maintenance_ssh(config.oss_ssh_target, en),
+            maintenance_setter=make_maintenance_setter(config.oss_ssh_target),
         )
         save_state(config.state_file, state)
+        state_holder.state = state
 
-        # сон с проверкой флага is_running каждые 2 секунды
         slept = 0
         while is_running and slept < sleep_sec:
             time.sleep(2)
             slept += 2
 
+    stop_event.set()
+    bot_thread.join(timeout=3)
     logger.info("служба yen_watchdog корректно остановлена.")
 
 
