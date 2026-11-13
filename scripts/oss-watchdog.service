@@ -1,0 +1,22 @@
+[Unit]
+Description=OSS Server and Containers Watchdog Service
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=user
+Group=user
+WorkingDirectory=/home/user/oss_watchdog
+EnvironmentFile=-/home/user/oss_watchdog/watchdog.env
+ExecStart=/usr/bin/python3 /home/user/oss_watchdog/yen_watchdog.py
+Restart=always
+RestartSec=10
+TimeoutStopSec=15
+
+# базовое ограничение ресурсов службы
+MemoryMax=128M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target
