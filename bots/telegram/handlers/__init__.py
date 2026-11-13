@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from aiogram import Router
 
+from bots.telegram.handlers.admins import router as admins_router
 from bots.telegram.handlers.backup import router as backup_router
 from bots.telegram.handlers.base import router as base_router
 from bots.telegram.handlers.containers import router as containers_router
@@ -21,4 +22,5 @@ def get_handlers_router() -> Router:
     main_router.include_router(maintenance_router)
     main_router.include_router(two_factor_router)
     main_router.include_router(backup_router)
+    main_router.include_router(admins_router)
     return main_router

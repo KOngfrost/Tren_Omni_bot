@@ -63,17 +63,20 @@ class AdminAccessMiddleware(BaseMiddleware):
         if not user:
             return None
 
-        # Проверка соответствия Telegram ID
-        if self.admin_id <= 0 or user.id != self.admin_id:
+        # Проверка прав администратора (root или динамический список)
+        from core.telegram_admins import is_authorized_telegram_admin
+
+        is_admin = await is_authorized_telegram_admin(user.id, self.admin_id)
+        if not is_admin:
             logger.warning(
                 "Отклонён запрос от неавторизованного пользователя Telegram ID=%s", user.id
             )
             if isinstance(event, Message):
                 await event.answer(
-                    "⛔ Доступ запрещён. Этот бот доступен только администратору сервера."
+                    "Доступ запрещен. Этот бот доступен только администраторам сервера."
                 )
             elif isinstance(event, CallbackQuery):
-                await event.answer("⛔ Доступ запрещён.", show_alert=True)
+                await event.answer("Доступ запрещен.", show_alert=True)
             return None
 
         data["docker_client"] = self.docker_client
@@ -115,6 +118,7 @@ async def setup_bot_commands(
             BotCommand(command="maintenance", description="🚧 Режим технических работ (503)"),
             BotCommand(command="kickall", description="🚪 Сброс всех активных сессий"),
             BotCommand(command="2fa", description="🔐 Управление двухфакторной аутентификацией"),
+            BotCommand(command="admins", description="Список администраторов"),
             BotCommand(command="help", description="ℹ️ Справка и документация"),
         ]
 
