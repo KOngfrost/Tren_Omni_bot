@@ -491,6 +491,44 @@ def load_state(path: str) -> WatchdogState:
     return WatchdogState()
 
 
+def fetch_remote_admin_ids(
+    target: str, root_id: int, timeout_sec: int = 10
+) -> list[int]:
+    """получить актуальный список id администраторов с хоста oss."""
+    cmd = [
+        "ssh",
+        "-o",
+        "LogLevel=ERROR",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        f"ConnectTimeout={timeout_sec}",
+        target,
+        "wsl.exe",
+        "-u",
+        "oss",
+        "docker",
+        "exec",
+        "oss_bot_app",
+        "python3",
+        "scripts/manage_admins.py",
+        "list",
+        "--json",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec + 2)
+        if proc.returncode == 0:
+            stdout_txt = proc.stdout.decode("utf-8", errors="replace").strip()
+            data = json.loads(stdout_txt)
+            ids = [int(x) for x in data.get("admin_ids", []) if int(x) > 0]
+            if root_id > 0 and root_id not in ids:
+                ids.insert(0, root_id)
+            return ids
+    except Exception as exc:
+        logger.debug("не удалось получить список админов с oss: %s", exc)
+    return [root_id] if root_id > 0 else []
+
+
 def main() -> None:
     """основной цикл службы сторожа на сервере yen."""
     logging.basicConfig(
@@ -519,6 +557,15 @@ def main() -> None:
     while is_running:
         is_ok, category, details = perform_full_check(config)
         logger.info("результат проверки: ok=%s category=%s details=%s", is_ok, category, details)
+
+        if is_ok:
+            remote_ids = fetch_remote_admin_ids(
+                config.oss_ssh_target, config.admin_chat_id, config.ssh_timeout_seconds
+            )
+            if remote_ids:
+                config = dataclasses.replace(
+                    config, server_alert_admin_ids=tuple(remote_ids)
+                )
 
         state, sleep_sec = process_check_result(
             state=state,
