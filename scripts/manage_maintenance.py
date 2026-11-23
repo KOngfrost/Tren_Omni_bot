@@ -6,8 +6,8 @@ import argparse
 import asyncio
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 # обеспечение видимости корневых пакетов core и web
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
