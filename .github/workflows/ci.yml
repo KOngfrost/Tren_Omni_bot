@@ -70,7 +70,7 @@ jobs:
       # Защита от форков истории миграций: голова должна быть ровно одна
       - name: Alembic — ровно одна голова миграций
         run: |
-          heads=$(python -m alembic heads | grep -c '^[a-f0-9]')
+          heads=$(python -m alembic heads | grep -c '^[a-z0-9]')
           echo "heads: $heads"
           test "$heads" -eq 1
       - name: Run pytest with coverage
@@ -133,7 +133,7 @@ jobs:
       - name: Проверить единственную голову миграций
         run: |
           pip install -r requirements.txt -r requirements-dev.txt
-          heads=$(python -m alembic heads | grep -c '^[a-f0-9]')
+          heads=$(python -m alembic heads | grep -c '^[a-z0-9]')
           echo "heads: $heads"
           test "$heads" -eq 1
 
