@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+scripts/*.env
+!scripts/*.env.example
 
 # Python cache
 __pycache__/
